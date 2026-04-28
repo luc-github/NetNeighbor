@@ -20,14 +20,22 @@ Current SSDP and mDNS providers are placeholders and do not yet perform real net
 - Python 3.10+
 - `python3-gi` and GTK bindings installed from distro packages
 
-Python dependencies:
-- `PyGObject`
+### Linux Mint / Ubuntu / Debian prerequisites
+
+Install GTK/PyGObject and Cairo from system packages:
+
+```bash
+sudo apt update
+sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev pkg-config
+```
+
+Python dependencies installed in the virtual environment:
 - `zeroconf`
 
 ## Run (development)
 
 ```bash
-python -m venv .venv
+python -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install -r requirements.txt
 python main.py
