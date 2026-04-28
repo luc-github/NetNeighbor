@@ -1,0 +1,48 @@
+{
+  "ssdp": {
+    "urn:schemas-upnp-org:device:MediaServer:1": {
+      "label": "Media Server",
+      "category": "Media Servers",
+      "icon": "mediaserver.png",
+      "default_port": 80,
+      "info_url": "http://{ip}:{port}/"
+    },
+    "urn:schemas-upnp-org:device:WANDevice:1": {
+      "label": "Router / Gateway",
+      "category": "Routers & Gateways",
+      "icon": "router.png",
+      "default_port": 80,
+      "info_url": "http://{ip}:{port}/"
+    }
+  },
+  "mdns": {
+    "_esp3d._tcp": {
+      "label": "ESP3D Device",
+      "category": "ESP3D Devices",
+      "icon": "esp32.png",
+      "default_port": 80,
+      "info_url": "http://{ip}:{port}/"
+    },
+    "_smb._tcp": {
+      "label": "Computer",
+      "category": "Computers",
+      "icon": "computer.png",
+      "default_port": 445,
+      "info_url": null
+    },
+    "_http._tcp": {
+      "label": "HTTP Device",
+      "category": "Unknown Devices",
+      "icon": "http.png",
+      "default_port": 80,
+      "info_url": "http://{ip}:{port}/"
+    }
+  },
+  "fallback": {
+    "label": "Unknown Device",
+    "category": "Unknown Devices",
+    "icon": "unknown.png",
+    "default_port": 80,
+    "info_url": null
+  }
+}
