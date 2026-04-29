@@ -1,9 +1,12 @@
 """Read-only protocol details dialog."""
 
 import gi
+import logging
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+from gi.repository import Gdk, Gtk
+
+_LOG = logging.getLogger(__name__)
 
 
 class DeviceDetailsDialog(Gtk.Dialog):
@@ -20,9 +23,22 @@ class DeviceDetailsDialog(Gtk.Dialog):
         raw_xml_location: str | None = None,
     ) -> None:
         super().__init__(title=title, transient_for=parent, modal=True)
-        self.add_button(_("Close"), Gtk.ResponseType.CLOSE)
-        if raw_content and raw_button_label:
-            self.add_button(raw_button_label, Gtk.ResponseType.APPLY)
+        fields = self._filter_unavailable_pairs(fields)
+        troubleshooting_records = self._filter_unavailable_pairs(troubleshooting_records)
+        txt_records = self._filter_unavailable_pairs(txt_records)
+        services_records = self._filter_unavailable_services(services_records)
+        # Simplify UI: merge troubleshooting rows into the main details tab.
+        if troubleshooting_records:
+            fields.extend(troubleshooting_records)
+            troubleshooting_records = None
+
+        close_button = self.add_button(_("Close"), Gtk.ResponseType.CLOSE)
+        close_button.connect("clicked", self._on_close_clicked)
+        self.set_default_response(Gtk.ResponseType.CLOSE)
+        close_button.set_receives_default(True)
+        close_button.grab_default()
+        close_button.grab_focus()
+        self.set_focus(close_button)
         self.set_default_size(720, 520)
         self._raw_content = raw_content
         self._raw_xml_location = raw_xml_location
@@ -31,12 +47,11 @@ class DeviceDetailsDialog(Gtk.Dialog):
         area.set_spacing(8)
         area.set_margin_start(6)
         area.set_margin_end(6)
+        notebook = Gtk.Notebook()
+        notebook.set_hexpand(True)
+        notebook.set_vexpand(True)
+        area.add(notebook)
 
-        fields_frame = Gtk.Frame(label=_("Device details"))
-        fields_frame.set_vexpand(True)
-        fields_frame.set_hexpand(True)
-        fields_frame.set_margin_start(6)
-        fields_frame.set_margin_end(6)
         details_grid = Gtk.Grid(column_spacing=16, row_spacing=8)
         details_grid.set_margin_start(12)
         details_grid.set_margin_end(12)
@@ -50,109 +65,107 @@ class DeviceDetailsDialog(Gtk.Dialog):
             details_grid.attach(key_label, 0, row, 1, 1)
             details_grid.attach(self._create_value_widget(value), 1, row, 1, 1)
             row += 1
-
-        fields_scroll = Gtk.ScrolledWindow()
-        fields_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        fields_scroll.set_vexpand(True)
-        fields_scroll.set_hexpand(True)
-        fields_scroll.add(details_grid)
-        fields_frame.add(fields_scroll)
-        area.add(fields_frame)
+        details_scroll = Gtk.ScrolledWindow()
+        details_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        details_scroll.set_hexpand(True)
+        details_scroll.set_vexpand(True)
+        details_scroll.add(details_grid)
+        notebook.append_page(details_scroll, Gtk.Label(label=_("Device details")))
 
         if services_records is not None:
-            services_frame = Gtk.Frame(label=_("Services"))
-            services_frame.set_margin_start(6)
-            services_frame.set_margin_end(6)
-            services_frame.set_vexpand(False)
-
             services_store = Gtk.ListStore(str, str, str)
             for service_type, target, port in services_records:
                 services_store.append([service_type, target, port])
-
             services_tree = Gtk.TreeView(model=services_store)
-            service_col = Gtk.TreeViewColumn(_("Service"), Gtk.CellRendererText(), text=0)
-            target_col = Gtk.TreeViewColumn(_("Target"), Gtk.CellRendererText(), text=1)
-            port_col = Gtk.TreeViewColumn(_("Port"), Gtk.CellRendererText(), text=2)
-            service_col.set_resizable(True)
-            target_col.set_resizable(True)
-            port_col.set_resizable(True)
-            services_tree.append_column(service_col)
-            services_tree.append_column(target_col)
-            services_tree.append_column(port_col)
-
+            services_tree.append_column(Gtk.TreeViewColumn(_("Service"), Gtk.CellRendererText(), text=0))
+            services_tree.append_column(Gtk.TreeViewColumn(_("Target"), Gtk.CellRendererText(), text=1))
+            services_tree.append_column(Gtk.TreeViewColumn(_("Port"), Gtk.CellRendererText(), text=2))
             services_scroll = Gtk.ScrolledWindow()
             services_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            services_scroll.set_min_content_height(120)
+            services_scroll.set_hexpand(True)
+            services_scroll.set_vexpand(True)
             services_scroll.add(services_tree)
-            services_frame.add(services_scroll)
-            area.add(services_frame)
+            notebook.append_page(services_scroll, Gtk.Label(label=_("Services")))
 
-        if troubleshooting_records is not None:
-            trouble_frame = Gtk.Frame(label=_("Troubleshooting Information"))
-            trouble_frame.set_margin_start(6)
-            trouble_frame.set_margin_end(6)
-            trouble_frame.set_vexpand(False)
-
+        if troubleshooting_records:
             trouble_store = Gtk.ListStore(str, str)
             for key, value in troubleshooting_records:
                 trouble_store.append([key, value])
-
             trouble_tree = Gtk.TreeView(model=trouble_store)
-            trouble_key_col = Gtk.TreeViewColumn(_("Field"), Gtk.CellRendererText(), text=0)
-            trouble_val_col = Gtk.TreeViewColumn(_("Value"), Gtk.CellRendererText(), text=1)
-            trouble_key_col.set_resizable(True)
-            trouble_val_col.set_resizable(True)
-            trouble_tree.append_column(trouble_key_col)
-            trouble_tree.append_column(trouble_val_col)
-
+            trouble_tree.append_column(Gtk.TreeViewColumn(_("Field"), Gtk.CellRendererText(), text=0))
+            trouble_tree.append_column(Gtk.TreeViewColumn(_("Value"), Gtk.CellRendererText(), text=1))
             trouble_scroll = Gtk.ScrolledWindow()
             trouble_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            trouble_scroll.set_min_content_height(120)
+            trouble_scroll.set_hexpand(True)
+            trouble_scroll.set_vexpand(True)
             trouble_scroll.add(trouble_tree)
+            notebook.append_page(trouble_scroll, Gtk.Label(label=_("Troubleshooting Information")))
 
-            trouble_frame.add(trouble_scroll)
-            area.add(trouble_frame)
-
-        if txt_records is not None:
-            txt_frame = Gtk.Frame(label=_("TXT records"))
-            txt_frame.set_margin_start(6)
-            txt_frame.set_margin_end(6)
+        if txt_records:
             txt_store = Gtk.ListStore(str, str)
             for key, value in txt_records:
                 txt_store.append([key, value])
             txt_tree = Gtk.TreeView(model=txt_store)
-            txt_key_column = Gtk.TreeViewColumn(_("Name"), Gtk.CellRendererText(), text=0)
-            txt_val_column = Gtk.TreeViewColumn(_("Record"), Gtk.CellRendererText(), text=1)
-            txt_key_column.set_resizable(True)
-            txt_val_column.set_resizable(True)
-            txt_tree.append_column(txt_key_column)
-            txt_tree.append_column(txt_val_column)
+            txt_tree.append_column(Gtk.TreeViewColumn(_("Name"), Gtk.CellRendererText(), text=0))
+            txt_tree.append_column(Gtk.TreeViewColumn(_("Record"), Gtk.CellRendererText(), text=1))
             txt_scroll = Gtk.ScrolledWindow()
             txt_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            txt_scroll.set_min_content_height(120)
+            txt_scroll.set_hexpand(True)
+            txt_scroll.set_vexpand(True)
             txt_scroll.add(txt_tree)
-            txt_frame.add(txt_scroll)
-            area.add(txt_frame)
+            notebook.append_page(txt_scroll, Gtk.Label(label=_("TXT records")))
+
+        if isinstance(self._raw_content, str) and self._raw_content.strip():
+            raw_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            raw_box.set_margin_start(8)
+            raw_box.set_margin_end(8)
+            raw_box.set_margin_top(8)
+            raw_box.set_margin_bottom(8)
+
+            if self._raw_xml_location:
+                location_label = Gtk.Label(label=f"{_('XML location')}: {self._raw_xml_location}", xalign=0.0)
+                location_label.set_selectable(True)
+                location_label.set_halign(Gtk.Align.START)
+                raw_box.pack_start(location_label, False, False, 0)
+
+            copy_button = Gtk.Button.new_with_label(_("Copy to clipboard"))
+            copy_button.set_halign(Gtk.Align.START)
+            copy_button.connect("clicked", self._on_raw_copy_clicked)
+            raw_box.pack_start(copy_button, False, False, 0)
+
+            text_buffer = Gtk.TextBuffer()
+            text_buffer.set_text(self._raw_content)
+            text_view = Gtk.TextView(buffer=text_buffer)
+            text_view.set_editable(False)
+            text_view.set_cursor_visible(True)
+            text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+            text_view.set_monospace(True)
+
+            raw_scroll = Gtk.ScrolledWindow()
+            raw_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            raw_scroll.set_hexpand(True)
+            raw_scroll.set_vexpand(True)
+            raw_scroll.add(text_view)
+            raw_box.pack_start(raw_scroll, True, True, 0)
+            notebook.append_page(raw_box, Gtk.Label(label=_("Device data")))
 
         self.connect("response", self._on_response)
         self.show_all()
 
+    def _on_close_clicked(self, _button: Gtk.Button) -> None:
+        _LOG.debug("Device details dialog close button clicked")
+
     def _on_response(self, _dialog: Gtk.Dialog, response_id: int) -> None:
-        if response_id != Gtk.ResponseType.APPLY or not self._raw_content:
+        _LOG.debug("Device details dialog response=%s", response_id)
+        return
+
+    def _on_raw_copy_clicked(self, _button: Gtk.Button) -> None:
+        if not isinstance(self._raw_content, str):
             return
-        raw_dialog = Gtk.MessageDialog(
-            transient_for=self,
-            modal=True,
-            buttons=Gtk.ButtonsType.CLOSE,
-            message_type=Gtk.MessageType.INFO,
-            text=_("Raw XML"),
-        )
-        if self._raw_xml_location:
-            raw_dialog.format_secondary_text(f"{_('XML location')}: {self._raw_xml_location}\n\n{self._raw_content}")
-        else:
-            raw_dialog.format_secondary_text(self._raw_content)
-        raw_dialog.run()
-        raw_dialog.destroy()
+        clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        clipboard.set_text(self._raw_content, -1)
+        clipboard.store()
+        _LOG.debug("Raw XML copied to clipboard")
 
     def _create_value_widget(self, value: str) -> Gtk.Widget:
         text = value.strip() if isinstance(value, str) else str(value)
@@ -165,3 +178,30 @@ class DeviceDetailsDialog(Gtk.Dialog):
         label.set_line_wrap(True)
         label.set_halign(Gtk.Align.START)
         return label
+
+    def _filter_unavailable_pairs(self, records: list[tuple[str, str]] | None) -> list[tuple[str, str]]:
+        if not records:
+            return []
+        cleaned: list[tuple[str, str]] = []
+        for key, value in records:
+            text = value.strip() if isinstance(value, str) else str(value).strip()
+            if not text or text.lower() == "unavailable":
+                continue
+            cleaned.append((key, text))
+        return cleaned
+
+    def _filter_unavailable_services(
+        self, records: list[tuple[str, str, str]] | None
+    ) -> list[tuple[str, str, str]] | None:
+        if not records:
+            return None
+        cleaned: list[tuple[str, str, str]] = []
+        for service, target, port in records:
+            target_txt = target.strip() if isinstance(target, str) else str(target).strip()
+            port_txt = port.strip() if isinstance(port, str) else str(port).strip()
+            if (not target_txt or target_txt.lower() == "unavailable") and (
+                not port_txt or port_txt.lower() == "unavailable"
+            ):
+                continue
+            cleaned.append((service, target_txt or "unavailable", port_txt or "unavailable"))
+        return cleaned or None

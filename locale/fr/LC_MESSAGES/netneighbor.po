@@ -35,6 +35,63 @@ msgstr "Utiliser les icones fournies"
 msgid "Use system icons"
 msgstr "Utiliser les icones systeme"
 
+msgid "Icon source"
+msgstr "Source de l'icone"
+
+msgid "Auto"
+msgstr "Auto"
+
+msgid "Use provided icon"
+msgstr "Utiliser l'icone fournie"
+
+msgid "Use system icon"
+msgstr "Utiliser l'icone systeme"
+
+msgid "Device type"
+msgstr "Type d'appareil"
+
+msgid "NAS"
+msgstr "NAS"
+
+msgid "Computer"
+msgstr "Ordinateur"
+
+msgid "Router"
+msgstr "Routeur"
+
+msgid "Media server"
+msgstr "Serveur multimedia"
+
+msgid "Printer"
+msgstr "Imprimante"
+
+msgid "Network Printer"
+msgstr "Imprimante reseau"
+
+msgid "SmartSpeaker"
+msgstr "Enceinte intelligente"
+
+msgid "Unknown"
+msgstr "Inconnu"
+
+msgid "SmartTV"
+msgstr "SmartTV"
+
+msgid "SmartDevice"
+msgstr "SmartDevice"
+
+msgid "Camera"
+msgstr "Camera"
+
+msgid "HomeAppliance"
+msgstr "HomeAppliance"
+
+msgid "CNC"
+msgstr "CNC"
+
+msgid "3D printer"
+msgstr "Imprimante 3D"
+
 msgid "Help"
 msgstr "Aide"
 
@@ -67,6 +124,9 @@ msgstr "XML brut"
 
 msgid "Close"
 msgstr "Fermer"
+
+msgid "Copy to clipboard"
+msgstr "Copier dans le presse-papiers"
 
 msgid "Details"
 msgstr "Details"
@@ -113,6 +173,12 @@ msgstr "Champ"
 msgid "Value"
 msgstr "Valeur"
 
+msgid "Information"
+msgstr "Informations"
+
+msgid "Last seen"
+msgstr "Derniere apparition"
+
 msgid "TXT records"
 msgstr "Enregistrements TXT"
 
@@ -137,6 +203,9 @@ msgstr "Nom"
 msgid "Record"
 msgstr "Enregistrement"
 
+msgid "Alternative names"
+msgstr "Noms alternatifs"
+
 msgid "Show SSDP XML"
 msgstr "Afficher le XML SSDP"
 
@@ -151,3 +220,6 @@ msgstr "Enregistrements TXT mDNS"
 
 msgid "No details available."
 msgstr "Aucun detail disponible."
+
+msgid "Device data"
+msgstr "Donnees appareil"

@@ -3,6 +3,7 @@
 import gi
 from collections import defaultdict
 from dataclasses import dataclass
+from urllib.request import urlopen
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GdkPixbuf, Gtk
@@ -88,6 +89,8 @@ class DeviceList(Gtk.Box):
         self,
         parent_window: Gtk.Window | None = None,
         on_set_monitored: Callable[[Device, bool], None] | None = None,
+        on_icon_mode_changed: Callable[[], None] | None = None,
+        on_set_type_override: Callable[[str, str, int, str | None], None] | None = None,
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._current_view = "icons"
@@ -96,8 +99,12 @@ class DeviceList(Gtk.Box):
         self._category_filter: str | None = None
         self._parent_window = parent_window
         self._on_set_monitored = on_set_monitored
+        self._on_icon_mode_changed = on_icon_mode_changed
+        self._on_set_type_override = on_set_type_override
         self._show_source_badges = True
-        self._icon_source_mode = "provided"
+        self._icon_source_overrides: dict[tuple[str, int], str] = {}
+        self._remote_icon_cache: dict[str, GdkPixbuf.Pixbuf] = {}
+        self._remote_icon_by_endpoint: dict[tuple[str, int], GdkPixbuf.Pixbuf] = {}
         self._install_css()
 
         self._list_store = Gtk.ListStore(object, str, str, int, str, str)
@@ -154,15 +161,24 @@ class DeviceList(Gtk.Box):
         self._show_source_badges = enabled
         self._rebuild_icon_sections(self._filtered_devices)
 
-    def set_icon_source_mode(self, mode: str) -> None:
-        if mode not in {"provided", "system"}:
-            return
-        self._icon_source_mode = mode
+    def set_icon_source_overrides(self, overrides: dict) -> None:
+        normalized: dict[tuple[str, int], str] = {}
+        for key, mode in overrides.items():
+            if mode not in {"auto", "provided", "system"}:
+                continue
+            if not isinstance(key, str) or ":" not in key:
+                continue
+            ip, port_text = key.rsplit(":", 1)
+            try:
+                port = int(port_text)
+            except ValueError:
+                continue
+            normalized[(ip, port)] = mode
+        self._icon_source_overrides = normalized
         self._rebuild_icon_sections(self._filtered_devices)
 
-    @property
-    def icon_source_mode(self) -> str:
-        return self._icon_source_mode
+    def get_icon_source_overrides(self) -> dict[str, str]:
+        return {f"{ip}:{port}": mode for (ip, port), mode in self._icon_source_overrides.items()}
 
     @property
     def view_mode(self) -> str:
@@ -283,6 +299,106 @@ class DeviceList(Gtk.Box):
             follow_item.connect("activate", self._on_monitor_item_activate, bundle, True)
             menu.append(follow_item)
 
+        menu.append(Gtk.SeparatorMenuItem())
+        icon_source_item = Gtk.MenuItem.new_with_label(_("Icon source"))
+        icon_source_menu = Gtk.Menu()
+        icon_source_item.set_submenu(icon_source_menu)
+        menu.append(icon_source_item)
+
+        endpoint = (bundle.ip, bundle.port)
+        current_mode = self._icon_source_overrides.get(endpoint, "auto")
+        auto_item = Gtk.RadioMenuItem.new_with_label(None, _("Auto"))
+        provided_item = Gtk.RadioMenuItem.new_with_label_from_widget(auto_item, _("Use provided icon"))
+        system_item = Gtk.RadioMenuItem.new_with_label_from_widget(auto_item, _("Use system icon"))
+        auto_item.connect("toggled", self._on_icon_mode_item_toggled, bundle, "auto")
+        provided_item.connect("toggled", self._on_icon_mode_item_toggled, bundle, "provided")
+        system_item.connect("toggled", self._on_icon_mode_item_toggled, bundle, "system")
+        icon_source_menu.append(auto_item)
+        icon_source_menu.append(provided_item)
+        icon_source_menu.append(system_item)
+        if current_mode == "provided":
+            provided_item.set_active(True)
+        elif current_mode == "system":
+            system_item.set_active(True)
+        else:
+            auto_item.set_active(True)
+
+        type_item = Gtk.MenuItem.new_with_label(_("Device type"))
+        type_menu = Gtk.Menu()
+        type_item.set_submenu(type_menu)
+        menu.append(type_item)
+        current_type = bundle.primary.type.strip().lower() if isinstance(bundle.primary.type, str) else "unknown"
+        type_auto_item = Gtk.RadioMenuItem.new_with_label(None, _("Auto"))
+        type_nas_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("NAS"))
+        type_computer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Computer"))
+        type_router_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Router"))
+        type_media_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Media server"))
+        type_printer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Printer"))
+        type_network_printer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Network Printer"))
+        type_smart_speaker_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("SmartSpeaker"))
+        type_smart_tv_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("SmartTV"))
+        type_smart_device_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("SmartDevice"))
+        type_camera_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Camera"))
+        type_home_appliance_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("HomeAppliance"))
+        type_cnc_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("CNC"))
+        type_3d_printer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("3D printer"))
+        type_auto_item.connect("toggled", self._on_type_item_toggled, bundle, None)
+        type_nas_item.connect("toggled", self._on_type_item_toggled, bundle, "nas")
+        type_computer_item.connect("toggled", self._on_type_item_toggled, bundle, "computer")
+        type_router_item.connect("toggled", self._on_type_item_toggled, bundle, "router")
+        type_media_item.connect("toggled", self._on_type_item_toggled, bundle, "mediaserver")
+        type_printer_item.connect("toggled", self._on_type_item_toggled, bundle, "printer")
+        type_network_printer_item.connect("toggled", self._on_type_item_toggled, bundle, "networkprinter")
+        type_smart_speaker_item.connect("toggled", self._on_type_item_toggled, bundle, "smartspeaker")
+        type_smart_tv_item.connect("toggled", self._on_type_item_toggled, bundle, "smarttv")
+        type_smart_device_item.connect("toggled", self._on_type_item_toggled, bundle, "smartdevice")
+        type_camera_item.connect("toggled", self._on_type_item_toggled, bundle, "camera")
+        type_home_appliance_item.connect("toggled", self._on_type_item_toggled, bundle, "homeappliance")
+        type_cnc_item.connect("toggled", self._on_type_item_toggled, bundle, "cnc")
+        type_3d_printer_item.connect("toggled", self._on_type_item_toggled, bundle, "3dprinter")
+        type_menu.append(type_auto_item)
+        type_menu.append(type_nas_item)
+        type_menu.append(type_computer_item)
+        type_menu.append(type_router_item)
+        type_menu.append(type_media_item)
+        type_menu.append(type_printer_item)
+        type_menu.append(type_network_printer_item)
+        type_menu.append(type_smart_speaker_item)
+        type_menu.append(type_smart_tv_item)
+        type_menu.append(type_smart_device_item)
+        type_menu.append(type_camera_item)
+        type_menu.append(type_home_appliance_item)
+        type_menu.append(type_cnc_item)
+        type_menu.append(type_3d_printer_item)
+        if current_type == "nas":
+            type_nas_item.set_active(True)
+        elif current_type == "computer":
+            type_computer_item.set_active(True)
+        elif current_type == "router":
+            type_router_item.set_active(True)
+        elif current_type == "mediaserver":
+            type_media_item.set_active(True)
+        elif current_type == "printer":
+            type_printer_item.set_active(True)
+        elif current_type == "networkprinter":
+            type_network_printer_item.set_active(True)
+        elif current_type == "smartspeaker":
+            type_smart_speaker_item.set_active(True)
+        elif current_type == "smarttv":
+            type_smart_tv_item.set_active(True)
+        elif current_type == "smartdevice":
+            type_smart_device_item.set_active(True)
+        elif current_type == "camera":
+            type_camera_item.set_active(True)
+        elif current_type == "homeappliance":
+            type_home_appliance_item.set_active(True)
+        elif current_type == "cnc":
+            type_cnc_item.set_active(True)
+        elif current_type == "3dprinter":
+            type_3d_printer_item.set_active(True)
+        else:
+            type_auto_item.set_active(True)
+
         menu.show_all()
         menu.popup_at_pointer(event)
 
@@ -292,10 +408,35 @@ class DeviceList(Gtk.Box):
         for device in bundle.devices:
             self._on_set_monitored(device, monitored)
 
+    def _on_icon_mode_item_toggled(self, menu_item: Gtk.RadioMenuItem, bundle: _DeviceBundle, mode: str) -> None:
+        if not menu_item.get_active():
+            return
+        endpoint = (bundle.ip, bundle.port)
+        current_mode = self._icon_source_overrides.get(endpoint, "auto")
+        if mode == current_mode:
+            return
+        if mode == "auto":
+            self._icon_source_overrides.pop(endpoint, None)
+        else:
+            self._icon_source_overrides[endpoint] = mode
+        self._rebuild_icon_sections(self._filtered_devices)
+        if self._on_icon_mode_changed is not None:
+            self._on_icon_mode_changed()
+
+    def _on_type_item_toggled(self, menu_item: Gtk.RadioMenuItem, bundle: _DeviceBundle, device_type: str | None) -> None:
+        if not menu_item.get_active():
+            return
+        if self._on_set_type_override is None:
+            return
+        self._on_set_type_override(bundle.primary.source, bundle.ip, bundle.port, device_type)
+
     def _on_open_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_device(bundle)
 
     def _on_show_ssdp_xml_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
+        self._open_ssdp_details(bundle)
+
+    def _open_ssdp_details(self, bundle: _DeviceBundle) -> None:
         device = bundle.ssdp_device
         if device is None:
             return
@@ -305,12 +446,15 @@ class DeviceList(Gtk.Box):
             fields=fields,
             raw_content=raw_xml,
             raw_button_label=_("Show raw XML"),
-            services_list=services_list if services_list else None,
+            services_list=None,
             troubleshooting_records=troubleshooting_fields,
             raw_xml_location=xml_location,
         )
 
     def _on_show_mdns_txt_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
+        self._open_mdns_details(bundle)
+
+    def _open_mdns_details(self, bundle: _DeviceBundle) -> None:
         device = bundle.mdns_device
         if device is None:
             return
@@ -323,10 +467,20 @@ class DeviceList(Gtk.Box):
         )
 
     def _open_device(self, bundle: _DeviceBundle) -> None:
+        # Double-click behavior priority:
+        # 1) presentation URL (open browser)
+        # 2) SSDP details when no presentation URL
+        # 3) mDNS details
+        # 4) no action
         url = bundle.open_url
-        if not url:
+        if url:
+            open_url(url)
             return
-        open_url(url)
+        if bundle.ssdp_device is not None:
+            self._open_ssdp_details(bundle)
+            return
+        if bundle.mdns_device is not None:
+            self._open_mdns_details(bundle)
 
     def _show_details_dialog(
         self,
@@ -407,7 +561,13 @@ class DeviceList(Gtk.Box):
         return False
 
     def _load_device_icon(self, device: Device) -> GdkPixbuf.Pixbuf:
-        if self._icon_source_mode == "provided":
+        endpoint = (device.ip, device.port)
+        icon_mode = self._icon_source_overrides.get(endpoint, "auto")
+        use_provided = icon_mode in {"auto", "provided"}
+        if use_provided:
+            remote_icon = self._load_remote_icon(device, 64)
+            if remote_icon is not None:
+                return remote_icon
             icon_path = resolve_icon_path(device.icon)
             try:
                 return GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), 64, 64)
@@ -420,6 +580,14 @@ class DeviceList(Gtk.Box):
             "router": ["network-wireless-router", "network-server", "network-workgroup"],
             "mediaserver": ["multimedia-player", "folder-videos", "network-server"],
             "printer": ["printer-network", "printer", "network-server"],
+            "networkprinter": ["printer-network", "printer", "network-server"],
+            "smartspeaker": ["audio-speakers", "multimedia-player", "network-server"],
+            "smarttv": ["video-display", "multimedia-player", "network-server"],
+            "smartdevice": ["applications-system", "network-server", "computer"],
+            "camera": ["camera-web", "camera-photo", "network-server"],
+            "homeappliance": ["applications-utilities", "network-server", "computer"],
+            "cnc": ["applications-engineering", "applications-system", "network-server"],
+            "3dprinter": ["printer-3d", "printer-network", "printer"],
             "nas": ["drive-harddisk", "folder-remote", "network-server"],
             "computer": ["computer", "network-workgroup", "video-display"],
             "http": ["applications-internet", "web-browser", "network-server"],
@@ -432,6 +600,38 @@ class DeviceList(Gtk.Box):
             except Exception:
                 continue
         return GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 64, 64)
+
+    def _load_remote_icon(self, device: Device, size: int) -> GdkPixbuf.Pixbuf | None:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        xml_fields = metadata.get("xml_fields")
+        if not isinstance(xml_fields, dict):
+            return None
+        icon_url = xml_fields.get("iconURL")
+        if not isinstance(icon_url, str) or not icon_url.strip():
+            return self._remote_icon_by_endpoint.get((device.ip, device.port))
+        icon_url = icon_url.strip()
+        endpoint = (device.ip, device.port)
+        cached = self._remote_icon_cache.get(icon_url)
+        if cached is not None:
+            self._remote_icon_by_endpoint[endpoint] = cached
+            return cached
+        try:
+            with urlopen(icon_url, timeout=1.5) as response:
+                data = response.read()
+            loader = GdkPixbuf.PixbufLoader()
+            loader.write(data)
+            loader.close()
+            pixbuf = loader.get_pixbuf()
+            if pixbuf is None:
+                return self._remote_icon_by_endpoint.get(endpoint)
+            scaled = pixbuf.scale_simple(size, size, GdkPixbuf.InterpType.BILINEAR)
+            if scaled is None:
+                return self._remote_icon_by_endpoint.get(endpoint)
+            self._remote_icon_cache[icon_url] = scaled
+            self._remote_icon_by_endpoint[endpoint] = scaled
+            return scaled
+        except Exception:
+            return self._remote_icon_by_endpoint.get(endpoint)
 
     def _install_css(self) -> None:
         provider = Gtk.CssProvider()

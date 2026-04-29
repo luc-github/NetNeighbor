@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from urllib.parse import urlparse
+
 from model.device import Device
 
 
@@ -26,17 +29,45 @@ def build_ssdp_payload(device: Device) -> tuple[
     xml_fields = xml_fields if isinstance(xml_fields, dict) else {}
     services_raw = xml_fields.get("services_description")
     services_list: list[tuple[str, str, str]] = []
+    services_records_raw = xml_fields.get("services_records")
+    if isinstance(services_records_raw, list):
+        for entry in services_records_raw:
+            if not isinstance(entry, dict):
+                continue
+            service = _value_or_unavailable(entry.get("service"))
+            target = _value_or_unavailable(entry.get("target"))
+            port = _value_or_unavailable(entry.get("port"))
+            services_list.append((service, target, port))
     if isinstance(services_raw, str) and services_raw.strip():
         # ESP3D/SSDP strings are often a comma-separated list of service URNs.
         # Normalize separators and split into individual entries.
         normalized = services_raw.replace("\n", ",")
         parts = [p.strip() for p in normalized.split(",") if p.strip()]
-        services_list = [(part, "unavailable", "unavailable") for part in parts]
+        target_default = device.ip
+        port_default = str(device.port)
+        presentation_url = xml_fields.get("presentationURL")
+        if isinstance(presentation_url, str) and presentation_url.strip():
+            parsed = urlparse(presentation_url.strip())
+            if parsed.hostname:
+                target_default = parsed.hostname
+            if parsed.port is not None:
+                port_default = str(parsed.port)
+        if not services_list:
+            services_list = [(part, target_default, port_default) for part in parts]
 
+    if isinstance(device.last_seen, datetime):
+        try:
+            last_seen_text = device.last_seen.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            last_seen_text = str(device.last_seen)
+    else:
+        last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
         ("IP", device.ip),
         ("Port", str(device.port)),
+        ("Last seen", last_seen_text),
         ("Friendly name", _value_or_unavailable(xml_fields.get("friendlyName"))),
+        ("Information", _value_or_unavailable(metadata.get("information"))),
         ("Manufacturer", _value_or_unavailable(xml_fields.get("manufacturer"))),
         ("Manufacturer URL", _value_or_unavailable(xml_fields.get("manufacturerURL"))),
         ("Model", _value_or_unavailable(xml_fields.get("modelName"))),
@@ -87,8 +118,16 @@ def build_mdns_payload(
     hostname_norm = _norm_name(hostname_raw)
     server_norm = _norm_name(server_raw)
 
+    if isinstance(device.last_seen, datetime):
+        try:
+            last_seen_text = device.last_seen.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            last_seen_text = str(device.last_seen)
+    else:
+        last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
         ("IP", device.ip),
+        ("Last seen", last_seen_text),
         ("Hostname", _value_or_unavailable(hostname_raw)),
     ]
 

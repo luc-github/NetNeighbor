@@ -1,5 +1,6 @@
 """GTK application bootstrap for NetNeighbor."""
 
+import logging
 import os
 from pathlib import Path
 import socket
@@ -189,6 +190,7 @@ class NetNeighborApplication(Gtk.Application):
 
 
 def main() -> int:
+    _setup_logging()
     app = NetNeighborApplication()
     if not app._instance_lock.acquire():
         if request_existing_instance_activation(app._app_id):
@@ -202,3 +204,27 @@ def main() -> int:
     finally:
         app._activation_server.stop()
         app._instance_lock.release()
+
+
+def _setup_logging() -> None:
+    level_name = os.getenv("NETNEIGHBOR_LOG_LEVEL", "DEBUG").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    log_dir = Path.home() / ".cache" / "netneighbor"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "netneighbor.log"
+
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        root_logger.setLevel(level)
+        return
+
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    root_logger.setLevel(level)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(stream_handler)
+    logging.getLogger(__name__).info("Logging initialized at %s (%s)", level_name, log_file)

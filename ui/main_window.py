@@ -1,6 +1,9 @@
 """Main application window."""
 
 import gi
+import logging
+from datetime import datetime
+import threading
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, Gtk
@@ -10,6 +13,8 @@ from ui.device_list import DeviceList
 from model.device import Device
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 from utils.notifications import send_notification
+
+_LOG = logging.getLogger(__name__)
 
 
 class MainWindow(Gtk.ApplicationWindow):
@@ -22,8 +27,10 @@ class MainWindow(Gtk.ApplicationWindow):
         self._selected_category: str | None = None
         self._category_rows: dict[str, Gtk.ListBoxRow] = {}
         self._is_updating_sidebar = False
+        self._sidebar_signature: tuple | None = None
         self._initializing = True
         self._prefs = load_ui_preferences()
+        self._notification_history: list[dict[str, str]] = []
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         root.set_border_width(8)
@@ -70,17 +77,6 @@ class MainWindow(Gtk.ApplicationWindow):
         preferences_menu = Gtk.Menu()
         preferences_item.set_submenu(preferences_menu)
 
-        self._provided_icons_item = Gtk.RadioMenuItem.new_with_label(None, _("Use provided icons"))
-        self._system_icons_item = Gtk.RadioMenuItem.new_with_label_from_widget(
-            self._provided_icons_item, _("Use system icons")
-        )
-        self._provided_icons_item.connect("toggled", self._on_icon_source_toggled, "provided")
-        self._system_icons_item.connect("toggled", self._on_icon_source_toggled, "system")
-        preferences_menu.append(self._provided_icons_item)
-        preferences_menu.append(self._system_icons_item)
-
-        preferences_menu.append(Gtk.SeparatorMenuItem())
-
         notif_off_item = Gtk.RadioMenuItem.new_with_label(None, _("Notifications off"))
         notif_monitored_item = Gtk.RadioMenuItem.new_with_label_from_widget(notif_off_item, _("Monitored devices only"))
         notif_all_item = Gtk.RadioMenuItem.new_with_label_from_widget(notif_off_item, _("All devices"))
@@ -96,6 +92,17 @@ class MainWindow(Gtk.ApplicationWindow):
         preferences_menu.append(notif_off_item)
         preferences_menu.append(notif_monitored_item)
         preferences_menu.append(notif_all_item)
+
+        self._notifications_item = Gtk.MenuItem.new_with_label(_("Notifications"))
+        menubar.append(self._notifications_item)
+        notifications_menu = Gtk.Menu()
+        self._notifications_item.set_submenu(notifications_menu)
+        notifications_history_item = Gtk.MenuItem.new_with_label(_("Show history"))
+        notifications_history_item.connect("activate", self._on_notifications_history_activate)
+        notifications_menu.append(notifications_history_item)
+        notifications_clear_item = Gtk.MenuItem.new_with_label(_("Clear history"))
+        notifications_clear_item.connect("activate", self._on_notifications_clear_activate)
+        notifications_menu.append(notifications_clear_item)
 
         help_item = Gtk.MenuItem.new_with_label(_("Help"))
         menubar.append(help_item)
@@ -119,7 +126,12 @@ class MainWindow(Gtk.ApplicationWindow):
         sidebar_scroll.add(self._sidebar_list)
         self._content.add1(sidebar_scroll)
 
-        self._device_list = DeviceList(parent_window=self, on_set_monitored=self._on_set_monitored)
+        self._device_list = DeviceList(
+            parent_window=self,
+            on_set_monitored=self._on_set_monitored,
+            on_icon_mode_changed=self._on_icon_mode_changed,
+            on_set_type_override=self._on_set_type_override,
+        )
         # DeviceList will call this when user chooses Monitor/Unfollow.
         self._content.add2(self._device_list)
 
@@ -144,15 +156,14 @@ class MainWindow(Gtk.ApplicationWindow):
         self._device_list.set_show_source_badges(menu_item.get_active())
         self._persist_ui_preferences()
 
-    def _on_icon_source_toggled(self, menu_item: Gtk.RadioMenuItem, mode: str) -> None:
-        if menu_item.get_active():
-            self._device_list.set_icon_source_mode(mode)
-            self._persist_ui_preferences()
+    def _on_icon_mode_changed(self) -> None:
+        self._persist_ui_preferences()
 
     def _on_notification_mode_toggled(self, menu_item: Gtk.RadioMenuItem, mode: str) -> None:
         if not menu_item.get_active():
             return
         self._notification_mode = mode
+        self._refresh_notifications_menu_state()
         self._persist_ui_preferences()
 
     def _on_set_monitored(self, device: Device, monitored: bool) -> None:
@@ -165,11 +176,24 @@ class MainWindow(Gtk.ApplicationWindow):
                 "name": device.name,
             }
             if not device.online:
-                send_notification("NetNeighbor", device.name, f"{device.name} left")
+                self._emit_device_notification(device.name, "left")
         self._manager.set_device_monitored(device.key, monitored)
 
+    def _on_set_type_override(self, source: str, ip: str, port: int, device_type: str | None) -> None:
+        self._manager.set_device_type_override(source, ip, port, device_type)
+        self._persist_ui_preferences()
+
     def _on_about_activate(self, _menu_item: Gtk.MenuItem) -> None:
+        _LOG.debug("About menu clicked")
         dialog = Gtk.AboutDialog(transient_for=self, modal=True)
+        dialog.set_default_response(Gtk.ResponseType.CLOSE)
+        close_button = dialog.get_widget_for_response(Gtk.ResponseType.CLOSE)
+        if close_button is not None:
+            close_button.connect("clicked", self._on_about_close_clicked)
+            close_button.set_receives_default(True)
+            close_button.grab_default()
+            close_button.grab_focus()
+            dialog.set_focus(close_button)
         dialog.set_program_name("NetNeighbor")
         dialog.set_version("0.1.0-dev")
         dialog.set_authors(["Luc"])
@@ -178,7 +202,56 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.set_website_label(_("GitHub Project"))
         dialog.set_license_type(Gtk.License.LGPL_3_0)
         dialog.set_copyright("Copyright (C) Luc")
+        dialog.connect("response", self._on_about_response)
         dialog.run()
+        dialog.destroy()
+
+    def _on_about_close_clicked(self, _button: Gtk.Button) -> None:
+        _LOG.debug("About close button clicked")
+
+    def _on_about_response(self, _dialog: Gtk.Dialog, response_id: int) -> None:
+        _LOG.debug("About dialog response=%s", response_id)
+
+    def _on_notifications_history_activate(self, _menu_item: Gtk.MenuItem) -> None:
+        self._show_notifications_history_dialog()
+
+    def _on_notifications_clear_activate(self, _menu_item: Gtk.MenuItem) -> None:
+        self._notification_history.clear()
+
+    def _show_notifications_history_dialog(self) -> None:
+        dialog = Gtk.Dialog(title=_("Notification history"), transient_for=self, modal=True)
+        dialog.set_default_size(620, 340)
+        content = dialog.get_content_area()
+        content.set_border_width(8)
+
+        store = Gtk.ListStore(str, str, str)
+        for item in self._notification_history:
+            store.append([item.get("timestamp", ""), item.get("device", ""), item.get("status", "")])
+
+        tree = Gtk.TreeView(model=store)
+        for title, index in [(_("Date/Time"), 0), (_("Device"), 1), (_("Status"), 2)]:
+            renderer = Gtk.CellRendererText()
+            column = Gtk.TreeViewColumn(title, renderer, text=index)
+            column.set_resizable(True)
+            tree.append_column(column)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.add(tree)
+        content.pack_start(scroll, True, True, 0)
+
+        clear_button = dialog.add_button(_("Clear"), Gtk.ResponseType.APPLY)
+        clear_button.set_can_default(False)
+        dialog.add_button(_("Close"), Gtk.ResponseType.CLOSE)
+        dialog.show_all()
+
+        while True:
+            response = dialog.run()
+            if response == Gtk.ResponseType.APPLY:
+                self._notification_history.clear()
+                store.clear()
+                continue
+            break
         dialog.destroy()
 
     def _build_accelerators(self) -> Gtk.AccelGroup:
@@ -213,10 +286,10 @@ class MainWindow(Gtk.ApplicationWindow):
             prev_monitored = bool(prev.get("monitored"))
             if mode == "all" and prev_online:
                 name = str(prev.get("name", "Device"))
-                send_notification("NetNeighbor", name, f"{name} left")
+                self._emit_device_notification(name, "left")
             elif mode == "monitored" and prev_online and prev_monitored:
                 name = str(prev.get("name", "Device"))
-                send_notification("NetNeighbor", name, f"{name} left")
+                self._emit_device_notification(name, "left")
             del self._device_state[key]
 
         # 2) Online/offline transitions => connected/left.
@@ -226,7 +299,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 # First sighting.
                 if bool(device.online) and (mode == "all" or bool(getattr(device, "monitored", False))):
                     name = device.name
-                    send_notification("NetNeighbor", name, f"{name} connected")
+                    self._emit_device_notification(name, "connected")
                 self._device_state[device.key] = {
                     "online": bool(device.online),
                     "monitored": bool(getattr(device, "monitored", False)),
@@ -246,9 +319,9 @@ class MainWindow(Gtk.ApplicationWindow):
                 continue
 
             if prev_online is False and device.online is True:
-                send_notification("NetNeighbor", device.name, f"{device.name} connected")
+                self._emit_device_notification(device.name, "connected")
             elif prev_online is True and device.online is False:
-                send_notification("NetNeighbor", device.name, f"{device.name} left")
+                self._emit_device_notification(device.name, "left")
 
     def _sync_device_state(self, devices: list[Device]) -> None:
         current_keys = {d.key for d in devices}
@@ -267,6 +340,10 @@ class MainWindow(Gtk.ApplicationWindow):
         counts: dict[str, int] = {}
         for device in devices:
             counts[device.category] = counts.get(device.category, 0) + 1
+        signature = (len(devices), tuple(sorted(counts.items())))
+        if signature == self._sidebar_signature:
+            return
+        self._sidebar_signature = signature
 
         selected = self._selected_category
         self._is_updating_sidebar = True
@@ -311,7 +388,7 @@ class MainWindow(Gtk.ApplicationWindow):
         view_mode = self._prefs.get("view_mode", "icons")
         show_source_badges = bool(self._prefs.get("show_source_badges", True))
         sidebar_position = int(self._prefs.get("sidebar_position", 220))
-        icon_source_mode = self._prefs.get("icon_source_mode", "provided")
+        icon_source_overrides = self._prefs.get("icon_source_overrides")
         # Backward compat: older versions saved a boolean.
         if isinstance(self._prefs.get("use_notifications"), bool):
             self._notification_mode = "monitored" if self._prefs.get("use_notifications") else "off"
@@ -325,10 +402,20 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self._content.set_position(max(160, min(sidebar_position, 480)))
         self._source_badges_item.set_active(show_source_badges)
-        if icon_source_mode == "system":
-            self._system_icons_item.set_active(True)
-        else:
-            self._provided_icons_item.set_active(True)
+        if isinstance(icon_source_overrides, dict):
+            self._device_list.set_icon_source_overrides(icon_source_overrides)
+        type_overrides = self._prefs.get("type_overrides")
+        if isinstance(type_overrides, dict):
+            self._manager.set_type_overrides(type_overrides)
+        monitored_overrides = self._prefs.get("monitored_overrides")
+        if isinstance(monitored_overrides, dict):
+            self._manager.set_monitored_overrides(monitored_overrides)
+        last_seen_overrides = self._prefs.get("last_seen_overrides")
+        if isinstance(last_seen_overrides, dict):
+            self._manager.set_last_seen_overrides(last_seen_overrides)
+        monitored_snapshots = self._prefs.get("monitored_device_snapshots")
+        if isinstance(monitored_snapshots, list):
+            self._manager.restore_monitored_snapshots(monitored_snapshots)
         if view_mode == "list":
             self._list_item.set_active(True)
         else:
@@ -339,6 +426,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self._notif_off_item.set_active(self._notification_mode == "off")
             self._notif_monitored_item.set_active(self._notification_mode == "monitored")
             self._notif_all_item.set_active(self._notification_mode == "all")
+        self._refresh_notifications_menu_state()
 
     def _persist_ui_preferences(self) -> None:
         if self._initializing:
@@ -346,13 +434,70 @@ class MainWindow(Gtk.ApplicationWindow):
         prefs = {
             "view_mode": self._device_list.view_mode,
             "show_source_badges": self._source_badges_item.get_active(),
-            "icon_source_mode": self._device_list.icon_source_mode,
+            "icon_source_overrides": self._device_list.get_icon_source_overrides(),
+            "type_overrides": self._manager.get_type_overrides(),
+            "monitored_overrides": self._manager.get_monitored_overrides(),
+            "last_seen_overrides": self._manager.get_last_seen_overrides(),
+            "monitored_device_snapshots": self._build_monitored_snapshots(),
             "notification_mode": self._notification_mode,
             "selected_category": self._selected_category,
             "sidebar_position": self._content.get_position(),
         }
         save_ui_preferences(prefs)
 
+    def _build_monitored_snapshots(self) -> list[dict]:
+        snapshots: list[dict] = []
+        for device in self._manager.devices:
+            if not bool(getattr(device, "monitored", False)):
+                continue
+            last_seen_text = ""
+            if hasattr(device.last_seen, "isoformat"):
+                try:
+                    last_seen_text = device.last_seen.isoformat()
+                except Exception:
+                    last_seen_text = ""
+            snapshots.append(
+                {
+                    "name": device.name,
+                    "ip": device.ip,
+                    "port": int(device.port),
+                    "type": device.type,
+                    "category": device.category,
+                    "source": device.source,
+                    "url": device.url,
+                    "metadata": device.metadata if isinstance(device.metadata, dict) else {},
+                    "icon": device.icon,
+                    "last_seen": last_seen_text,
+                }
+            )
+        return snapshots
+
     def _on_destroy(self, *_args) -> None:
+        # UX: hide immediately, then complete shutdown work.
+        self.hide()
+        while Gtk.events_pending():
+            Gtk.main_iteration_do(False)
         self._persist_ui_preferences()
         self._manager.stop()
+
+    def _emit_device_notification(self, device_name: str, status: str) -> None:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        status_norm = status.strip().lower() if isinstance(status, str) else "status"
+        self._notification_history.append(
+            {
+                "timestamp": timestamp,
+                "device": str(device_name),
+                "status": status_norm,
+            }
+        )
+        # Keep UI responsive even if desktop notification backend stalls.
+        threading.Thread(
+            target=send_notification,
+            args=("NetNeighbor", str(device_name), f"{device_name} {status_norm}"),
+            daemon=True,
+        ).start()
+
+    def _refresh_notifications_menu_state(self) -> None:
+        enabled = self._notification_mode != "off"
+        if hasattr(self, "_notifications_item"):
+            self._notifications_item.set_sensitive(enabled)
