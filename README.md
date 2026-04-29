@@ -47,6 +47,22 @@ Demo data is enabled by default to help with visual mockups. Disable it with:
 NETNEIGHBOR_DEMO=0 python main.py
 ```
 
+## Translations (i18n)
+
+French catalog is available in `locale/fr/LC_MESSAGES/netneighbor.po`.
+
+Compile translations after edits:
+
+```bash
+msgfmt locale/fr/LC_MESSAGES/netneighbor.po -o locale/fr/LC_MESSAGES/netneighbor.mo
+```
+
+Run app in French for testing:
+
+```bash
+LANG=fr_FR.UTF-8 python main.py
+```
+
 Only one NetNeighbor instance is allowed at a time on Linux to avoid discovery conflicts.
 A second launch asks the first instance to bring its window to the foreground.
 

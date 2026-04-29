@@ -16,6 +16,7 @@ class Device:
     metadata: dict = field(default_factory=dict)
     last_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     online: bool = True
+    monitored: bool = False
     icon: str | None = None
 
     @property
