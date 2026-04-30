@@ -1,0 +1,108 @@
+{
+  "name_rules": {
+    "fallback_fields": [
+      "friendlyName",
+      "displayName"
+    ],
+    "prefer_display_name_when_no_friendly_name": true
+  },
+  "information_rules": {
+    "concat_fields": [
+      "roomName",
+      "displayName"
+    ],
+    "separator": " / "
+  },
+  "type_rules": [
+    {
+      "contains_any": [
+        "smartspeaker-audio",
+        "sonos"
+      ],
+      "type": "smartspeaker"
+    },
+    {
+      "contains_any": [
+        "dial-multiscreen",
+        "chromecast",
+        "googletv",
+        "android tv"
+      ],
+      "type": "smarttv"
+    },
+    {
+      "contains_any": [
+        "camera",
+        "onvif",
+        "ipcam",
+        "surveillance"
+      ],
+      "type": "camera"
+    },
+    {
+      "contains_any": [
+        "washer",
+        "dryer",
+        "refrigerator",
+        "oven",
+        "dishwasher",
+        "home appliance"
+      ],
+      "type": "homeappliance"
+    },
+    {
+      "contains_any": [
+        "cnc",
+        "laser cutter"
+      ],
+      "type": "cnc"
+    },
+    {
+      "contains_any": [
+        "3d printer",
+        "3dprinter",
+        "esp3d",
+        "ultimaker",
+        "prusa",
+        "bambu"
+      ],
+      "type": "3dprinter"
+    },
+    {
+      "contains_any": [
+        "iot",
+        "smart device",
+        "smartdevice"
+      ],
+      "type": "smartdevice"
+    },
+    {
+      "contains_any": [
+        "printer-network",
+        "ipp",
+        "ipps",
+        "airprint",
+        "network printer",
+        "print service",
+        "urn:schemas-upnp-org:device:printer"
+      ],
+      "type": "networkprinter"
+    },
+    {
+      "contains_any": [
+        "wifialliance",
+        "wfadevice",
+        "wfawlanconfig"
+      ],
+      "type": "router"
+    },
+    {
+      "contains_any": [
+        "synology",
+        "qnap",
+        "nas"
+      ],
+      "type": "nas"
+    }
+  ]
+}

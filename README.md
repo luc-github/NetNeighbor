@@ -5,14 +5,14 @@ Neighborhood experience.
 
 ## Current state
 
-This repository now includes a runnable project skeleton:
-- GTK application bootstrap
-- Discovery manager with SSDP/mDNS provider interfaces
-- Basic device model
-- Main window with refresh button and device list widget
-- Initial `device_types.json` and icon contribution guide
+- GTK 3 application (single-instance lock, optional demo mode)
+- **SSDP** discovery (multicast listen, M-SEARCH refresh, XML descriptors, offline / TTL handling)
+- **mDNS** provider is still a stub; real `zeroconf` browsing is the next milestone
+- Discovery manager with in-memory device cache, SSDP merge rules, user overrides
+- Main window: list + icon grid, categories, details dialogs, notifications (optional), preferences in `~/.config/netneighbor/ui_prefs.json`
 
-Current SSDP and mDNS providers are placeholders and do not yet perform real network discovery.
+Developer documentation lives under [`docs/README.md`](docs/README.md).
+User documentation (MVP) lives in [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
 
 ## Requirements
 
@@ -47,12 +47,27 @@ Demo data is enabled by default to help with visual mockups. Disable it with:
 NETNEIGHBOR_DEMO=0 python main.py
 ```
 
+## Translations (i18n)
+
+French catalog is available in `locale/fr/LC_MESSAGES/netneighbor.po`.
+
+Compile translations after edits:
+
+```bash
+msgfmt locale/fr/LC_MESSAGES/netneighbor.po -o locale/fr/LC_MESSAGES/netneighbor.mo
+```
+
+Run app in French for testing:
+
+```bash
+LANG=fr_FR.UTF-8 python main.py
+```
+
 Only one NetNeighbor instance is allowed at a time on Linux to avoid discovery conflicts.
 A second launch asks the first instance to bring its window to the foreground.
 
 ## Next implementation milestones
 
-1. Implement real mDNS discovery with `zeroconf`
-2. Implement real SSDP UDP multicast listener/query
-3. Add deduplication and online/offline lifecycle
-4. Add persistence in `~/.config/netneighbor/devices.json`
+1. Implement real mDNS discovery with `zeroconf` (service browser, TXT/SRV → `Device`)
+2. Refine cross-protocol deduplication once SSDP + mDNS both emit live data
+3. Packaging (AppImage / `.deb`) and release checklist — see [`docs/ROADMAP.md`](docs/ROADMAP.md)

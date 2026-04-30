@@ -1,0 +1,225 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: NetNeighbor 0.1.0-dev\n"
+"POT-Creation-Date: 2026-04-29 13:30+0800\n"
+"PO-Revision-Date: 2026-04-29 13:30+0800\n"
+"Last-Translator: Luc\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "View"
+msgstr "Affichage"
+
+msgid "Reload"
+msgstr "Recharger"
+
+msgid "Icons"
+msgstr "Icônes"
+
+msgid "List"
+msgstr "Liste"
+
+msgid "Show source badges"
+msgstr "Afficher les badges de source"
+
+msgid "Preferences"
+msgstr "Preferences"
+
+msgid "Use provided icons"
+msgstr "Utiliser les icones fournies"
+
+msgid "Use system icons"
+msgstr "Utiliser les icones systeme"
+
+msgid "Icon source"
+msgstr "Source de l'icone"
+
+msgid "Auto"
+msgstr "Auto"
+
+msgid "Use provided icon"
+msgstr "Utiliser l'icone fournie"
+
+msgid "Use system icon"
+msgstr "Utiliser l'icone systeme"
+
+msgid "Device type"
+msgstr "Type d'appareil"
+
+msgid "NAS"
+msgstr "NAS"
+
+msgid "Computer"
+msgstr "Ordinateur"
+
+msgid "Router"
+msgstr "Routeur"
+
+msgid "Media server"
+msgstr "Serveur multimedia"
+
+msgid "Printer"
+msgstr "Imprimante"
+
+msgid "Network Printer"
+msgstr "Imprimante reseau"
+
+msgid "SmartSpeaker"
+msgstr "Enceinte intelligente"
+
+msgid "Unknown"
+msgstr "Inconnu"
+
+msgid "SmartTV"
+msgstr "SmartTV"
+
+msgid "SmartDevice"
+msgstr "SmartDevice"
+
+msgid "Camera"
+msgstr "Camera"
+
+msgid "HomeAppliance"
+msgstr "HomeAppliance"
+
+msgid "CNC"
+msgstr "CNC"
+
+msgid "3D printer"
+msgstr "Imprimante 3D"
+
+msgid "Help"
+msgstr "Aide"
+
+msgid "About"
+msgstr "A propos"
+
+msgid "Linux network neighborhood for SSDP/mDNS discovery."
+msgstr "Voisinage reseau Linux pour la decouverte SSDP/mDNS."
+
+msgid "GitHub Project"
+msgstr "Projet GitHub"
+
+msgid "All"
+msgstr "Tous"
+
+msgid "Open"
+msgstr "Ouvrir"
+
+msgid "SSDP details"
+msgstr "Details SSDP"
+
+msgid "mDNS details"
+msgstr "Details mDNS"
+
+msgid "Show raw XML"
+msgstr "Afficher le XML brut"
+
+msgid "Raw XML"
+msgstr "XML brut"
+
+msgid "Close"
+msgstr "Fermer"
+
+msgid "Copy to clipboard"
+msgstr "Copier dans le presse-papiers"
+
+msgid "Details"
+msgstr "Details"
+
+msgid "Device details"
+msgstr "Details appareil"
+
+msgid "Services"
+msgstr "Services"
+
+msgid "XML location"
+msgstr "Emplacement XML"
+
+msgid "Service"
+msgstr "Service"
+
+msgid "Target"
+msgstr "Cible"
+
+msgid "Port"
+msgstr "Port"
+
+msgid "Monitor"
+msgstr "Surveiller"
+
+msgid "Unfollow"
+msgstr "Ne plus surveiller"
+
+msgid "Use notifications"
+msgstr "Utiliser les notifications"
+
+msgid "Notifications off"
+msgstr "Notifications désactivées"
+
+msgid "Monitored devices only"
+msgstr "Appareils surveillés uniquement"
+
+msgid "All devices"
+msgstr "Tous les appareils"
+
+msgid "Field"
+msgstr "Champ"
+
+msgid "Value"
+msgstr "Valeur"
+
+msgid "Information"
+msgstr "Informations"
+
+msgid "Last seen"
+msgstr "Derniere apparition"
+
+msgid "TXT records"
+msgstr "Enregistrements TXT"
+
+msgid "Troubleshooting Information"
+msgstr "Informations de dépannage"
+
+msgid "Serial number"
+msgstr "Numéro de série"
+
+msgid "MAC address"
+msgstr "Adresse MAC"
+
+msgid "Unique identifier"
+msgstr "Identifiant unique"
+
+msgid "IP address"
+msgstr "Adresse IP"
+
+msgid "Name"
+msgstr "Nom"
+
+msgid "Record"
+msgstr "Enregistrement"
+
+msgid "Alternative names"
+msgstr "Noms alternatifs"
+
+msgid "Show SSDP XML"
+msgstr "Afficher le XML SSDP"
+
+msgid "Show mDNS TXT records"
+msgstr "Afficher les enregistrements TXT mDNS"
+
+msgid "SSDP XML"
+msgstr "XML SSDP"
+
+msgid "mDNS TXT records"
+msgstr "Enregistrements TXT mDNS"
+
+msgid "No details available."
+msgstr "Aucun detail disponible."
+
+msgid "Device data"
+msgstr "Donnees appareil"
