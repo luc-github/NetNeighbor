@@ -344,7 +344,7 @@ class DeviceList(Gtk.Box):
         tile.set_size_request(130, -1)
 
         icon_overlay = Gtk.Overlay()
-        icon_overlay.set_size_request(64, 64)
+        icon_overlay.set_size_request(-1, 64)
         icon_overlay.set_halign(Gtk.Align.CENTER)
         icon_overlay.set_valign(Gtk.Align.CENTER)
         image = Gtk.Image.new_from_pixbuf(self._load_device_icon(bundle.primary))
@@ -519,10 +519,20 @@ class DeviceList(Gtk.Box):
         endpoint = (bundle.ip, bundle.port)
         current_mode = self._normalized_icon_mode(bundle)
         if mode == current_mode:
+            changed = False
             if mode != "custom":
-                self._custom_icon_overrides.pop(endpoint, None)
+                if endpoint in self._custom_icon_overrides:
+                    self._custom_icon_overrides.pop(endpoint, None)
+                    changed = True
             elif custom_icon_name:
-                self._custom_icon_overrides[endpoint] = custom_icon_name
+                previous = self._custom_icon_overrides.get(endpoint)
+                if previous != custom_icon_name:
+                    self._custom_icon_overrides[endpoint] = custom_icon_name
+                    changed = True
+            if changed:
+                self._rebuild_icon_sections(self._filtered_devices)
+                if self._on_icon_mode_changed is not None:
+                    self._on_icon_mode_changed()
             return
         self._icon_source_overrides[endpoint] = mode
         if mode == "custom":
@@ -894,8 +904,9 @@ class DeviceList(Gtk.Box):
         endpoint = (device.ip, device.port)
         cached = self._remote_icon_cache.get(icon_url)
         if cached is not None:
-            self._remote_icon_by_endpoint[endpoint] = cached
-            return cached
+            normalized_cached = self._normalize_icon_pixbuf(cached, size)
+            self._remote_icon_by_endpoint[endpoint] = normalized_cached
+            return normalized_cached
         self._start_remote_icon_fetch(icon_url, endpoint, size)
         return self._remote_icon_by_endpoint.get(endpoint)
 
@@ -913,7 +924,7 @@ class DeviceList(Gtk.Box):
                 loader.close()
                 pixbuf = loader.get_pixbuf()
                 if pixbuf is not None:
-                    scaled = pixbuf.scale_simple(size, size, GdkPixbuf.InterpType.BILINEAR)
+                    scaled = self._normalize_icon_pixbuf(pixbuf, size)
                     if scaled is not None:
                         self._remote_icon_cache[icon_url] = scaled
                         self._remote_icon_by_endpoint[endpoint] = scaled
@@ -930,6 +941,67 @@ class DeviceList(Gtk.Box):
     def _refresh_icons_after_async_fetch(self) -> bool:
         self._rebuild_icon_sections(self._filtered_devices)
         return False
+
+    def _normalize_icon_pixbuf(self, pixbuf: GdkPixbuf.Pixbuf, size: int) -> GdkPixbuf.Pixbuf:
+        if size <= 0:
+            return pixbuf
+        source = pixbuf
+        if pixbuf.get_has_alpha():
+            cropped = self._trim_transparent_borders(pixbuf)
+            if cropped is not None:
+                source = cropped
+        width = max(1, int(source.get_width()))
+        height = max(1, int(source.get_height()))
+        # Keep original size when dimensions straddle the target
+        # (one side below 64, the other above 64).
+        if (width > size and height < size) or (height > size and width < size):
+            return source
+        # Preserve aspect ratio while prioritizing visual height consistency:
+        # make icon height = target size, let width adapt.
+        ratio = size / height
+        target_w = max(1, int(width * ratio))
+        target_h = max(1, int(height * ratio))
+        scaled = source.scale_simple(target_w, target_h, GdkPixbuf.InterpType.BILINEAR)
+        return scaled if scaled is not None else source
+
+    def _trim_transparent_borders(self, pixbuf: GdkPixbuf.Pixbuf) -> GdkPixbuf.Pixbuf | None:
+        if not pixbuf.get_has_alpha():
+            return None
+        width = int(pixbuf.get_width())
+        height = int(pixbuf.get_height())
+        channels = int(pixbuf.get_n_channels())
+        rowstride = int(pixbuf.get_rowstride())
+        pixels = memoryview(pixbuf.get_pixels())
+        min_x = width
+        min_y = height
+        max_x = -1
+        max_y = -1
+        alpha_index = channels - 1
+
+        for y in range(height):
+            row_start = y * rowstride
+            for x in range(width):
+                index = row_start + (x * channels) + alpha_index
+                if pixels[index] > 8:
+                    if x < min_x:
+                        min_x = x
+                    if y < min_y:
+                        min_y = y
+                    if x > max_x:
+                        max_x = x
+                    if y > max_y:
+                        max_y = y
+
+        if max_x < min_x or max_y < min_y:
+            return None
+        crop_w = (max_x - min_x) + 1
+        crop_h = (max_y - min_y) + 1
+        if crop_w == width and crop_h == height:
+            return None
+        try:
+            return pixbuf.new_subpixbuf(min_x, min_y, crop_w, crop_h)
+        except Exception:
+            return None
 
     def _install_css(self) -> None:
         provider = Gtk.CssProvider()
