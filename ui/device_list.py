@@ -420,91 +420,56 @@ class DeviceList(Gtk.Box):
         location_menu = Gtk.Menu()
         location_item.set_submenu(location_menu)
         location_item.set_sensitive(self._on_set_location_override is not None and bool(self._location_options))
+        current_location = None
+        for device in bundle.devices:
+            metadata = device.metadata if isinstance(device.metadata, dict) else {}
+            value = metadata.get("user_location")
+            if isinstance(value, str) and value.strip():
+                current_location = value.strip()
+                break
         for location_value in self._location_options:
-            loc_choice_item = Gtk.MenuItem.new_with_label(location_value)
+            loc_choice_item = Gtk.CheckMenuItem.new_with_label(location_value)
+            loc_choice_item.set_draw_as_radio(False)
+            loc_choice_item.set_active(location_value == current_location)
             loc_choice_item.connect("activate", self._on_location_item_activate, bundle, location_value)
             location_menu.append(loc_choice_item)
-        clear_location_item = Gtk.MenuItem.new_with_label(_("Clear location"))
-        clear_location_item.connect("activate", self._on_location_item_activate, bundle, None)
-        location_menu.append(Gtk.SeparatorMenuItem())
-        location_menu.append(clear_location_item)
         menu.append(location_item)
+        clear_location_item = Gtk.MenuItem.new_with_label(_("Clear location"))
+        clear_location_item.set_sensitive(self._on_set_location_override is not None and current_location is not None)
+        clear_location_item.connect("activate", self._on_location_item_activate, bundle, None)
+        menu.append(clear_location_item)
 
         type_item = Gtk.MenuItem.new_with_label(_("Device type"))
         type_menu = Gtk.Menu()
         type_item.set_submenu(type_menu)
         menu.append(type_item)
         current_type = bundle.primary.type.strip().lower() if isinstance(bundle.primary.type, str) else "unknown"
-        type_auto_item = Gtk.RadioMenuItem.new_with_label(None, _("Auto"))
-        type_nas_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("NAS"))
-        type_computer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Computer"))
-        type_router_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Router"))
-        type_media_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Media server"))
-        type_printer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Printer"))
-        type_network_printer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Network Printer"))
-        type_smart_speaker_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("SmartSpeaker"))
-        type_smart_tv_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("SmartTV"))
-        type_smart_device_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("SmartDevice"))
-        type_camera_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("Camera"))
-        type_home_appliance_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("HomeAppliance"))
-        type_cnc_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("CNC"))
-        type_3d_printer_item = Gtk.RadioMenuItem.new_with_label_from_widget(type_auto_item, _("3D printer"))
-        type_auto_item.connect("toggled", self._on_type_item_toggled, bundle, None)
-        type_nas_item.connect("toggled", self._on_type_item_toggled, bundle, "nas")
-        type_computer_item.connect("toggled", self._on_type_item_toggled, bundle, "computer")
-        type_router_item.connect("toggled", self._on_type_item_toggled, bundle, "router")
-        type_media_item.connect("toggled", self._on_type_item_toggled, bundle, "mediaserver")
-        type_printer_item.connect("toggled", self._on_type_item_toggled, bundle, "printer")
-        type_network_printer_item.connect("toggled", self._on_type_item_toggled, bundle, "networkprinter")
-        type_smart_speaker_item.connect("toggled", self._on_type_item_toggled, bundle, "smartspeaker")
-        type_smart_tv_item.connect("toggled", self._on_type_item_toggled, bundle, "smarttv")
-        type_smart_device_item.connect("toggled", self._on_type_item_toggled, bundle, "smartdevice")
-        type_camera_item.connect("toggled", self._on_type_item_toggled, bundle, "camera")
-        type_home_appliance_item.connect("toggled", self._on_type_item_toggled, bundle, "homeappliance")
-        type_cnc_item.connect("toggled", self._on_type_item_toggled, bundle, "cnc")
-        type_3d_printer_item.connect("toggled", self._on_type_item_toggled, bundle, "3dprinter")
-        type_menu.append(type_auto_item)
-        type_menu.append(type_nas_item)
-        type_menu.append(type_computer_item)
-        type_menu.append(type_router_item)
-        type_menu.append(type_media_item)
-        type_menu.append(type_printer_item)
-        type_menu.append(type_network_printer_item)
-        type_menu.append(type_smart_speaker_item)
-        type_menu.append(type_smart_tv_item)
-        type_menu.append(type_smart_device_item)
-        type_menu.append(type_camera_item)
-        type_menu.append(type_home_appliance_item)
-        type_menu.append(type_cnc_item)
-        type_menu.append(type_3d_printer_item)
-        if current_type == "nas":
-            type_nas_item.set_active(True)
-        elif current_type == "computer":
-            type_computer_item.set_active(True)
-        elif current_type == "router":
-            type_router_item.set_active(True)
-        elif current_type == "mediaserver":
-            type_media_item.set_active(True)
-        elif current_type == "printer":
-            type_printer_item.set_active(True)
-        elif current_type == "networkprinter":
-            type_network_printer_item.set_active(True)
-        elif current_type == "smartspeaker":
-            type_smart_speaker_item.set_active(True)
-        elif current_type == "smarttv":
-            type_smart_tv_item.set_active(True)
-        elif current_type == "smartdevice":
-            type_smart_device_item.set_active(True)
-        elif current_type == "camera":
-            type_camera_item.set_active(True)
-        elif current_type == "homeappliance":
-            type_home_appliance_item.set_active(True)
-        elif current_type == "cnc":
-            type_cnc_item.set_active(True)
-        elif current_type == "3dprinter":
-            type_3d_printer_item.set_active(True)
-        else:
-            type_auto_item.set_active(True)
+        type_choices = [
+            (_("Auto"), None),
+            (_("NAS"), "nas"),
+            (_("Computer"), "computer"),
+            (_("Router"), "router"),
+            (_("Media server"), "mediaserver"),
+            (_("Printer"), "printer"),
+            (_("Network Printer"), "networkprinter"),
+            (_("SmartSpeaker"), "smartspeaker"),
+            (_("SmartTV"), "smarttv"),
+            (_("SmartDevice"), "smartdevice"),
+            (_("Camera"), "camera"),
+            (_("HomeAppliance"), "homeappliance"),
+            (_("CNC"), "cnc"),
+            (_("3D printer"), "3dprinter"),
+        ]
+        known_types = {value for _label, value in type_choices if value is not None}
+        for label, type_value in type_choices:
+            item = Gtk.CheckMenuItem.new_with_label(label)
+            item.set_draw_as_radio(False)
+            if type_value is None:
+                item.set_active(current_type not in known_types)
+            else:
+                item.set_active(current_type == type_value)
+            item.connect("activate", self._on_type_item_activate, bundle, type_value)
+            type_menu.append(item)
 
         menu.show_all()
         menu.popup_at_pointer(event)
@@ -588,9 +553,7 @@ class DeviceList(Gtk.Box):
         for device in bundle.devices:
             self._on_set_location_override(device.source, bundle.ip, bundle.port, value)
 
-    def _on_type_item_toggled(self, menu_item: Gtk.RadioMenuItem, bundle: _DeviceBundle, device_type: str | None) -> None:
-        if not menu_item.get_active():
-            return
+    def _on_type_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle, device_type: str | None) -> None:
         if self._on_set_type_override is None:
             return
         self._on_set_type_override(bundle.primary.source, bundle.ip, bundle.port, device_type)
@@ -734,6 +697,11 @@ class DeviceList(Gtk.Box):
     def _apply_category_filter(self, bundles: list[_DeviceBundle]) -> list[_DeviceBundle]:
         if not self._category_filter:
             return list(bundles)
+        if isinstance(self._category_filter, str) and self._category_filter.startswith("location:"):
+            location_value = self._category_filter.split(":", 1)[1]
+            if location_value == "__none__":
+                return [bundle for bundle in bundles if self._bundle_location_label(bundle) == _("No location")]
+            return [bundle for bundle in bundles if self._bundle_location_label(bundle) == location_value]
         return [bundle for bundle in bundles if bundle.category == self._category_filter]
 
     def _on_tree_row_activated(self, _tree: Gtk.TreeView, path: Gtk.TreePath, _column: Gtk.TreeViewColumn) -> None:
@@ -1044,15 +1012,23 @@ class DeviceList(Gtk.Box):
                 pass
 
     def _build_device_bundles(self, devices: list[Device]) -> list[_DeviceBundle]:
-        bundles_by_endpoint: dict[tuple[str, int], _DeviceBundle] = {}
-        order: list[tuple[str, int]] = []
+        bundles_by_id: dict[str, _DeviceBundle] = {}
+        host_to_bundle_id: dict[str, str] = {}
+        order: list[str] = []
         for device in devices:
             endpoint = (device.ip, device.port)
-            bundle = bundles_by_endpoint.get(endpoint)
+            bundle_id = f"endpoint:{endpoint[0]}:{endpoint[1]}"
+            host_id = self._device_host_identity(device)
+            if host_id and host_id in host_to_bundle_id:
+                bundle_id = host_to_bundle_id[host_id]
+            bundle = bundles_by_id.get(bundle_id)
             if bundle is None:
                 bundle = _DeviceBundle(ip=device.ip, port=device.port, primary=device)
-                bundles_by_endpoint[endpoint] = bundle
-                order.append(endpoint)
+                bundles_by_id[bundle_id] = bundle
+                order.append(bundle_id)
+                host_id = self._device_host_identity(device)
+                if host_id:
+                    host_to_bundle_id[host_id] = bundle_id
 
             if device.source == "mdns":
                 bundle.mdns_device = device
@@ -1064,4 +1040,68 @@ class DeviceList(Gtk.Box):
             elif bundle.mdns_device is None and bundle.ssdp_device is None:
                 bundle.primary = device
 
-        return [bundles_by_endpoint[key] for key in order]
+            host_id = self._device_host_identity(device)
+            if host_id:
+                host_to_bundle_id[host_id] = bundle_id
+        return [bundles_by_id[key] for key in order]
+
+    def _device_host_identity(self, device: Device) -> str | None:
+        if device.source not in {"mdns", "ssdp"}:
+            return None
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        uid = self._extract_uid(metadata)
+        if uid:
+            return f"uid:{uid}"
+        mac = self._extract_mac(metadata)
+        if mac:
+            return f"mac:{mac}"
+        ip = str(device.ip).strip()
+        if not ip or ip == "0.0.0.0":
+            return None
+        return f"ip:{ip}"
+
+    def _extract_uid(self, metadata: dict) -> str:
+        if not isinstance(metadata, dict):
+            return ""
+        xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+        txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
+
+        usn = metadata.get("usn")
+        if isinstance(usn, str) and usn.strip():
+            return usn.strip().lower().split("::", 1)[0]
+
+        candidates = [
+            xml_fields.get("UDN"),
+            metadata.get("udn"),
+            txt_fields.get("uuid"),
+            txt_fields.get("udn"),
+            txt_fields.get("id"),
+            txt_fields.get("deviceid"),
+            txt_fields.get("device_id"),
+            txt_fields.get("serial"),
+            txt_fields.get("serialnumber"),
+        ]
+        for value in candidates:
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+        return ""
+
+    def _extract_mac(self, metadata: dict) -> str:
+        if not isinstance(metadata, dict):
+            return ""
+        xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+        txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
+        candidates = [
+            xml_fields.get("mac"),
+            metadata.get("mac"),
+            metadata.get("mac_address"),
+            metadata.get("MAC"),
+            metadata.get("macAddress"),
+            txt_fields.get("mac"),
+            txt_fields.get("macaddress"),
+            txt_fields.get("mac_address"),
+        ]
+        for value in candidates:
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+        return ""

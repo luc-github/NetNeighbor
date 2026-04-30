@@ -176,6 +176,21 @@ class DiscoveryManager:
             if value_norm:
                 normalized[key] = value_norm
         self._location_overrides = normalized
+        changed = False
+        for device in self._devices.values():
+            before = ""
+            metadata = device.metadata if isinstance(device.metadata, dict) else {}
+            value = metadata.get("user_location")
+            if isinstance(value, str):
+                before = value
+            self._apply_location_override(device)
+            metadata_after = device.metadata if isinstance(device.metadata, dict) else {}
+            after_raw = metadata_after.get("user_location")
+            after = after_raw if isinstance(after_raw, str) else ""
+            if before != after:
+                changed = True
+        if changed:
+            self._notify()
 
     def get_location_overrides(self) -> dict[str, str]:
         return dict(self._location_overrides)

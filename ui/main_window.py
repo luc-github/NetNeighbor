@@ -61,6 +61,10 @@ class MainWindow(Gtk.ApplicationWindow):
 
         view_menu.append(Gtk.SeparatorMenuItem())
 
+        view_title_item = Gtk.MenuItem.new_with_label(_("Display:"))
+        view_title_item.set_sensitive(False)
+        view_menu.append(view_title_item)
+
         self._icons_item = Gtk.RadioMenuItem.new_with_label(None, _("Icons"))
         self._list_item = Gtk.RadioMenuItem.new_with_label_from_widget(self._icons_item, _("List"))
         self._icons_item.connect("toggled", self._on_view_toggled, "icons")
@@ -69,21 +73,21 @@ class MainWindow(Gtk.ApplicationWindow):
         view_menu.append(self._list_item)
         view_menu.append(Gtk.SeparatorMenuItem())
 
-        display_title_item = Gtk.MenuItem.new_with_label(_("Display:"))
-        display_title_item.set_sensitive(False)
-        view_menu.append(display_title_item)
-        self._icons_sorted_item = Gtk.RadioMenuItem.new_with_label(None, _("by Type"))
-        self._icons_unsorted_item = Gtk.RadioMenuItem.new_with_label_from_widget(
-            self._icons_sorted_item, _("All at once")
+        arrange_title_item = Gtk.MenuItem.new_with_label(_("Arrange:"))
+        arrange_title_item.set_sensitive(False)
+        view_menu.append(arrange_title_item)
+        self._icons_unsorted_item = Gtk.RadioMenuItem.new_with_label(None, _("Unsorted"))
+        self._icons_sorted_item = Gtk.RadioMenuItem.new_with_label_from_widget(
+            self._icons_unsorted_item, _("by Type")
         )
         self._icons_by_location_item = Gtk.RadioMenuItem.new_with_label_from_widget(
-            self._icons_sorted_item, _("by Location")
+            self._icons_unsorted_item, _("by Location")
         )
-        self._icons_sorted_item.connect("toggled", self._on_icon_sort_mode_toggled, "sorted")
         self._icons_unsorted_item.connect("toggled", self._on_icon_sort_mode_toggled, "appearance")
+        self._icons_sorted_item.connect("toggled", self._on_icon_sort_mode_toggled, "sorted")
         self._icons_by_location_item.connect("toggled", self._on_icon_sort_mode_toggled, "location")
-        view_menu.append(self._icons_sorted_item)
         view_menu.append(self._icons_unsorted_item)
+        view_menu.append(self._icons_sorted_item)
         view_menu.append(self._icons_by_location_item)
         view_menu.append(Gtk.SeparatorMenuItem())
 
@@ -112,16 +116,13 @@ class MainWindow(Gtk.ApplicationWindow):
         locations_item.connect("activate", self._on_locations_presets_activate)
         preferences_menu.append(locations_item)
 
-        self._notifications_item = Gtk.MenuItem.new_with_label(_("Notifications"))
+        self._notifications_item = Gtk.MenuItem.new_with_label(_("Tools"))
         menubar.append(self._notifications_item)
         notifications_menu = Gtk.Menu()
         self._notifications_item.set_submenu(notifications_menu)
-        notifications_history_item = Gtk.MenuItem.new_with_label(_("Show history"))
+        notifications_history_item = Gtk.MenuItem.new_with_label(_("Notifications history"))
         notifications_history_item.connect("activate", self._on_notifications_history_activate)
         notifications_menu.append(notifications_history_item)
-        notifications_clear_item = Gtk.MenuItem.new_with_label(_("Clear history"))
-        notifications_clear_item.connect("activate", self._on_notifications_clear_activate)
-        notifications_menu.append(notifications_clear_item)
 
         help_item = Gtk.MenuItem.new_with_label(_("Help"))
         menubar.append(help_item)
@@ -176,12 +177,14 @@ class MainWindow(Gtk.ApplicationWindow):
         if menu_item.get_active():
             self._device_list.set_view_mode(view_mode)
             self._refresh_icon_sort_menu_state()
+            self._rebuild_sidebar(self._manager.devices)
             self._persist_ui_preferences()
 
     def _on_icon_sort_mode_toggled(self, menu_item: Gtk.RadioMenuItem, mode: str) -> None:
         if not menu_item.get_active():
             return
         self._device_list.set_icon_sort_mode(mode)
+        self._rebuild_sidebar(self._manager.devices)
         self._persist_ui_preferences()
 
     def _on_icon_mode_changed(self) -> None:
@@ -221,41 +224,144 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _on_locations_presets_activate(self, _menu_item: Gtk.MenuItem) -> None:
         dialog = Gtk.Dialog(title=_("Location presets"), transient_for=self, modal=True)
-        dialog.set_default_size(420, 320)
+        dialog.set_default_size(460, 340)
         content = dialog.get_content_area()
         content.set_border_width(8)
         label = Gtk.Label(
-            label=_("One location per line (example: Office, Lab, Living room)."),
+            label=_("Manage location presets."),
             xalign=0.0,
         )
         label.set_line_wrap(True)
         content.pack_start(label, False, False, 4)
-        text_view = Gtk.TextView()
-        text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        buffer = text_view.get_buffer()
-        buffer.set_text("\n".join(self._location_options))
+
+        presets_store = Gtk.ListStore(str)
+        for value in self._location_options:
+            presets_store.append([value])
+        presets_view = Gtk.TreeView(model=presets_store)
+        presets_view.set_headers_visible(False)
+        presets_view.get_selection().set_mode(Gtk.SelectionMode.SINGLE)
+        presets_view.append_column(Gtk.TreeViewColumn(_("Preset"), Gtk.CellRendererText(), text=0))
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.set_hexpand(True)
         scroll.set_vexpand(True)
-        scroll.add(text_view)
+        scroll.add(presets_view)
         content.pack_start(scroll, True, True, 4)
+
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        add_button = Gtk.Button.new_with_label(_("Add"))
+        rename_button = Gtk.Button.new_with_label(_("Rename"))
+        remove_button = Gtk.Button.new_with_label(_("Remove"))
+        clear_button = Gtk.Button.new_with_label(_("Clear all"))
+        controls.pack_start(add_button, False, False, 0)
+        controls.pack_start(rename_button, False, False, 0)
+        controls.pack_start(remove_button, False, False, 0)
+        controls.pack_start(clear_button, False, False, 0)
+        content.pack_start(controls, False, False, 2)
+
+        rename_map: dict[str, str] = {}
+
+        def _prompt_text(title: str, initial: str = "") -> str | None:
+            prompt = Gtk.Dialog(title=title, transient_for=dialog, modal=True)
+            prompt.set_default_size(320, -1)
+            area = prompt.get_content_area()
+            area.set_border_width(8)
+            entry = Gtk.Entry()
+            entry.set_text(initial)
+            entry.select_region(0, -1)
+            area.pack_start(entry, False, False, 0)
+            prompt.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+            prompt.add_button(_("OK"), Gtk.ResponseType.OK)
+            prompt.show_all()
+            response_prompt = prompt.run()
+            value = None
+            if response_prompt == Gtk.ResponseType.OK:
+                text = entry.get_text().strip()
+                value = text if text else None
+            prompt.destroy()
+            return value
+
+        def _selected_iter():
+            _model, tree_iter = presets_view.get_selection().get_selected()
+            return tree_iter
+
+        def _existing_values() -> list[str]:
+            values: list[str] = []
+            tree_iter = presets_store.get_iter_first()
+            while tree_iter is not None:
+                value = presets_store.get_value(tree_iter, 0)
+                if isinstance(value, str) and value.strip():
+                    values.append(value.strip())
+                tree_iter = presets_store.iter_next(tree_iter)
+            return values
+
+        def _on_add_clicked(_button: Gtk.Button) -> None:
+            new_value = _prompt_text(_("Add location preset"))
+            if not new_value:
+                return
+            if new_value in _existing_values():
+                return
+            presets_store.append([new_value])
+
+        def _on_rename_clicked(_button: Gtk.Button) -> None:
+            tree_iter = _selected_iter()
+            if tree_iter is None:
+                return
+            old_value = presets_store.get_value(tree_iter, 0)
+            if not isinstance(old_value, str):
+                return
+            new_value = _prompt_text(_("Rename location preset"), old_value)
+            if not new_value or new_value == old_value:
+                return
+            if new_value in _existing_values():
+                return
+            presets_store.set_value(tree_iter, 0, new_value)
+            rename_map[old_value] = new_value
+
+        def _on_remove_clicked(_button: Gtk.Button) -> None:
+            tree_iter = _selected_iter()
+            if tree_iter is None:
+                return
+            presets_store.remove(tree_iter)
+
+        def _on_clear_clicked(_button: Gtk.Button) -> None:
+            presets_store.clear()
+
+        add_button.connect("clicked", _on_add_clicked)
+        rename_button.connect("clicked", _on_rename_clicked)
+        remove_button.connect("clicked", _on_remove_clicked)
+        clear_button.connect("clicked", _on_clear_clicked)
+
         dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
         dialog.add_button(_("Save"), Gtk.ResponseType.OK)
         dialog.show_all()
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
-            start_iter = buffer.get_start_iter()
-            end_iter = buffer.get_end_iter()
-            text = buffer.get_text(start_iter, end_iter, True)
-            self._location_options = []
-            for raw_line in text.splitlines():
-                value = raw_line.strip()
-                if value and value not in self._location_options:
-                    self._location_options.append(value)
+            previous_options = list(self._location_options)
+            self._location_options = _existing_values()
             self._device_list.set_location_options(self._location_options)
+            self._apply_location_preset_changes(previous_options, self._location_options, rename_map)
             self._persist_ui_preferences()
         dialog.destroy()
+
+    def _apply_location_preset_changes(
+        self, old_options: list[str], new_options: list[str], rename_map: dict[str, str]
+    ) -> None:
+        overrides = self._manager.get_location_overrides()
+        if not overrides:
+            return
+        removed_values = {value for value in old_options if value not in new_options}
+        changed = False
+        for key, value in list(overrides.items()):
+            if value in rename_map:
+                overrides[key] = rename_map[value]
+                changed = True
+                continue
+            if value in removed_values:
+                overrides.pop(key, None)
+                changed = True
+        if changed:
+            self._manager.set_location_overrides(overrides)
 
     def _on_about_activate(self, _menu_item: Gtk.MenuItem) -> None:
         _LOG.debug("About menu clicked")
@@ -303,9 +409,6 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _on_notifications_history_activate(self, _menu_item: Gtk.MenuItem) -> None:
         self._show_notifications_history_dialog()
-
-    def _on_notifications_clear_activate(self, _menu_item: Gtk.MenuItem) -> None:
-        self._notification_history.clear()
 
     def _show_notifications_history_dialog(self) -> None:
         dialog = Gtk.Dialog(title=_("Notification history"), transient_for=self, modal=True)
@@ -465,10 +568,18 @@ class MainWindow(Gtk.ApplicationWindow):
             }
 
     def _rebuild_sidebar(self, devices) -> None:
+        sidebar_mode = self._sidebar_group_mode()
         counts: dict[str, int] = {}
+        bundle_filter_keys: dict[str, str] = {}
         for device in devices:
-            counts[device.category] = counts.get(device.category, 0) + 1
-        signature = (len(devices), tuple(sorted(counts.items())))
+            if sidebar_mode == "location":
+                location = self._device_location_label(device)
+                counts[location] = counts.get(location, 0) + 1
+                bundle_filter_keys[location] = "location:__none__" if location == _("No location") else f"location:{location}"
+            else:
+                counts[device.category] = counts.get(device.category, 0) + 1
+                bundle_filter_keys[device.category] = device.category
+        signature = (sidebar_mode, len(devices), tuple(sorted(counts.items())))
         if signature == self._sidebar_signature:
             return
         self._sidebar_signature = signature
@@ -479,10 +590,16 @@ class MainWindow(Gtk.ApplicationWindow):
             self._sidebar_list.remove(child)
         self._category_rows.clear()
 
-        all_label = f"{_('All')} ({len(devices)})"
+        all_text = _("All Locations") if sidebar_mode == "location" else _("All Types")
+        all_label = f"{all_text} ({len(devices)})"
         self._add_sidebar_row(all_label, None)
-        for category in sorted(counts.keys()):
-            self._add_sidebar_row(f"{category} ({counts[category]})", category)
+        for key in sorted(counts.keys(), key=str.lower):
+            if sidebar_mode == "location" and key == _("No location"):
+                continue
+            self._add_sidebar_row(f"{key} ({counts[key]})", bundle_filter_keys[key])
+        if sidebar_mode == "location" and _("No location") in counts:
+            no_location = _("No location")
+            self._add_sidebar_row(f"{no_location} ({counts[no_location]})", bundle_filter_keys[no_location])
 
         target_row = self._category_rows.get(selected) if selected in self._category_rows else self._category_rows.get(None)
         if target_row is not None:
@@ -501,6 +618,18 @@ class MainWindow(Gtk.ApplicationWindow):
         self._sidebar_list.add(row)
         self._category_rows[category] = row
         row.show_all()
+
+    def _sidebar_group_mode(self) -> str:
+        if self._device_list.view_mode == "icons" and self._device_list.icon_sort_mode == "location":
+            return "location"
+        return "category"
+
+    def _device_location_label(self, device: Device) -> str:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        value = metadata.get("user_location")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return _("No location")
 
     def _on_sidebar_row_selected(self, _listbox: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
         if self._is_updating_sidebar or row is None:
