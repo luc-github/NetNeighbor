@@ -6,7 +6,7 @@
 - **Responsive discovery**: protocol threads must not block the GTK main loop; updates are
   marshaled with `GLib.idle_add` from `MainWindow._on_devices_updated`.
 - **Two views**: list (`Gtk.TreeView`) and icon grid (`Gtk.FlowBox` per category) — user preference persisted.
-- **Discoverability**: sidebar categories, source badges on icons, context menus for monitor / type / icon source.
+- **Discoverability**: sidebar categories, context menus for monitor / type / icon source.
 
 ## Module layout
 
@@ -35,8 +35,7 @@ DiscoveryManager._notify()
 ## Bundling and display identity
 
 `_DeviceBundle` groups multiple `Device` rows that share the same `(ip, port)` so one tile
-can show both mDNS and SSDP badges when both exist. The “primary” row chooses mDNS first if
-present for labeling.
+represents one host/device entry. The “primary” row chooses mDNS first if present for labeling.
 
 ## Threading and notifications
 
@@ -52,8 +51,7 @@ snapshots** used to show greyed monitored entries after restart before rediscove
 
 ## Styling
 
-`DeviceList` installs a small CSS provider for source badges and offline monitored tint
-(`.offline-device-monitored`).
+`DeviceList` installs a small CSS provider for offline monitored tint (`.offline-device-monitored`).
 
 ## Internationalization
 

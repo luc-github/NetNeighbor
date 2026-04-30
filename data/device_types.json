@@ -36,6 +36,13 @@
       "icon": "http.png",
       "default_port": 80,
       "info_url": "http://{ip}:{port}/"
+    },
+    "_telnet._tcp": {
+      "label": "Telnet Service",
+      "category": "Unknown Devices",
+      "icon": "unknown.png",
+      "default_port": 23,
+      "info_url": null
     }
   },
   "fallback": {

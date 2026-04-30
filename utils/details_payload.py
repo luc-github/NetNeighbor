@@ -65,6 +65,7 @@ def build_ssdp_payload(device: Device) -> tuple[
     fields = [
         ("IP", device.ip),
         ("Port", str(device.port)),
+        ("Location", _value_or_unavailable(metadata.get("user_location"))),
         ("Last seen", last_seen_text),
         ("Friendly name", _value_or_unavailable(xml_fields.get("friendlyName"))),
         ("Information", _value_or_unavailable(metadata.get("information"))),
@@ -127,6 +128,7 @@ def build_mdns_payload(
         last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
         ("IP", device.ip),
+        ("Location", _value_or_unavailable(metadata.get("user_location"))),
         ("Last seen", last_seen_text),
         ("Hostname", _value_or_unavailable(hostname_raw)),
     ]

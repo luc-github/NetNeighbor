@@ -5,7 +5,7 @@
 
 ## Changes from v1.3
 
-- Documents **current codebase**: SSDP implemented; mDNS provider still a stub pending zeroconf work.
+- Documents **current codebase**: SSDP and mDNS implemented (zeroconf-based mDNS with multi-service host aggregation).
 - Persistence described as **`~/.config/netneighbor/ui_prefs.json`** (UI state, overrides, monitored device snapshots), not a separate `devices.json` device database.
 - Features and roadmap aligned with [`ROADMAP.md`](ROADMAP.md).
 
@@ -35,9 +35,9 @@ devices in a user-friendly GUI.
 ### In scope (MVP)
 
 - SSDP (UPnP multicast) discovery — **implemented**
-- mDNS (zeroconf) discovery — **planned / in progress** (`discovery/mdns.py` placeholder)
+- mDNS (zeroconf) discovery — **implemented**
 - PC detection via WSD/SSDP (`urn:schemas-microsoft-com:device:Computer:1`) — subject to devices on network
-- PC detection via `_smb._tcp` mDNS when mDNS is implemented
+- PC detection via `_smb._tcp` mDNS
 
 ### Out of scope (future protocols)
 
@@ -65,7 +65,7 @@ netneighbor/
 │   ├── base.py              # BaseDiscovery — protocol callback contract
 │   ├── manager.py           # DiscoveryManager — cache, merges, overrides, listeners
 │   ├── ssdp.py              # SSDP UDP multicast + XML descriptors + rules
-│   └── mdns.py              # mDNS (stub until zeroconf browser lands)
+│   └── mdns.py              # mDNS discovery (zeroconf)
 │
 ├── model/
 │   └── device.py            # Device dataclass + stable SSDP key
@@ -125,7 +125,7 @@ MainWindow listener → GLib.idle_add → DeviceList (list + icon grid, categori
 Device:
     name, ip, port, type, category, source
     url: optional presentation URL
-    metadata: dict — SSDP XML fields / raw XML; future mDNS TXT + services
+    metadata: dict — SSDP XML fields / raw XML; mDNS TXT + discovered services
     last_seen: datetime
     online: bool
     monitored: bool   # user follow; grey when offline and monitored
@@ -156,7 +156,7 @@ Still used for icon/type hints where applicable. See embedded example in v1.3 or
 - Offline policy: NOTIFY byebye immediate; TTL timeout uses **`2 × max-age`** when present (bounded)
 - Configurable SSDP heuristics via `config/ssdp_rules.json`
 - Device list + **icon grid**, category sidebar, manual reload
-- Details dialogs (SSDP payload builder; mDNS UI ready when protocol fills metadata)
+- Details dialogs (SSDP/mDNS payload builders with protocol metadata and services)
 - Monitor / unfollow, user type override, icon source override
 - Desktop notifications (connected / left) with optional **session notification history**
 - Monitored devices restored as offline from prefs snapshots until rediscovered
@@ -164,7 +164,6 @@ Still used for icon/type hints where applicable. See embedded example in v1.3 or
 
 ### MVP still open
 
-- Full **mDNS** discovery and presence model
 - Stronger **cross-protocol deduplication** once both stacks emit real data (today: UI bundles same `ip:port`)
 
 ### Future
@@ -177,7 +176,7 @@ Still used for icon/type hints where applicable. See embedded example in v1.3 or
 
 ### 1) Cross-protocol deduplication
 
-Same host may appear via SSDP and mDNS. The UI bundles rows with the same `(ip, port)`; metadata merge may evolve when mDNS lands. Prefer stable IDs where available (USN/UDN, hostname).
+Same host may appear via SSDP and mDNS. The UI bundles rows with the same `(ip, port)`; metadata merge may evolve to host identifiers (USN/UDN, hostname, MAC) for stronger matching across protocols.
 
 ### 2) Thread-safe GTK updates
 
@@ -185,7 +184,7 @@ Discovery runs on background threads; UI updates use **`GLib.idle_add`** from `M
 
 ### 3) Presence and offline lifecycle
 
-Offline must not flip on a single missed packet. SSDP uses announced **`max-age`** (doubled) plus NOTIFY byebye. mDNS policy TBD when implemented.
+Offline must not flip on a single missed packet. SSDP uses announced **`max-age`** (doubled) plus NOTIFY byebye. mDNS uses host-level aggregation so one missing service does not instantly hide a still-present host.
 
 ### 4) URL and endpoint normalization
 
@@ -193,7 +192,7 @@ Centralize safe browser open; respect SSDP `presentationURL` when present.
 
 ### 5) Linux packaging and runtime dependencies
 
-GTK + PyGObject from distro packages; `zeroconf` in venv for upcoming mDNS. Document prerequisites in README.
+GTK + PyGObject from distro packages; `zeroconf` required for mDNS. Document prerequisites in README.
 
 ---
 
@@ -201,9 +200,9 @@ GTK + PyGObject from distro packages; `zeroconf` in venv for upcoming mDNS. Docu
 
 | Area | Note |
 |------|------|
-| A Deduplication | Partial: SSDP stable keys + UI bundling; full merge when mDNS exists |
+| A Deduplication | Partial: SSDP stable keys + UI bundling; stronger cross-protocol merge still open |
 | B GTK safety | Required pattern in place |
-| C Lifecycle | SSDP matches intent; mDNS TBD |
+| C Lifecycle | SSDP + mDNS lifecycle implemented; tuning remains possible |
 | D URLs | Best-effort from SSDP XML |
 | E Packaging | Still to finalize |
 | F Persistence | **`ui_prefs.json`** + monitored snapshots; safe if missing/corrupt prefs |
@@ -215,7 +214,7 @@ GTK + PyGObject from distro packages; `zeroconf` in venv for upcoming mDNS. Docu
 See **[`ROADMAP.md`](ROADMAP.md)** for ordered phases. Summary:
 
 1. **Done:** foundation, SSDP, UI shell, prefs, monitored restore, notifications.
-2. **Next:** mDNS with zeroconf, then runtime mode decision (app/service/tray/file manager/TBD), then packaging/release polish.
+2. **Next:** runtime mode decision (app/service/tray/file manager/TBD), then packaging/release polish.
 
 ---
 
@@ -224,7 +223,7 @@ See **[`ROADMAP.md`](ROADMAP.md)** for ordered phases. Summary:
 | Package | Purpose |
 |---------|---------|
 | `pygobject` | GTK3 UI |
-| `zeroconf` | mDNS discovery (when implemented) |
+| `zeroconf` | mDNS discovery |
 | stdlib `socket` | SSDP multicast |
 
 ---

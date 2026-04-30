@@ -15,6 +15,7 @@ from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 from utils.notifications import send_notification
 
 _LOG = logging.getLogger(__name__)
+_DEFAULT_LOCATION_OPTIONS = ["Office", "Room", "Living room", "Kitchen", "Workshop", "Garage"]
 
 
 class MainWindow(Gtk.ApplicationWindow):
@@ -31,6 +32,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._initializing = True
         self._prefs = load_ui_preferences()
         self._notification_history: list[dict[str, str]] = []
+        self._location_options: list[str] = []
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         root.set_border_width(8)
@@ -67,9 +69,22 @@ class MainWindow(Gtk.ApplicationWindow):
         view_menu.append(self._list_item)
         view_menu.append(Gtk.SeparatorMenuItem())
 
-        self._source_badges_item = Gtk.CheckMenuItem.new_with_label(_("Show source badges"))
-        self._source_badges_item.connect("toggled", self._on_source_badges_toggled)
-        view_menu.append(self._source_badges_item)
+        display_title_item = Gtk.MenuItem.new_with_label(_("Display:"))
+        display_title_item.set_sensitive(False)
+        view_menu.append(display_title_item)
+        self._icons_sorted_item = Gtk.RadioMenuItem.new_with_label(None, _("by Type"))
+        self._icons_unsorted_item = Gtk.RadioMenuItem.new_with_label_from_widget(
+            self._icons_sorted_item, _("All at once")
+        )
+        self._icons_by_location_item = Gtk.RadioMenuItem.new_with_label_from_widget(
+            self._icons_sorted_item, _("by Location")
+        )
+        self._icons_sorted_item.connect("toggled", self._on_icon_sort_mode_toggled, "sorted")
+        self._icons_unsorted_item.connect("toggled", self._on_icon_sort_mode_toggled, "appearance")
+        self._icons_by_location_item.connect("toggled", self._on_icon_sort_mode_toggled, "location")
+        view_menu.append(self._icons_sorted_item)
+        view_menu.append(self._icons_unsorted_item)
+        view_menu.append(self._icons_by_location_item)
         view_menu.append(Gtk.SeparatorMenuItem())
 
         preferences_item = Gtk.MenuItem.new_with_label(_("Preferences"))
@@ -92,6 +107,10 @@ class MainWindow(Gtk.ApplicationWindow):
         preferences_menu.append(notif_off_item)
         preferences_menu.append(notif_monitored_item)
         preferences_menu.append(notif_all_item)
+        preferences_menu.append(Gtk.SeparatorMenuItem())
+        locations_item = Gtk.MenuItem.new_with_label(_("Location presets"))
+        locations_item.connect("activate", self._on_locations_presets_activate)
+        preferences_menu.append(locations_item)
 
         self._notifications_item = Gtk.MenuItem.new_with_label(_("Notifications"))
         menubar.append(self._notifications_item)
@@ -131,6 +150,8 @@ class MainWindow(Gtk.ApplicationWindow):
             on_set_monitored=self._on_set_monitored,
             on_icon_mode_changed=self._on_icon_mode_changed,
             on_set_type_override=self._on_set_type_override,
+            on_set_name_override=self._on_set_name_override,
+            on_set_location_override=self._on_set_location_override,
         )
         # DeviceList will call this when user chooses Monitor/Unfollow.
         self._content.add2(self._device_list)
@@ -138,11 +159,15 @@ class MainWindow(Gtk.ApplicationWindow):
         self._apply_ui_preferences()
 
         self._manager.add_listener(self._on_devices_updated)
-        self._manager.start()
+        GLib.idle_add(self._start_discovery_protocols)
 
         self._initializing = False
         self.connect("destroy", self._on_destroy)
         self.show_all()
+
+    def _start_discovery_protocols(self) -> bool:
+        self._manager.start()
+        return False
 
     def _on_reload_activate(self, _menu_item: Gtk.MenuItem) -> None:
         self._manager.refresh()
@@ -150,10 +175,13 @@ class MainWindow(Gtk.ApplicationWindow):
     def _on_view_toggled(self, menu_item: Gtk.RadioMenuItem, view_mode: str) -> None:
         if menu_item.get_active():
             self._device_list.set_view_mode(view_mode)
+            self._refresh_icon_sort_menu_state()
             self._persist_ui_preferences()
 
-    def _on_source_badges_toggled(self, menu_item: Gtk.CheckMenuItem) -> None:
-        self._device_list.set_show_source_badges(menu_item.get_active())
+    def _on_icon_sort_mode_toggled(self, menu_item: Gtk.RadioMenuItem, mode: str) -> None:
+        if not menu_item.get_active():
+            return
+        self._device_list.set_icon_sort_mode(mode)
         self._persist_ui_preferences()
 
     def _on_icon_mode_changed(self) -> None:
@@ -183,6 +211,52 @@ class MainWindow(Gtk.ApplicationWindow):
         self._manager.set_device_type_override(source, ip, port, device_type)
         self._persist_ui_preferences()
 
+    def _on_set_name_override(self, source: str, ip: str, port: int, device_name: str | None) -> None:
+        self._manager.set_device_name_override(source, ip, port, device_name)
+        self._persist_ui_preferences()
+
+    def _on_set_location_override(self, source: str, ip: str, port: int, location: str | None) -> None:
+        self._manager.set_device_location_override(source, ip, port, location)
+        self._persist_ui_preferences()
+
+    def _on_locations_presets_activate(self, _menu_item: Gtk.MenuItem) -> None:
+        dialog = Gtk.Dialog(title=_("Location presets"), transient_for=self, modal=True)
+        dialog.set_default_size(420, 320)
+        content = dialog.get_content_area()
+        content.set_border_width(8)
+        label = Gtk.Label(
+            label=_("One location per line (example: Office, Lab, Living room)."),
+            xalign=0.0,
+        )
+        label.set_line_wrap(True)
+        content.pack_start(label, False, False, 4)
+        text_view = Gtk.TextView()
+        text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        buffer = text_view.get_buffer()
+        buffer.set_text("\n".join(self._location_options))
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_hexpand(True)
+        scroll.set_vexpand(True)
+        scroll.add(text_view)
+        content.pack_start(scroll, True, True, 4)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        dialog.add_button(_("Save"), Gtk.ResponseType.OK)
+        dialog.show_all()
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            start_iter = buffer.get_start_iter()
+            end_iter = buffer.get_end_iter()
+            text = buffer.get_text(start_iter, end_iter, True)
+            self._location_options = []
+            for raw_line in text.splitlines():
+                value = raw_line.strip()
+                if value and value not in self._location_options:
+                    self._location_options.append(value)
+            self._device_list.set_location_options(self._location_options)
+            self._persist_ui_preferences()
+        dialog.destroy()
+
     def _on_about_activate(self, _menu_item: Gtk.MenuItem) -> None:
         _LOG.debug("About menu clicked")
         dialog = Gtk.AboutDialog(transient_for=self, modal=True)
@@ -198,10 +272,25 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.set_version("0.1.0-dev")
         dialog.set_authors(["Luc"])
         dialog.set_comments(_("Linux network neighborhood for SSDP/mDNS discovery."))
+        dialog.add_credit_section(
+            _("Python libraries"),
+            [
+                "PyGObject (GTK 3)",
+                "zeroconf",
+                "requests",
+            ],
+        )
+        dialog.add_credit_section(
+            _("Icons"),
+            [
+                "Custom app icons: Luc",
+                "System icons: active GTK icon theme",
+            ],
+        )
         dialog.set_website("https://github.com/luc-github/NetNeighbor")
         dialog.set_website_label(_("GitHub Project"))
         dialog.set_license_type(Gtk.License.LGPL_3_0)
-        dialog.set_copyright("Copyright (C) Luc")
+        dialog.set_copyright("Copyright (C) Luc LEBOSSE")
         dialog.connect("response", self._on_about_response)
         dialog.run()
         dialog.destroy()
@@ -264,9 +353,48 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _update_ui_devices(self, devices) -> bool:
         self._notify_device_transitions(devices)
+        self._merge_sonos_location_suggestions(devices)
         self._rebuild_sidebar(devices)
         self._device_list.set_devices(devices)
         return False
+
+    def _merge_sonos_location_suggestions(self, devices: list[Device]) -> None:
+        discovered = self._extract_sonos_room_names(devices)
+        if not discovered:
+            return
+        changed = False
+        for value in discovered:
+            if value not in self._location_options:
+                self._location_options.append(value)
+                changed = True
+        if not changed:
+            return
+        self._device_list.set_location_options(self._location_options)
+        self._persist_ui_preferences()
+
+    def _extract_sonos_room_names(self, devices: list[Device]) -> list[str]:
+        names: list[str] = []
+        for device in devices:
+            metadata = device.metadata if isinstance(device.metadata, dict) else {}
+            xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+            txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
+
+            candidates = [
+                xml_fields.get("RoomName"),
+                xml_fields.get("roomName"),
+                metadata.get("RoomName"),
+                metadata.get("roomName"),
+                txt_fields.get("roomname"),
+                txt_fields.get("room_name"),
+                txt_fields.get("room"),
+            ]
+            for raw in candidates:
+                if not isinstance(raw, str):
+                    continue
+                value = raw.strip()
+                if value and value not in names:
+                    names.append(value)
+        return names
 
     def _notify_device_transitions(self, devices: list[Device]) -> None:
         mode = getattr(self, "_notification_mode", "off")
@@ -386,9 +514,10 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _apply_ui_preferences(self) -> None:
         view_mode = self._prefs.get("view_mode", "icons")
-        show_source_badges = bool(self._prefs.get("show_source_badges", True))
         sidebar_position = int(self._prefs.get("sidebar_position", 220))
         icon_source_overrides = self._prefs.get("icon_source_overrides")
+        custom_icon_overrides = self._prefs.get("custom_icon_overrides")
+        icon_sort_mode = str(self._prefs.get("icon_sort_mode", "sorted"))
         # Backward compat: older versions saved a boolean.
         if isinstance(self._prefs.get("use_notifications"), bool):
             self._notification_mode = "monitored" if self._prefs.get("use_notifications") else "off"
@@ -401,12 +530,26 @@ class MainWindow(Gtk.ApplicationWindow):
             self._selected_category = None
 
         self._content.set_position(max(160, min(sidebar_position, 480)))
-        self._source_badges_item.set_active(show_source_badges)
         if isinstance(icon_source_overrides, dict):
             self._device_list.set_icon_source_overrides(icon_source_overrides)
+        if isinstance(custom_icon_overrides, dict):
+            self._device_list.set_custom_icon_overrides(custom_icon_overrides)
+        location_options = self._prefs.get("location_options")
+        if isinstance(location_options, list):
+            self._location_options = [str(v).strip() for v in location_options if isinstance(v, str) and str(v).strip()]
+        if not self._location_options:
+            self._location_options = list(_DEFAULT_LOCATION_OPTIONS)
+        self._device_list.set_location_options(self._location_options)
+        self._device_list.set_icon_sort_mode(icon_sort_mode)
         type_overrides = self._prefs.get("type_overrides")
         if isinstance(type_overrides, dict):
             self._manager.set_type_overrides(type_overrides)
+        name_overrides = self._prefs.get("name_overrides")
+        if isinstance(name_overrides, dict):
+            self._manager.set_name_overrides(name_overrides)
+        location_overrides = self._prefs.get("location_overrides")
+        if isinstance(location_overrides, dict):
+            self._manager.set_location_overrides(location_overrides)
         monitored_overrides = self._prefs.get("monitored_overrides")
         if isinstance(monitored_overrides, dict):
             self._manager.set_monitored_overrides(monitored_overrides)
@@ -420,6 +563,13 @@ class MainWindow(Gtk.ApplicationWindow):
             self._list_item.set_active(True)
         else:
             self._icons_item.set_active(True)
+        if self._device_list.icon_sort_mode == "appearance":
+            self._icons_unsorted_item.set_active(True)
+        elif self._device_list.icon_sort_mode == "location":
+            self._icons_by_location_item.set_active(True)
+        else:
+            self._icons_sorted_item.set_active(True)
+        self._refresh_icon_sort_menu_state()
 
         # Restore selected radio option.
         if hasattr(self, "_notif_off_item") and hasattr(self, "_notif_monitored_item") and hasattr(self, "_notif_all_item"):
@@ -433,9 +583,13 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         prefs = {
             "view_mode": self._device_list.view_mode,
-            "show_source_badges": self._source_badges_item.get_active(),
             "icon_source_overrides": self._device_list.get_icon_source_overrides(),
+            "custom_icon_overrides": self._device_list.get_custom_icon_overrides(),
+            "icon_sort_mode": self._device_list.icon_sort_mode,
             "type_overrides": self._manager.get_type_overrides(),
+            "name_overrides": self._manager.get_name_overrides(),
+            "location_overrides": self._manager.get_location_overrides(),
+            "location_options": self._location_options,
             "monitored_overrides": self._manager.get_monitored_overrides(),
             "last_seen_overrides": self._manager.get_last_seen_overrides(),
             "monitored_device_snapshots": self._build_monitored_snapshots(),
@@ -501,3 +655,12 @@ class MainWindow(Gtk.ApplicationWindow):
         enabled = self._notification_mode != "off"
         if hasattr(self, "_notifications_item"):
             self._notifications_item.set_sensitive(enabled)
+
+    def _refresh_icon_sort_menu_state(self) -> None:
+        enabled = self._device_list.view_mode == "icons"
+        if hasattr(self, "_icons_sorted_item"):
+            self._icons_sorted_item.set_sensitive(enabled)
+        if hasattr(self, "_icons_unsorted_item"):
+            self._icons_unsorted_item.set_sensitive(enabled)
+        if hasattr(self, "_icons_by_location_item"):
+            self._icons_by_location_item.set_sensitive(enabled)

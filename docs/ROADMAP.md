@@ -3,7 +3,7 @@
 This file tracks **implementation** progress. Product vision and constraints live in
 [`NetNeighbor_Brief_v1.4.md`](NetNeighbor_Brief_v1.4.md).
 
-## Done (baseline before full mDNS)
+## Done (current baseline)
 
 - GTK application shell, single-instance lock, locale activation socket (second launch raises existing window).
 - **`DiscoveryManager`**: in-memory device cache, listener callbacks, SSDP merge rules, user overrides (type, monitored, last seen).
@@ -12,18 +12,14 @@ This file tracks **implementation** progress. Product vision and constraints liv
 - **SSDP rules file** (`config/ssdp_rules.json`): name, information, and type heuristics without recompiling.
 - **UI**: list and icon grid, category sidebar, details dialogs (SSDP / mDNS payload builders), browser open, user type override, icon source override, monitored devices, greyed offline when monitored, session notification history (in-memory) when desktop notifications are enabled.
 - **Persistence** (per user): `~/.config/netneighbor/ui_prefs.json` (view, filters, overrides, monitored snapshots for restore on next launch — not a full device database file).
+- **mDNS (zeroconf)**: real browser/listener, TXT decode, type/category heuristics, host-level service aggregation (single device can expose multiple services), and conditional presentation URL (only when `_http._tcp` is actually present).
 
 ## In progress / next
 
-1. **mDNS (zeroconf)** — primary next milestone  
-   - Real `MDNSDiscovery` service browser, TXT/SRV normalization, `Device` mapping.  
-   - Thread-safe UI updates (`GLib.idle_add`).  
-   - Optional: mDNS presence / TTL policy aligned with SSDP philosophy (documented).
-
-2. **Cross-protocol deduplication (UI)**  
+1. **Cross-protocol deduplication (UI)**  
    - `DeviceList` already bundles same `ip:port` for display; evaluate hostname / MAC for stronger merge when mDNS lands.
 
-3. **Runtime mode decision (pre-packaging gate)**  
+2. **Runtime mode decision (pre-packaging gate)**  
    - Decide the primary product form before packaging:
      - simple standalone app window
      - background service + optional UI
@@ -32,10 +28,10 @@ This file tracks **implementation** progress. Product vision and constraints liv
      - other mode (`TBD`)
    - Define one primary mode for MVP and list optional modes as future variants.
 
-4. **Packaging and release**  
+3. **Packaging and release**  
    - AppImage / `.deb`, dependency checks, user-facing troubleshooting (see brief).
 
-5. **Optional UX**  
+4. **Optional UX**  
    - Search / filter bar, copy IP, IPv6 (out of current MVP per brief but listed as future).
 
 ## How to use this file

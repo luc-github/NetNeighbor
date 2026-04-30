@@ -7,7 +7,7 @@ Neighborhood experience.
 
 - GTK 3 application (single-instance lock, optional demo mode)
 - **SSDP** discovery (multicast listen, M-SEARCH refresh, XML descriptors, offline / TTL handling)
-- **mDNS** provider is still a stub; real `zeroconf` browsing is the next milestone
+- **mDNS** discovery with `zeroconf` (service browse, host-level aggregation, TXT/services details)
 - Discovery manager with in-memory device cache, SSDP merge rules, user overrides
 - Main window: list + icon grid, categories, details dialogs, notifications (optional), preferences in `~/.config/netneighbor/ui_prefs.json`
 
@@ -68,6 +68,6 @@ A second launch asks the first instance to bring its window to the foreground.
 
 ## Next implementation milestones
 
-1. Implement real mDNS discovery with `zeroconf` (service browser, TXT/SRV → `Device`)
-2. Refine cross-protocol deduplication once SSDP + mDNS both emit live data
+1. Refine cross-protocol deduplication once SSDP + mDNS both emit live data
+2. Runtime mode decision (standalone app / service / tray / file manager integration)
 3. Packaging (AppImage / `.deb`) and release checklist — see [`docs/ROADMAP.md`](docs/ROADMAP.md)

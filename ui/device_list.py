@@ -3,6 +3,8 @@
 import gi
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
+import threading
 from urllib.request import urlopen
 
 gi.require_version("Gtk", "3.0")
@@ -59,14 +61,7 @@ class _DeviceBundle:
 
     @property
     def badges(self) -> list[tuple[str, Gtk.Align]]:
-        badges: list[tuple[str, Gtk.Align]] = []
-        if self.mdns_device is not None:
-            badges.append(("mDNS", Gtk.Align.START))
-        if self.ssdp_device is not None:
-            badges.append(("SSDP", Gtk.Align.END))
-        if badges:
-            return badges
-        return [(self.primary.source.upper(), Gtk.Align.END)]
+        return []
 
     @property
     def open_url(self) -> str | None:
@@ -91,9 +86,12 @@ class DeviceList(Gtk.Box):
         on_set_monitored: Callable[[Device, bool], None] | None = None,
         on_icon_mode_changed: Callable[[], None] | None = None,
         on_set_type_override: Callable[[str, str, int, str | None], None] | None = None,
+        on_set_name_override: Callable[[str, str, int, str | None], None] | None = None,
+        on_set_location_override: Callable[[str, str, int, str | None], None] | None = None,
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._current_view = "icons"
+        self._icon_sort_mode = "sorted"
         self._devices: list[Device] = []
         self._filtered_devices: list[_DeviceBundle] = []
         self._category_filter: str | None = None
@@ -101,10 +99,16 @@ class DeviceList(Gtk.Box):
         self._on_set_monitored = on_set_monitored
         self._on_icon_mode_changed = on_icon_mode_changed
         self._on_set_type_override = on_set_type_override
-        self._show_source_badges = True
+        self._on_set_name_override = on_set_name_override
+        self._on_set_location_override = on_set_location_override
+        self._location_options: list[str] = []
         self._icon_source_overrides: dict[tuple[str, int], str] = {}
+        self._custom_icon_overrides: dict[tuple[str, int], str] = {}
         self._remote_icon_cache: dict[str, GdkPixbuf.Pixbuf] = {}
         self._remote_icon_by_endpoint: dict[tuple[str, int], GdkPixbuf.Pixbuf] = {}
+        self._remote_icon_fetching: set[str] = set()
+        self._custom_icons_dir = Path.home() / ".config" / "netneighbor" / "custom_icons"
+        self._builtin_icons_dir = Path(__file__).resolve().parent.parent / "assets" / "icons"
         self._install_css()
 
         self._list_store = Gtk.ListStore(object, str, str, int, str, str)
@@ -157,14 +161,26 @@ class DeviceList(Gtk.Box):
         self._current_view = view_mode
         self._stack.set_visible_child_name(view_mode)
 
-    def set_show_source_badges(self, enabled: bool) -> None:
-        self._show_source_badges = enabled
+    def set_icon_sort_mode(self, mode: str) -> None:
+        if mode not in {"sorted", "appearance", "location"}:
+            return
+        self._icon_sort_mode = mode
         self._rebuild_icon_sections(self._filtered_devices)
+
+    def set_location_options(self, options: list[str]) -> None:
+        normalized: list[str] = []
+        for value in options:
+            if not isinstance(value, str):
+                continue
+            text = value.strip()
+            if text and text not in normalized:
+                normalized.append(text)
+        self._location_options = normalized
 
     def set_icon_source_overrides(self, overrides: dict) -> None:
         normalized: dict[tuple[str, int], str] = {}
         for key, mode in overrides.items():
-            if mode not in {"auto", "provided", "system"}:
+            if mode not in {"auto", "provided", "system", "custom"}:
                 continue
             if not isinstance(key, str) or ":" not in key:
                 continue
@@ -180,13 +196,46 @@ class DeviceList(Gtk.Box):
     def get_icon_source_overrides(self) -> dict[str, str]:
         return {f"{ip}:{port}": mode for (ip, port), mode in self._icon_source_overrides.items()}
 
+    def set_custom_icon_overrides(self, overrides: dict) -> None:
+        normalized: dict[tuple[str, int], str] = {}
+        for key, icon_name in overrides.items():
+            if not isinstance(icon_name, str) or not icon_name.strip():
+                continue
+            if not isinstance(key, str) or ":" not in key:
+                continue
+            ip, port_text = key.rsplit(":", 1)
+            try:
+                port = int(port_text)
+            except ValueError:
+                continue
+            normalized[(ip, port)] = icon_name.strip()
+        self._custom_icon_overrides = normalized
+        self._rebuild_icon_sections(self._filtered_devices)
+
+    def get_custom_icon_overrides(self) -> dict[str, str]:
+        return {f"{ip}:{port}": icon for (ip, port), icon in self._custom_icon_overrides.items()}
+
     @property
     def view_mode(self) -> str:
         return self._current_view
 
+    @property
+    def icon_sort_mode(self) -> str:
+        return self._icon_sort_mode
+
     def _rebuild_icon_sections(self, bundles: list[_DeviceBundle]) -> None:
         for child in self._icon_sections.get_children():
             self._icon_sections.remove(child)
+
+        if self._icon_sort_mode == "appearance":
+            ordered = sorted(bundles, key=self._bundle_arrival_index)
+            self._rebuild_flat_icon_panel(ordered)
+            self._icon_sections.show_all()
+            return
+        if self._icon_sort_mode == "location":
+            self._rebuild_icons_by_location(bundles)
+            self._icon_sections.show_all()
+            return
 
         grouped_devices: dict[str, list[_DeviceBundle]] = defaultdict(list)
         for bundle in bundles:
@@ -218,6 +267,78 @@ class DeviceList(Gtk.Box):
 
         self._icon_sections.show_all()
 
+    def _rebuild_flat_icon_panel(self, bundles: list[_DeviceBundle]) -> None:
+        frame = Gtk.Frame()
+        frame.set_shadow_type(Gtk.ShadowType.IN)
+        frame_label = Gtk.Label(label=_("All devices"), xalign=0.0)
+        frame_label.set_margin_start(8)
+        frame.set_label_widget(frame_label)
+        frame_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        frame_content.set_border_width(8)
+        frame_content.set_margin_start(6)
+        frame.add(frame_content)
+
+        flow = Gtk.FlowBox()
+        flow.set_max_children_per_line(6)
+        flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        flow.set_row_spacing(10)
+        flow.set_column_spacing(10)
+        flow.set_homogeneous(False)
+        for bundle in bundles:
+            flow.add(self._build_icon_tile(bundle))
+        frame_content.pack_start(flow, False, False, 0)
+        self._icon_sections.pack_start(frame, False, False, 0)
+
+    def _rebuild_icons_by_location(self, bundles: list[_DeviceBundle]) -> None:
+        grouped_devices: dict[str, list[_DeviceBundle]] = defaultdict(list)
+        for bundle in bundles:
+            grouped_devices[self._bundle_location_label(bundle)].append(bundle)
+
+        for location in sorted([label for label in grouped_devices.keys() if label != _("No location")], key=str.lower):
+            self._add_location_section(location, grouped_devices[location])
+        if _("No location") in grouped_devices:
+            self._add_location_section(_("No location"), grouped_devices[_("No location")])
+
+    def _add_location_section(self, location: str, bundles: list[_DeviceBundle]) -> None:
+        frame = Gtk.Frame()
+        frame.set_shadow_type(Gtk.ShadowType.IN)
+        frame_label = Gtk.Label(label=location, xalign=0.0)
+        frame_label.set_margin_start(8)
+        frame.set_label_widget(frame_label)
+        frame_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        frame_content.set_border_width(8)
+        frame_content.set_margin_start(6)
+        frame.add(frame_content)
+        flow = Gtk.FlowBox()
+        flow.set_max_children_per_line(6)
+        flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        flow.set_row_spacing(10)
+        flow.set_column_spacing(10)
+        flow.set_homogeneous(False)
+        for bundle in sorted(bundles, key=lambda item: item.name.lower()):
+            flow.add(self._build_icon_tile(bundle))
+        frame_content.pack_start(flow, False, False, 0)
+        self._icon_sections.pack_start(frame, False, False, 0)
+
+    def _bundle_location_label(self, bundle: _DeviceBundle) -> str:
+        for device in bundle.devices:
+            metadata = device.metadata if isinstance(device.metadata, dict) else {}
+            location = metadata.get("user_location")
+            if isinstance(location, str) and location.strip():
+                return location.strip()
+        return _("No location")
+
+    def _bundle_arrival_index(self, bundle: _DeviceBundle) -> int:
+        indexes: list[int] = []
+        for device in bundle.devices:
+            metadata = device.metadata if isinstance(device.metadata, dict) else {}
+            raw = metadata.get("_arrival_index")
+            if isinstance(raw, int):
+                indexes.append(raw)
+        if indexes:
+            return min(indexes)
+        return 10**12
+
     def _build_icon_tile(self, bundle: _DeviceBundle) -> Gtk.Widget:
         tile = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         tile.set_size_request(130, -1)
@@ -230,19 +351,6 @@ class DeviceList(Gtk.Box):
         image.set_halign(Gtk.Align.CENTER)
         image.set_valign(Gtk.Align.CENTER)
         icon_overlay.add(image)
-
-        if self._show_source_badges:
-            for label, align in bundle.badges:
-                badge = Gtk.Label(label=label)
-                badge.get_style_context().add_class("source-badge")
-                badge.set_halign(align)
-                badge.set_valign(Gtk.Align.END)
-                if align == Gtk.Align.START:
-                    badge.set_margin_start(0)
-                else:
-                    badge.set_margin_end(0)
-                badge.set_margin_bottom(0)
-                icon_overlay.add_overlay(badge)
 
         tile.pack_start(icon_overlay, False, False, 0)
 
@@ -289,6 +397,10 @@ class DeviceList(Gtk.Box):
             mdns_item = Gtk.MenuItem.new_with_label(_("mDNS details"))
             mdns_item.connect("activate", self._on_show_mdns_txt_activate, bundle)
             menu.append(mdns_item)
+        icon_item = Gtk.MenuItem.new_with_label(_("Icon..."))
+        icon_item.connect("activate", self._on_icon_item_activate, bundle)
+        icon_item.set_sensitive(self._has_ssdp_details(bundle) or self._has_mdns_details(bundle))
+        menu.append(icon_item)
 
         if bundle.monitored:
             unfollow_item = Gtk.MenuItem.new_with_label(_("Unfollow"))
@@ -299,29 +411,24 @@ class DeviceList(Gtk.Box):
             follow_item.connect("activate", self._on_monitor_item_activate, bundle, True)
             menu.append(follow_item)
 
-        menu.append(Gtk.SeparatorMenuItem())
-        icon_source_item = Gtk.MenuItem.new_with_label(_("Icon source"))
-        icon_source_menu = Gtk.Menu()
-        icon_source_item.set_submenu(icon_source_menu)
-        menu.append(icon_source_item)
+        rename_item = Gtk.MenuItem.new_with_label(_("Rename"))
+        rename_item.connect("activate", self._on_rename_item_activate, bundle)
+        rename_item.set_sensitive(self._on_set_name_override is not None)
+        menu.append(rename_item)
 
-        endpoint = (bundle.ip, bundle.port)
-        current_mode = self._icon_source_overrides.get(endpoint, "auto")
-        auto_item = Gtk.RadioMenuItem.new_with_label(None, _("Auto"))
-        provided_item = Gtk.RadioMenuItem.new_with_label_from_widget(auto_item, _("Use provided icon"))
-        system_item = Gtk.RadioMenuItem.new_with_label_from_widget(auto_item, _("Use system icon"))
-        auto_item.connect("toggled", self._on_icon_mode_item_toggled, bundle, "auto")
-        provided_item.connect("toggled", self._on_icon_mode_item_toggled, bundle, "provided")
-        system_item.connect("toggled", self._on_icon_mode_item_toggled, bundle, "system")
-        icon_source_menu.append(auto_item)
-        icon_source_menu.append(provided_item)
-        icon_source_menu.append(system_item)
-        if current_mode == "provided":
-            provided_item.set_active(True)
-        elif current_mode == "system":
-            system_item.set_active(True)
-        else:
-            auto_item.set_active(True)
+        location_item = Gtk.MenuItem.new_with_label(_("Location"))
+        location_menu = Gtk.Menu()
+        location_item.set_submenu(location_menu)
+        location_item.set_sensitive(self._on_set_location_override is not None and bool(self._location_options))
+        for location_value in self._location_options:
+            loc_choice_item = Gtk.MenuItem.new_with_label(location_value)
+            loc_choice_item.connect("activate", self._on_location_item_activate, bundle, location_value)
+            location_menu.append(loc_choice_item)
+        clear_location_item = Gtk.MenuItem.new_with_label(_("Clear location"))
+        clear_location_item.connect("activate", self._on_location_item_activate, bundle, None)
+        location_menu.append(Gtk.SeparatorMenuItem())
+        location_menu.append(clear_location_item)
+        menu.append(location_item)
 
         type_item = Gtk.MenuItem.new_with_label(_("Device type"))
         type_menu = Gtk.Menu()
@@ -408,20 +515,68 @@ class DeviceList(Gtk.Box):
         for device in bundle.devices:
             self._on_set_monitored(device, monitored)
 
-    def _on_icon_mode_item_toggled(self, menu_item: Gtk.RadioMenuItem, bundle: _DeviceBundle, mode: str) -> None:
-        if not menu_item.get_active():
-            return
+    def _apply_bundle_icon_settings(self, bundle: _DeviceBundle, mode: str, custom_icon_name: str | None) -> None:
         endpoint = (bundle.ip, bundle.port)
-        current_mode = self._icon_source_overrides.get(endpoint, "auto")
+        current_mode = self._normalized_icon_mode(bundle)
         if mode == current_mode:
+            if mode != "custom":
+                self._custom_icon_overrides.pop(endpoint, None)
+            elif custom_icon_name:
+                self._custom_icon_overrides[endpoint] = custom_icon_name
             return
-        if mode == "auto":
-            self._icon_source_overrides.pop(endpoint, None)
+        self._icon_source_overrides[endpoint] = mode
+        if mode == "custom":
+            if custom_icon_name:
+                self._custom_icon_overrides[endpoint] = custom_icon_name
         else:
-            self._icon_source_overrides[endpoint] = mode
+            self._custom_icon_overrides.pop(endpoint, None)
         self._rebuild_icon_sections(self._filtered_devices)
         if self._on_icon_mode_changed is not None:
             self._on_icon_mode_changed()
+
+    def _on_rename_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
+        if self._on_set_name_override is None:
+            return
+        parent = self._parent_window
+        if parent is None:
+            top_level = self.get_toplevel()
+            if isinstance(top_level, Gtk.Window):
+                parent = top_level
+        if parent is None:
+            return
+        dialog = Gtk.Dialog(title=_("Rename device"), transient_for=parent, modal=True)
+        dialog.set_default_size(360, -1)
+        content = dialog.get_content_area()
+        content.set_border_width(8)
+        label = Gtk.Label(label=_("Custom name"), xalign=0.0)
+        entry = Gtk.Entry()
+        entry.set_text(bundle.name)
+        entry.select_region(0, -1)
+        content.pack_start(label, False, False, 4)
+        content.pack_start(entry, False, False, 4)
+        dialog.add_button(_("Reset"), Gtk.ResponseType.REJECT)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        dialog.add_button(_("Save"), Gtk.ResponseType.OK)
+        dialog.show_all()
+
+        response = dialog.run()
+        new_name: str | None = None
+        if response == Gtk.ResponseType.OK:
+            value = entry.get_text().strip()
+            new_name = value if value else None
+        elif response == Gtk.ResponseType.REJECT:
+            new_name = None
+        dialog.destroy()
+        if response not in {Gtk.ResponseType.OK, Gtk.ResponseType.REJECT}:
+            return
+        for device in bundle.devices:
+            self._on_set_name_override(device.source, bundle.ip, bundle.port, new_name)
+
+    def _on_location_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle, value: str | None) -> None:
+        if self._on_set_location_override is None:
+            return
+        for device in bundle.devices:
+            self._on_set_location_override(device.source, bundle.ip, bundle.port, value)
 
     def _on_type_item_toggled(self, menu_item: Gtk.RadioMenuItem, bundle: _DeviceBundle, device_type: str | None) -> None:
         if not menu_item.get_active():
@@ -436,7 +591,7 @@ class DeviceList(Gtk.Box):
     def _on_show_ssdp_xml_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_ssdp_details(bundle)
 
-    def _open_ssdp_details(self, bundle: _DeviceBundle) -> None:
+    def _open_ssdp_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
         device = bundle.ssdp_device
         if device is None:
             return
@@ -449,12 +604,26 @@ class DeviceList(Gtk.Box):
             services_list=None,
             troubleshooting_records=troubleshooting_fields,
             raw_xml_location=xml_location,
+            icon_mode=self._normalized_icon_mode(bundle),
+            selected_icon_id=self._custom_icon_overrides.get((bundle.ip, bundle.port)),
+            icon_choices=self._load_icon_choices(bundle.primary.type),
+            on_apply_icon_settings=lambda mode, custom: self._apply_bundle_icon_settings(bundle, mode, custom),
+            custom_icons_dir=str(self._custom_icons_dir),
+            initial_tab=initial_tab,
+            has_device_icon_source=self._bundle_has_ssdp_icon_source(bundle),
         )
 
     def _on_show_mdns_txt_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_mdns_details(bundle)
 
-    def _open_mdns_details(self, bundle: _DeviceBundle) -> None:
+    def _on_icon_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
+        if bundle.mdns_device is not None:
+            self._open_mdns_details(bundle, initial_tab="appearance")
+            return
+        if bundle.ssdp_device is not None:
+            self._open_ssdp_details(bundle, initial_tab="appearance")
+
+    def _open_mdns_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
         device = bundle.mdns_device
         if device is None:
             return
@@ -464,6 +633,13 @@ class DeviceList(Gtk.Box):
             fields=fields,
             txt_records=txt_records,
             services_list=services_list,
+            icon_mode=self._normalized_icon_mode(bundle),
+            selected_icon_id=self._custom_icon_overrides.get((bundle.ip, bundle.port)),
+            icon_choices=self._load_icon_choices(bundle.primary.type),
+            on_apply_icon_settings=lambda mode, custom: self._apply_bundle_icon_settings(bundle, mode, custom),
+            custom_icons_dir=str(self._custom_icons_dir),
+            initial_tab=initial_tab,
+            has_device_icon_source=False,
         )
 
     def _open_device(self, bundle: _DeviceBundle) -> None:
@@ -492,6 +668,13 @@ class DeviceList(Gtk.Box):
         raw_button_label: str | None = None,
         troubleshooting_records: list[tuple[str, str]] | None = None,
         raw_xml_location: str | None = None,
+        icon_mode: str | None = None,
+        selected_icon_id: str | None = None,
+        icon_choices: list[tuple[str, str, GdkPixbuf.Pixbuf]] | None = None,
+        on_apply_icon_settings=None,
+        custom_icons_dir: str | None = None,
+        initial_tab: str | None = None,
+        has_device_icon_source: bool = True,
     ) -> None:
         parent = self._parent_window
         if parent is None:
@@ -510,6 +693,13 @@ class DeviceList(Gtk.Box):
             raw_button_label=raw_button_label,
             troubleshooting_records=troubleshooting_records,
             raw_xml_location=raw_xml_location,
+            icon_mode=icon_mode,
+            selected_icon_id=selected_icon_id,
+            icon_choices=icon_choices,
+            on_apply_icon_settings=on_apply_icon_settings,
+            custom_icons_dir=custom_icons_dir,
+            initial_tab=initial_tab,
+            has_device_icon_source=has_device_icon_source,
         )
         dialog.run()
         dialog.destroy()
@@ -519,6 +709,17 @@ class DeviceList(Gtk.Box):
 
     def _has_mdns_details(self, bundle: _DeviceBundle) -> bool:
         return bundle.mdns_device is not None
+
+    def _bundle_has_ssdp_icon_source(self, bundle: _DeviceBundle) -> bool:
+        device = bundle.ssdp_device
+        if device is None:
+            return False
+        if isinstance(device.icon, str) and device.icon.strip():
+            return True
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+        icon_url = xml_fields.get("iconURL")
+        return isinstance(icon_url, str) and icon_url.strip() != ""
 
     def _apply_category_filter(self, bundles: list[_DeviceBundle]) -> list[_DeviceBundle]:
         if not self._category_filter:
@@ -562,8 +763,15 @@ class DeviceList(Gtk.Box):
 
     def _load_device_icon(self, device: Device) -> GdkPixbuf.Pixbuf:
         endpoint = (device.ip, device.port)
-        icon_mode = self._icon_source_overrides.get(endpoint, "auto")
+        icon_mode = self._icon_source_overrides.get(endpoint, "provided")
+        use_custom = icon_mode == "custom"
         use_provided = icon_mode in {"auto", "provided"}
+        if use_custom:
+            custom_pixbuf = self._load_custom_icon_for_endpoint(endpoint, 64)
+            if custom_pixbuf is not None:
+                return custom_pixbuf
+            # If custom icon is missing, fallback to provided behavior.
+            use_provided = True
         if use_provided:
             remote_icon = self._load_remote_icon(device, 64)
             if remote_icon is not None:
@@ -601,6 +809,79 @@ class DeviceList(Gtk.Box):
                 continue
         return GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 64, 64)
 
+    def _normalized_icon_mode(self, bundle: _DeviceBundle) -> str:
+        raw_mode = self._icon_source_overrides.get((bundle.ip, bundle.port), "provided")
+        if raw_mode == "auto":
+            return "provided"
+        if raw_mode in {"provided", "system", "custom"}:
+            return raw_mode
+        return "provided"
+
+    def _load_custom_icon_for_endpoint(self, endpoint: tuple[str, int], size: int) -> GdkPixbuf.Pixbuf | None:
+        icon_id = self._custom_icon_overrides.get(endpoint)
+        if not icon_id:
+            return None
+        icon_path = self._resolve_icon_id_to_path(icon_id)
+        if not icon_path.exists():
+            return None
+        try:
+            return GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), size, size)
+        except Exception:
+            return None
+
+    def _load_icon_choices(self, preferred_type: str | None = None) -> list[tuple[str, str, GdkPixbuf.Pixbuf]]:
+        choices: list[tuple[str, str, GdkPixbuf.Pixbuf]] = []
+        try:
+            if self._builtin_icons_dir.exists():
+                for icon_path in sorted(self._builtin_icons_dir.glob("*.png")):
+                    if icon_path.name == "logo.png":
+                        continue
+                    try:
+                        preview = GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), 64, 64)
+                    except Exception:
+                        continue
+                    icon_id = f"builtin:{icon_path.name}"
+                    label = f"{icon_path.name} ({_('Built-in')})"
+                    choices.append((icon_id, label, preview))
+            if not self._custom_icons_dir.exists():
+                return choices
+            for icon_path in sorted(self._custom_icons_dir.glob("*.png")):
+                try:
+                    preview = GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), 64, 64)
+                except Exception:
+                    continue
+                icon_id = f"custom:{icon_path.name}"
+                label = f"{icon_path.name} ({_('Custom')})"
+                choices.append((icon_id, label, preview))
+        except Exception:
+            return choices
+        preferred_token = f"{(preferred_type or '').strip().lower()}.png"
+        if preferred_token:
+            def _choice_sort_key(item: tuple[str, str, GdkPixbuf.Pixbuf]) -> tuple[int, str]:
+                _icon_id, label, _preview = item
+                label_low = label.lower()
+                is_preferred = 0 if preferred_token in label_low else 1
+                return (is_preferred, label_low)
+
+            choices.sort(key=_choice_sort_key)
+        return choices
+
+    def _resolve_icon_id_to_path(self, icon_id: str) -> Path:
+        if not isinstance(icon_id, str) or not icon_id:
+            return self._custom_icons_dir / ""
+        if ":" in icon_id:
+            source, name = icon_id.split(":", 1)
+            name = name.strip()
+            if source == "builtin":
+                return self._builtin_icons_dir / name
+            if source == "custom":
+                return self._custom_icons_dir / name
+        # Backward compatibility with old prefs storing only filename.
+        custom_candidate = self._custom_icons_dir / icon_id
+        if custom_candidate.exists():
+            return custom_candidate
+        return self._builtin_icons_dir / icon_id
+
     def _load_remote_icon(self, device: Device, size: int) -> GdkPixbuf.Pixbuf | None:
         metadata = device.metadata if isinstance(device.metadata, dict) else {}
         xml_fields = metadata.get("xml_fields")
@@ -615,36 +896,45 @@ class DeviceList(Gtk.Box):
         if cached is not None:
             self._remote_icon_by_endpoint[endpoint] = cached
             return cached
-        try:
-            with urlopen(icon_url, timeout=1.5) as response:
-                data = response.read()
-            loader = GdkPixbuf.PixbufLoader()
-            loader.write(data)
-            loader.close()
-            pixbuf = loader.get_pixbuf()
-            if pixbuf is None:
-                return self._remote_icon_by_endpoint.get(endpoint)
-            scaled = pixbuf.scale_simple(size, size, GdkPixbuf.InterpType.BILINEAR)
-            if scaled is None:
-                return self._remote_icon_by_endpoint.get(endpoint)
-            self._remote_icon_cache[icon_url] = scaled
-            self._remote_icon_by_endpoint[endpoint] = scaled
-            return scaled
-        except Exception:
-            return self._remote_icon_by_endpoint.get(endpoint)
+        self._start_remote_icon_fetch(icon_url, endpoint, size)
+        return self._remote_icon_by_endpoint.get(endpoint)
+
+    def _start_remote_icon_fetch(self, icon_url: str, endpoint: tuple[str, int], size: int) -> None:
+        if icon_url in self._remote_icon_fetching:
+            return
+        self._remote_icon_fetching.add(icon_url)
+
+        def _worker() -> None:
+            try:
+                with urlopen(icon_url, timeout=1.5) as response:
+                    data = response.read()
+                loader = GdkPixbuf.PixbufLoader()
+                loader.write(data)
+                loader.close()
+                pixbuf = loader.get_pixbuf()
+                if pixbuf is not None:
+                    scaled = pixbuf.scale_simple(size, size, GdkPixbuf.InterpType.BILINEAR)
+                    if scaled is not None:
+                        self._remote_icon_cache[icon_url] = scaled
+                        self._remote_icon_by_endpoint[endpoint] = scaled
+                        from gi.repository import GLib
+
+                        GLib.idle_add(self._refresh_icons_after_async_fetch)
+            except Exception:
+                pass
+            finally:
+                self._remote_icon_fetching.discard(icon_url)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _refresh_icons_after_async_fetch(self) -> bool:
+        self._rebuild_icon_sections(self._filtered_devices)
+        return False
 
     def _install_css(self) -> None:
         provider = Gtk.CssProvider()
         provider.load_from_data(
             b"""
-            .source-badge {
-                background-color: rgba(0, 0, 0, 0.85);
-                color: #ffffff;
-                border-radius: 8px;
-                padding: 1px 6px;
-                font-size: 10px;
-                font-weight: 700;
-            }
             .offline-device-monitored {
                 opacity: 0.45;
             }

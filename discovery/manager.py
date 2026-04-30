@@ -17,8 +17,11 @@ class DiscoveryManager:
         self._mdns_logger = logging.getLogger(f"{__name__}.mdns")
         self._protocols: list[BaseDiscovery] = [SSDPDiscovery(), MDNSDiscovery()]
         self._devices: dict[str, Device] = {}
+        self._arrival_sequence = 0
         self._listeners: list[Callable[[list[Device]], None]] = []
         self._type_overrides: dict[str, str] = {}
+        self._name_overrides: dict[str, str] = {}
+        self._location_overrides: dict[str, str] = {}
         self._monitored_overrides: dict[str, bool] = {}
         self._last_seen_overrides: dict[str, str] = {}
         self._demo_mode = demo_mode
@@ -72,6 +75,8 @@ class DiscoveryManager:
                 pass
 
         self._apply_type_override(device)
+        self._apply_name_override(device)
+        self._apply_location_override(device)
         self._apply_monitored_override(device)
         existing_key = device.key
         existing = self._devices.get(existing_key)
@@ -100,6 +105,17 @@ class DiscoveryManager:
                     del self._devices[existing_key]
                 existing_key = device.key
 
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        existing_arrival = None
+        if isinstance(existing, Device) and isinstance(existing.metadata, dict):
+            candidate = existing.metadata.get("_arrival_index")
+            if isinstance(candidate, int):
+                existing_arrival = candidate
+        if existing_arrival is None:
+            self._arrival_sequence += 1
+            existing_arrival = self._arrival_sequence
+        device.metadata["_arrival_index"] = existing_arrival
         self._devices[existing_key] = device
         device_log = self._device_event_logger(device.source)
         device_log.info(
@@ -137,6 +153,32 @@ class DiscoveryManager:
 
     def get_type_overrides(self) -> dict[str, str]:
         return dict(self._type_overrides)
+
+    def set_name_overrides(self, overrides: dict[str, str]) -> None:
+        normalized: dict[str, str] = {}
+        for key, value in overrides.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            value_norm = value.strip()
+            if value_norm:
+                normalized[key] = value_norm
+        self._name_overrides = normalized
+
+    def get_name_overrides(self) -> dict[str, str]:
+        return dict(self._name_overrides)
+
+    def set_location_overrides(self, overrides: dict[str, str]) -> None:
+        normalized: dict[str, str] = {}
+        for key, value in overrides.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            value_norm = value.strip()
+            if value_norm:
+                normalized[key] = value_norm
+        self._location_overrides = normalized
+
+    def get_location_overrides(self) -> dict[str, str]:
+        return dict(self._location_overrides)
 
     def set_monitored_overrides(self, overrides: dict[str, bool]) -> None:
         normalized: dict[str, bool] = {}
@@ -225,6 +267,41 @@ class DiscoveryManager:
             if new_key != old_key:
                 self._devices.pop(old_key, None)
                 self._devices[new_key] = existing
+            changed = True
+        if changed:
+            self._notify()
+
+    def set_device_name_override(self, source: str, ip: str, port: int, device_name: str | None) -> None:
+        changed = False
+        for _old_key, existing in list(self._devices.items()):
+            if existing.source != source or existing.ip != ip or existing.port != port:
+                continue
+            preferred_key = self._make_name_override_key_for_device(existing)
+            endpoint_key = self._make_override_key(source, ip, port)
+            if device_name is None or not str(device_name).strip():
+                self._name_overrides.pop(preferred_key, None)
+                self._name_overrides.pop(endpoint_key, None)
+                existing.name = self._default_name_for_device(existing)
+            else:
+                self._name_overrides[preferred_key] = str(device_name).strip()
+            self._apply_name_override(existing)
+            changed = True
+        if changed:
+            self._notify()
+
+    def set_device_location_override(self, source: str, ip: str, port: int, location: str | None) -> None:
+        changed = False
+        for _old_key, existing in list(self._devices.items()):
+            if existing.source != source or existing.ip != ip or existing.port != port:
+                continue
+            preferred_key = self._make_name_override_key_for_device(existing)
+            endpoint_key = self._make_override_key(source, ip, port)
+            if location is None or not str(location).strip():
+                self._location_overrides.pop(preferred_key, None)
+                self._location_overrides.pop(endpoint_key, None)
+            else:
+                self._location_overrides[preferred_key] = str(location).strip()
+            self._apply_location_override(existing)
             changed = True
         if changed:
             self._notify()
@@ -402,6 +479,25 @@ class DiscoveryManager:
         device.type = override_type
         device.category = self._category_for_type(override_type)
 
+    def _apply_name_override(self, device: Device) -> None:
+        override_name = self._find_name_override_value(device)
+        if not override_name:
+            return
+        device.name = override_name
+
+    def _apply_location_override(self, device: Device) -> None:
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        location = self._find_location_override_value(device)
+        if location:
+            device.metadata["user_location"] = location
+        else:
+            auto_location = self._default_location_for_device(device)
+            if auto_location:
+                device.metadata["user_location"] = auto_location
+            else:
+                device.metadata.pop("user_location", None)
+
     def _apply_monitored_override(self, device: Device) -> None:
         override_value = self._find_override_value(self._monitored_overrides, device)
         if override_value is not None:
@@ -414,6 +510,26 @@ class DiscoveryManager:
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         return store.get(endpoint_key)
 
+    def _find_name_override_value(self, device: Device) -> str | None:
+        preferred_key = self._make_name_override_key_for_device(device)
+        if preferred_key in self._name_overrides:
+            return self._name_overrides[preferred_key]
+        endpoint_key = self._make_override_key(device.source, device.ip, device.port)
+        value = self._name_overrides.get(endpoint_key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
+    def _find_location_override_value(self, device: Device) -> str | None:
+        preferred_key = self._make_name_override_key_for_device(device)
+        if preferred_key in self._location_overrides:
+            return self._location_overrides[preferred_key]
+        endpoint_key = self._make_override_key(device.source, device.ip, device.port)
+        value = self._location_overrides.get(endpoint_key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
     def _make_override_key(self, source: str, ip: str, port: int) -> str:
         return f"{source}:{ip}:{int(port)}"
 
@@ -422,6 +538,93 @@ class DiscoveryManager:
         if mac:
             return f"{device.source}:mac:{mac}"
         return self._make_override_key(device.source, device.ip, device.port)
+
+    def _make_name_override_key_for_device(self, device: Device) -> str:
+        uid = self._extract_uid(device.metadata)
+        if uid:
+            return f"{device.source}:uid:{uid}"
+        mac = self._extract_mac(device.metadata)
+        if mac:
+            return f"{device.source}:mac:{mac}"
+        return self._make_override_key(device.source, device.ip, device.port)
+
+    def _extract_uid(self, metadata: dict) -> str:
+        if not isinstance(metadata, dict):
+            return ""
+        xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+        txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
+        usn = metadata.get("usn")
+        if isinstance(usn, str) and usn.strip():
+            return usn.strip().lower().split("::", 1)[0]
+        candidates = [
+            xml_fields.get("UDN"),
+            metadata.get("udn"),
+            txt_fields.get("uuid"),
+            txt_fields.get("udn"),
+            txt_fields.get("id"),
+            txt_fields.get("deviceid"),
+            txt_fields.get("device_id"),
+            txt_fields.get("serial"),
+            txt_fields.get("serialnumber"),
+        ]
+        for value in candidates:
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+        return ""
+
+    def _default_name_for_device(self, device: Device) -> str:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+        txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
+        ip = str(device.ip).strip() or "0.0.0.0"
+
+        for key in ("friendlyName", "displayName"):
+            value = xml_fields.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        if device.source == "mdns":
+            for key in ("name", "friendlyname", "friendly_name", "device", "model"):
+                value = txt_fields.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            hostname = metadata.get("hostname")
+            if isinstance(hostname, str) and hostname.strip():
+                normalized = hostname.strip().removesuffix(".local.").removesuffix(".local").strip(".")
+                if normalized:
+                    return normalized.replace("-", " ")
+            return f"mDNS Device {ip}"
+
+        if device.source == "ssdp":
+            server = str(metadata.get("server", ""))
+            st = str(metadata.get("st", ""))
+            server_low = server.lower()
+            st_low = st.lower()
+            if "router" in server_low or "wan" in st_low:
+                return f"Router {ip}"
+            if "mediaserver" in st_low or "dlna" in server_low:
+                return f"Media Server {ip}"
+            if "printer" in st_low:
+                return f"Printer {ip}"
+            return f"SSDP Device {ip}"
+
+        return str(device.name).strip() or "Unknown"
+
+    def _default_location_for_device(self, device: Device) -> str:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+        txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
+
+        # Sonos commonly exposes a room label in SSDP XML fields.
+        for value in (xml_fields.get("RoomName"), xml_fields.get("roomName"), metadata.get("RoomName"), metadata.get("roomName")):
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        for key in ("roomname", "room_name", "room"):
+            value = txt_fields.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
 
     def _category_for_type(self, device_type: str) -> str:
         return {

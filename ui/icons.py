@@ -23,7 +23,7 @@ def resolve_icon_path(icon_name: str | None) -> Path:
 
 def resolve_app_icon_path() -> Path | None:
     base = Path(__file__).resolve().parent.parent / "assets" / "icons"
-    for name in ("netneighbor.png", "netneighbor.svg", "app.png", "app.svg"):
+    for name in ("logo.png", "logo.svg", "netneighbor.png", "netneighbor.svg", "app.png", "app.svg"):
         candidate = base / name
         if candidate.exists():
             return candidate
