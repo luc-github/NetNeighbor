@@ -13,6 +13,8 @@ from model.device import Device
 class DiscoveryManager:
     def __init__(self, demo_mode: bool = False) -> None:
         self._logger = logging.getLogger(__name__)
+        self._ssdp_logger = logging.getLogger(f"{__name__}.ssdp")
+        self._mdns_logger = logging.getLogger(f"{__name__}.mdns")
         self._protocols: list[BaseDiscovery] = [SSDPDiscovery(), MDNSDiscovery()]
         self._devices: dict[str, Device] = {}
         self._listeners: list[Callable[[list[Device]], None]] = []
@@ -47,6 +49,13 @@ class DiscoveryManager:
         for protocol in self._protocols:
             protocol.refresh()
 
+    def _device_event_logger(self, source: str) -> logging.Logger:
+        if source == "ssdp":
+            return self._ssdp_logger
+        if source == "mdns":
+            return self._mdns_logger
+        return self._logger
+
     def add_or_update_device(self, device: Device) -> None:
         override_key = self._make_override_key_for_device(device)
         existing_seen = self._last_seen_overrides.get(override_key)
@@ -75,7 +84,7 @@ class DiscoveryManager:
             if device.online is False and existing.last_seen:
                 device.last_seen = existing.last_seen
             if device.source == "ssdp":
-                self._logger.debug(
+                self._ssdp_logger.debug(
                     "SSDP merge candidate for %s:%s old_name=%s new_name=%s",
                     device.ip,
                     device.port,
@@ -92,7 +101,8 @@ class DiscoveryManager:
                 existing_key = device.key
 
         self._devices[existing_key] = device
-        self._logger.info(
+        device_log = self._device_event_logger(device.source)
+        device_log.info(
             "Device %s: source=%s name=%s ip=%s port=%s type=%s category=%s online=%s",
             "updated" if existing else "added",
             device.source,
@@ -103,7 +113,7 @@ class DiscoveryManager:
             device.category,
             device.online,
         )
-        self._logger.debug(
+        device_log.debug(
             "Device %s: %s %s:%s [%s] online=%s category=%s",
             "updated" if existing else "added",
             device.source,
@@ -230,7 +240,7 @@ class DiscoveryManager:
         old_rank = self._ssdp_profile_rank(old_xml_fields)
         new_rank = self._ssdp_profile_rank(new_xml_fields)
         preferred_xml_fields = old_xml_fields if old_rank >= new_rank else new_xml_fields
-        self._logger.debug(
+        self._ssdp_logger.debug(
             "SSDP profile rank old=%s new=%s selected=%s",
             old_rank,
             new_rank,
@@ -274,7 +284,7 @@ class DiscoveryManager:
             if not value or value in aliases:
                 continue
             aliases.append(value)
-            self._logger.debug("SSDP alias tracked: %s", value)
+            self._ssdp_logger.debug("SSDP alias tracked: %s", value)
         merged["alternate_names"] = aliases
 
         # Keep last known information text when a partial payload does not provide it.
@@ -290,10 +300,10 @@ class DiscoveryManager:
         if isinstance(old_xml, str) and isinstance(new_xml, str):
             if old_rank >= new_rank and len(old_xml.strip()) >= len(new_xml.strip()):
                 merged["xml"] = old_xml
-                self._logger.debug("SSDP raw XML preserved from previous richer profile")
+                self._ssdp_logger.debug("SSDP raw XML preserved from previous richer profile")
         elif isinstance(old_xml, str) and not isinstance(new_xml, str):
             merged["xml"] = old_xml
-            self._logger.debug("SSDP raw XML preserved because new payload has no XML")
+            self._ssdp_logger.debug("SSDP raw XML preserved because new payload has no XML")
 
         return merged
 
@@ -330,9 +340,9 @@ class DiscoveryManager:
         old_fields = old_meta.get("xml_fields") if isinstance(old_meta, dict) and isinstance(old_meta.get("xml_fields"), dict) else {}
         new_fields = new_meta.get("xml_fields") if isinstance(new_meta, dict) and isinstance(new_meta.get("xml_fields"), dict) else {}
         if self._ssdp_profile_rank(new_fields) > self._ssdp_profile_rank(old_fields):
-            self._logger.debug("SSDP name switched to newer profile name: %s", new_name)
+            self._ssdp_logger.debug("SSDP name switched to newer profile name: %s", new_name)
             return new_name
-        self._logger.debug("SSDP name preserved from previous profile: %s", old_name)
+        self._ssdp_logger.debug("SSDP name preserved from previous profile: %s", old_name)
         return old_name
 
     def _find_existing_ssdp_by_endpoint(self, candidate: Device) -> tuple[str, Device] | tuple[None, None]:
@@ -344,7 +354,7 @@ class DiscoveryManager:
                 continue
             existing_mac = self._extract_mac(item.metadata)
             if candidate_mac and existing_mac and candidate_mac != existing_mac:
-                self._logger.debug(
+                self._ssdp_logger.debug(
                     "SSDP endpoint match rejected due to MAC mismatch ip=%s port=%s old=%s new=%s",
                     candidate.ip,
                     candidate.port,
@@ -353,14 +363,14 @@ class DiscoveryManager:
                 )
                 continue
             if candidate_mac and not existing_mac:
-                self._logger.debug(
+                self._ssdp_logger.debug(
                     "SSDP endpoint match accepted and upgraded with MAC ip=%s port=%s mac=%s",
                     candidate.ip,
                     candidate.port,
                     candidate_mac,
                 )
             if existing_mac and not candidate_mac:
-                self._logger.debug(
+                self._ssdp_logger.debug(
                     "SSDP endpoint match accepted using existing MAC ip=%s port=%s mac=%s",
                     candidate.ip,
                     candidate.port,

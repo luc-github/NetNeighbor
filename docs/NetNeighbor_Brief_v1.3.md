@@ -1,5 +1,7 @@
 # NetNeighbor — Project Brief v1.3
 
+> **Note:** For an architecture and roadmap aligned with the current repository, use **`NetNeighbor_Brief_v1.4.md`**. This file is retained as a historical reference.
+
 ## Description
 NetNeighbor is a Linux desktop application that replicates and extends the Windows Network
 Neighborhood experience, using SSDP and mDNS protocols to discover and display local network

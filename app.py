@@ -7,6 +7,7 @@ import socket
 import threading
 import tempfile
 import time
+import json
 
 import gi
 
@@ -207,8 +208,12 @@ def main() -> int:
 
 
 def _setup_logging() -> None:
-    level_name = os.getenv("NETNEIGHBOR_LOG_LEVEL", "DEBUG").upper()
-    level = getattr(logging, level_name, logging.INFO)
+    env_level_name = os.getenv("NETNEIGHBOR_LOG_LEVEL")
+    config = _load_logging_config()
+    default_level_name = str(config.get("default", "INFO")).upper()
+    if env_level_name:
+        default_level_name = env_level_name.upper()
+    level = _to_level(default_level_name, logging.INFO)
     log_dir = Path.home() / ".cache" / "netneighbor"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "netneighbor.log"
@@ -216,6 +221,7 @@ def _setup_logging() -> None:
     root_logger = logging.getLogger()
     if root_logger.handlers:
         root_logger.setLevel(level)
+        _apply_named_log_levels(config)
         return
 
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -227,4 +233,56 @@ def _setup_logging() -> None:
     root_logger.setLevel(level)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(stream_handler)
-    logging.getLogger(__name__).info("Logging initialized at %s (%s)", level_name, log_file)
+    _apply_named_log_levels(config)
+    logging.getLogger(__name__).info("Logging initialized at %s (%s)", default_level_name, log_file)
+
+
+_LOG_LEVEL_OFF = 100  # above CRITICAL (50): suppress all standard levels
+
+
+def _to_level(level_name: str, fallback: int) -> int:
+    normalized = str(level_name).strip().upper()
+    if normalized in {"NONE", "OFF", "DISABLED", "SILENT"}:
+        return _LOG_LEVEL_OFF
+    resolved = getattr(logging, normalized, None)
+    if isinstance(resolved, int):
+        return resolved
+    return fallback
+
+
+def _load_logging_config() -> dict:
+    config_dir = Path.home() / ".config" / "netneighbor"
+    config_path = config_dir / "logging.json"
+    default_config = {
+        "default": "INFO",
+        "app": "INFO",
+        "ssdp": "WARNING",
+        "mdns": "DEBUG",
+    }
+    try:
+        config_dir.mkdir(parents=True, exist_ok=True)
+        if not config_path.exists():
+            config_path.write_text(json.dumps(default_config, indent=2, sort_keys=True), encoding="utf-8")
+            return dict(default_config)
+        parsed = json.loads(config_path.read_text(encoding="utf-8"))
+        if not isinstance(parsed, dict):
+            return dict(default_config)
+        merged = dict(default_config)
+        merged.update(parsed)
+        return merged
+    except (OSError, json.JSONDecodeError):
+        return dict(default_config)
+
+
+def _apply_named_log_levels(config: dict) -> None:
+    app_level = _to_level(str(config.get("app", config.get("default", "INFO"))), logging.INFO)
+    ssdp_level = _to_level(str(config.get("ssdp", config.get("default", "INFO"))), logging.INFO)
+    mdns_level = _to_level(str(config.get("mdns", config.get("default", "INFO"))), logging.INFO)
+
+    for logger_name in ("app", "ui", "utils", "discovery.manager", "model"):
+        logging.getLogger(logger_name).setLevel(app_level)
+    logging.getLogger("discovery.ssdp").setLevel(ssdp_level)
+    logging.getLogger("discovery.mdns").setLevel(mdns_level)
+    # Manager-side messages tied to a protocol (device add/update, SSDP merge) use child loggers.
+    logging.getLogger("discovery.manager.ssdp").setLevel(ssdp_level)
+    logging.getLogger("discovery.manager.mdns").setLevel(mdns_level)
