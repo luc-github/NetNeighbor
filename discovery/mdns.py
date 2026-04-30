@@ -44,6 +44,7 @@ class MDNSDiscovery(BaseDiscovery):
         self._listener = _MDNSListener(self)
         self._seen_by_service: dict[tuple[str, str], dict] = {}
         self._service_host_keys: dict[tuple[str, str], str] = {}
+        self._host_last_endpoint: dict[str, tuple[str, int]] = {}
         self._type_map = self._load_mdns_type_map()
 
     def start(self) -> None:
@@ -75,6 +76,7 @@ class MDNSDiscovery(BaseDiscovery):
             return
         self._running = False
         self._seen_by_service.clear()
+        self._host_last_endpoint.clear()
         self._browsers.clear()
         zc = self._zeroconf
         self._zeroconf = None
@@ -137,6 +139,15 @@ class MDNSDiscovery(BaseDiscovery):
         host_key = self._host_key_for_payload(payload, service_type, name)
         self._service_host_keys[key] = host_key
         aggregate = self._aggregate_payload_for_host(host_key, online=True)
+        previous_endpoint = self._host_last_endpoint.get(host_key)
+        current_endpoint = (str(aggregate.get("ip", "0.0.0.0")), int(aggregate.get("port", 0) or 0))
+        if previous_endpoint and previous_endpoint != current_endpoint:
+            stale_payload = dict(aggregate)
+            stale_payload["ip"] = previous_endpoint[0]
+            stale_payload["port"] = previous_endpoint[1]
+            stale_payload["online"] = False
+            self._emit("device", stale_payload)
+        self._host_last_endpoint[host_key] = current_endpoint
         self._emit("device", aggregate)
 
     def _on_service_remove(self, service_type: str, name: str) -> None:
@@ -150,6 +161,7 @@ class MDNSDiscovery(BaseDiscovery):
             if still_online:
                 self._emit("device", self._aggregate_payload_for_host(host_key, online=True))
                 return
+            self._host_last_endpoint.pop(host_key, None)
             payload = self._aggregate_payload_for_host(host_key, online=False)
             self._emit("device", payload)
             return
