@@ -271,11 +271,17 @@ class DiscoveryManager:
             if existing.source != source or existing.ip != ip or existing.port != port:
                 continue
             preferred_key = self._make_override_key_for_device(existing)
+            legacy_key = self._make_legacy_identity_key_for_device(existing)
             endpoint_key = self._make_override_key(source, ip, port)
             if device_type is None or not str(device_type).strip() or str(device_type).strip().lower() == "auto":
                 self._type_overrides.pop(preferred_key, None)
+                if legacy_key:
+                    self._type_overrides.pop(legacy_key, None)
                 self._type_overrides.pop(endpoint_key, None)
             else:
+                if legacy_key:
+                    self._type_overrides.pop(legacy_key, None)
+                self._type_overrides.pop(endpoint_key, None)
                 self._type_overrides[preferred_key] = str(device_type).strip().lower()
             self._apply_type_override(existing)
             new_key = existing.key
@@ -292,12 +298,18 @@ class DiscoveryManager:
             if existing.source != source or existing.ip != ip or existing.port != port:
                 continue
             preferred_key = self._make_name_override_key_for_device(existing)
+            legacy_key = self._make_legacy_identity_key_for_device(existing)
             endpoint_key = self._make_override_key(source, ip, port)
             if device_name is None or not str(device_name).strip():
                 self._name_overrides.pop(preferred_key, None)
+                if legacy_key:
+                    self._name_overrides.pop(legacy_key, None)
                 self._name_overrides.pop(endpoint_key, None)
                 existing.name = self._default_name_for_device(existing)
             else:
+                if legacy_key:
+                    self._name_overrides.pop(legacy_key, None)
+                self._name_overrides.pop(endpoint_key, None)
                 self._name_overrides[preferred_key] = str(device_name).strip()
             self._apply_name_override(existing)
             changed = True
@@ -310,11 +322,17 @@ class DiscoveryManager:
             if existing.source != source or existing.ip != ip or existing.port != port:
                 continue
             preferred_key = self._make_name_override_key_for_device(existing)
+            legacy_key = self._make_legacy_identity_key_for_device(existing)
             endpoint_key = self._make_override_key(source, ip, port)
             if location is None or not str(location).strip():
                 self._location_overrides.pop(preferred_key, None)
+                if legacy_key:
+                    self._location_overrides.pop(legacy_key, None)
                 self._location_overrides.pop(endpoint_key, None)
             else:
+                if legacy_key:
+                    self._location_overrides.pop(legacy_key, None)
+                self._location_overrides.pop(endpoint_key, None)
                 self._location_overrides[preferred_key] = str(location).strip()
             self._apply_location_override(existing)
             changed = True
@@ -522,6 +540,9 @@ class DiscoveryManager:
         preferred_key = self._make_override_key_for_device(device)
         if preferred_key in store:
             return store[preferred_key]
+        legacy_key = self._make_legacy_identity_key_for_device(device)
+        if legacy_key and legacy_key in store:
+            return store[legacy_key]
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         return store.get(endpoint_key)
 
@@ -529,6 +550,11 @@ class DiscoveryManager:
         preferred_key = self._make_name_override_key_for_device(device)
         if preferred_key in self._name_overrides:
             return self._name_overrides[preferred_key]
+        legacy_key = self._make_legacy_identity_key_for_device(device)
+        if legacy_key and legacy_key in self._name_overrides:
+            value = self._name_overrides.get(legacy_key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         value = self._name_overrides.get(endpoint_key)
         if isinstance(value, str) and value.strip():
@@ -539,6 +565,11 @@ class DiscoveryManager:
         preferred_key = self._make_name_override_key_for_device(device)
         if preferred_key in self._location_overrides:
             return self._location_overrides[preferred_key]
+        legacy_key = self._make_legacy_identity_key_for_device(device)
+        if legacy_key and legacy_key in self._location_overrides:
+            value = self._location_overrides.get(legacy_key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         value = self._location_overrides.get(endpoint_key)
         if isinstance(value, str) and value.strip():
@@ -549,19 +580,28 @@ class DiscoveryManager:
         return f"{source}:{ip}:{int(port)}"
 
     def _make_override_key_for_device(self, device: Device) -> str:
+        uid = self._extract_uid(device.metadata)
+        if uid:
+            return f"host:uid:{uid}"
         mac = self._extract_mac(device.metadata)
         if mac:
-            return f"{device.source}:mac:{mac}"
+            return f"host:mac:{mac}"
+        ip = str(device.ip).strip()
+        if ip and ip != "0.0.0.0":
+            return f"host:ip:{ip}"
         return self._make_override_key(device.source, device.ip, device.port)
 
     def _make_name_override_key_for_device(self, device: Device) -> str:
+        return self._make_override_key_for_device(device)
+
+    def _make_legacy_identity_key_for_device(self, device: Device) -> str:
         uid = self._extract_uid(device.metadata)
         if uid:
             return f"{device.source}:uid:{uid}"
         mac = self._extract_mac(device.metadata)
         if mac:
             return f"{device.source}:mac:{mac}"
-        return self._make_override_key(device.source, device.ip, device.port)
+        return ""
 
     def _extract_uid(self, metadata: dict) -> str:
         if not isinstance(metadata, dict):

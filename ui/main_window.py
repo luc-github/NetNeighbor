@@ -389,7 +389,7 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.add_credit_section(
             _("Icons"),
             [
-                "Custom app icons: Luc",
+                "Custom app icons: Luc LEBOSSE",
                 "System icons: active GTK icon theme",
             ],
         )
