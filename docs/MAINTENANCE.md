@@ -10,12 +10,13 @@ keeping the project healthy between releases.
 | `~/.config/netneighbor/ui_prefs.json` | UI state, overrides, monitored snapshots (not a full device DB). |
 | `~/.config/netneighbor/logging.json` | Per-area log levels (`default`, `app`, `ssdp`, `mdns`). Created with defaults on first run if missing. |
 | `~/.cache/netneighbor/netneighbor.log` | Log file when file logging is enabled (see `app.py`). |
-| `~/.cache/netneighbor/remote_icons/` | On-disk cache for **device-provided** icons fetched from SSDP/mDNS URLs (normalized). Primary file per URL: **`{SHA256(url)}.payload`** raw HTTP body (decoded with GdkPixbuf on load — avoids flaky `savev`). The digest uses a **canonical URL** after rewriting typical LAN hosts (`*.local`, `*.lan`, single-label names) to the **device IP** (stable fetch + hash), then normalizing (lowercased scheme/host, trailing FQDN dot stripped). A second lookup tries the **canonical raw URL** (pre-IP rewrite) for older payloads. **HTTPS** to `*.local` / `*.lan` or **RFC1918** hosts uses a relaxed TLS verify context (typical self-signed printer certs). Legacy **`.png`** files from older releases are still read if present. Clearing the folder forces a fresh download. |
+| `~/.cache/netneighbor/remote_icons/` | On-disk cache for **device-provided** icons fetched from SSDP/mDNS URLs (normalized). Primary file per URL: **`{SHA256(url)}.payload`** raw HTTP body (decoded with GdkPixbuf on load — avoids flaky `savev`). The digest uses a **canonical URL** after rewriting typical LAN hosts (`*.local`, `*.lan`, single-label names) to the **device IP** (stable fetch + hash), then normalizing (lowercased scheme/host, trailing FQDN dot stripped, **default HTTP/HTTPS ports omitted**). Disk lookup also tries **legacy explicit `:80` / `:443`** variants so filenames from older canonicalization rules still resolve. A second lookup tries the **canonical raw URL** (pre-IP rewrite) for older payloads. **HTTPS** to `*.local` / `*.lan` or **RFC1918** hosts uses a relaxed TLS verify context (typical self-signed printer certs). Legacy **`.png`** files from older releases are still read if present. Clearing the folder forces a fresh download; if icons look wrong after a firmware change, clear **`remote_icon_index.json`** (see next row) as well. |
+| `~/.cache/netneighbor/remote_icon_index.json` | **Host → icon cache index** (version 2 JSON): per **IPv4/IPv6 key** stores **`canonical_url`**, **`payload_sha256`** (same stem as **`remote_icons/{sha256}.payload`**), and **`updated_at`**. Lets the UI load the correct cached icon **on cold start** without waiting for every mDNS TXT variant. If **`remote_icon_bindings.json`** exists from an older build, it is **migrated once** into this file on first load. Delete this file to drop remembered host→URL mappings (payload files remain until removed manually). |
 
 ## Logging
 
 - Root logging is configured in `app.py` (console + optional rotating file under cache dir).
-- **`logging.json`**: keys `ssdp` and `mdns` apply both to the protocol module (`discovery.ssdp`, `discovery.mdns`) and to manager-side lines for that source (`discovery.manager.ssdp`, `discovery.manager.mdns`), including “Device added/updated”.
+- **`logging.json`**: keys `ssdp` and `mdns` apply both to the protocol module (`discovery.ssdp`, `discovery.mdns`) and to manager-side lines for that source (`discovery.manager.ssdp`, `discovery.manager.mdns`), including “Device added/updated”, **location** resolution (`Location: …`), and **device appearance** (type, bundled icon filename, `user_location`). Set **`app`** to **DEBUG** for **`ui.device_list`** messages (remote vs bundled icon path, GTK theme fallback).
 - Special levels **`NONE`**, **`OFF`**, **`DISABLED`**, **`SILENT`** turn off that area (no INFO/DEBUG/WARNING from those loggers).
 - **`NETNEIGHBOR_LOG_LEVEL`** still overrides the root/default level when set.
 - Other useful loggers: `discovery.manager` (start/stop, publishing at DEBUG), `ui`.
@@ -23,7 +24,7 @@ keeping the project healthy between releases.
 ## Common tasks
 
 - **Rules tuning**: shipped `config/ssdp_rules.json` / `config/mdns_rules.json`; user overlays in **`~/.config/netneighbor/`** — [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md).
-- **Icons / types**: `data/device_types.json` and [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md); optional user merge from `~/.config/netneighbor/device_types.json` ([`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md)). Icons loaded from SSDP/mDNS URLs are persisted under **`~/.cache/netneighbor/remote_icons/`** (see table above).
+- **Icons / types**: `data/device_types.json` and [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md); optional user merge from `~/.config/netneighbor/device_types.json` ([`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md)). Icons loaded from SSDP/mDNS URLs are persisted under **`~/.cache/netneighbor/remote_icons/`** with a **`remote_icon_index.json`** host map (see table above).
 - **Translations**: `locale/*/LC_MESSAGES/netneighbor.po`, compile with `msgfmt`; see [`I18N.md`](I18N.md) for full workflow.
 
 ## Discovery extension hooks
@@ -36,6 +37,8 @@ keeping the project healthy between releases.
 2. Check firewall allows UDP 1900 inbound / multicast.
 3. Inspect SSDP details in the UI for `LOCATION`, `USN`, XML presence.
 4. Compare logs for “XML fetched” vs failures (timeouts, parse errors).
+5. **Location looks like a URL / `description.xml`**: should no longer happen; if prefs were polluted earlier, open **Location presets** or edit **`ui_prefs.json`** — invalid URL-like presets are stripped on load. **`utils/location_label.py`** documents the rejection rules.
+6. **Wrong or delayed device icon**: confirm **`remote_icons/*.payload`** and **`remote_icon_index.json`** together; bump **`mdns`** / **`app`** to **DEBUG** to trace aggregate + icon load path.
 
 ## Suggested additional docs (optional)
 

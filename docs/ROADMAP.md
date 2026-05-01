@@ -12,15 +12,18 @@ This file tracks **implementation** progress. Product vision and constraints liv
 - **SSDP rules file** (`config/ssdp_rules.json`): name, information, and type heuristics without recompiling.
 - **UI**: list and icon grid, sidebar grouped by type or location (matching arrange mode), details dialogs (SSDP / mDNS payload builders), browser open, user type/name/location overrides, icon appearance management (system/provided/custom + picker), monitored devices, greyed offline when monitored, session notification history (in-memory) available from `Tools`.
 - **Persistence** (per user): `~/.config/netneighbor/ui_prefs.json` (view, filters, overrides, monitored snapshots for restore on next launch — not a full device database file).
-- **mDNS (zeroconf)**: real browser/listener, TXT decode, type/category heuristics, host-level service aggregation (single device can expose multiple services), and conditional presentation URL (only when `_http._tcp` is actually present).
-- **Remote icon persistence**: SSDP/mDNS device icon URLs normalized and cached under `~/.cache/netneighbor/remote_icons/` (raw `.payload` per SHA-256 of the URL; optional read of legacy `.png`).
+- **mDNS (zeroconf)**: real browser/listener, TXT decode, type/category heuristics, host-level service aggregation (single device can expose multiple services), and conditional presentation URL (only when `_http._tcp` is actually present). Aggregation scoring prefers **playback / printer** services (e.g. `_airplay._tcp`, `_raop._tcp`, Sonos/Cast/Spotify Connect, `_ipp._tcp`, `_printer._tcp`) over bare **`_http._tcp`** so representative TXT, type, and icon metadata stabilize sooner on multi-service hosts.
+- **`data/device_types.json`**: explicit mDNS keys for common smart-speaker / casting services map to **Smart Speakers** and bundled **`smartspeaker.png`** (user overlay still merges from `~/.config/netneighbor/device_types.json`).
+- **Auto location (metadata)**: room-like labels are inferred from SSDP XML / mDNS TXT (including per-service TXT under `metadata["services"]`). Values that look like **SSDP LOCATION / descriptor URLs** (`http…`, `description.xml`, etc.) are rejected so they never populate **location** UI or presets (`utils/location_label.py`).
+- **Remote icon persistence**: SSDP/mDNS device icon URLs normalized and cached under `~/.cache/netneighbor/remote_icons/` (raw **`.payload`** per SHA-256 of a **canonical URL**; optional legacy **`.png`**). **Canonicalization** omits default HTTP/HTTPS ports and probes **legacy `:80` / `:443`** variants so older on-disk digests still match. A **host-level RAM cache** and **`~/.cache/netneighbor/remote_icon_index.json`** map **LAN IP → `{canonical_url, payload_sha256, updated_at}`** so the correct **`.payload`** loads immediately at startup even when the representative mDNS port or advertised URL string drifts; **`remote_icon_bindings.json`** is migrated once if present. UI tries **all** icon URLs from merged service TXT before falling back to bundled / GTK icons.
+- **Discovery / UI debugging (optional)**: `logging.json` keys **`mdns`** / **`ssdp`** at **DEBUG** surface manager lines for **location** resolution and **device appearance** (type, icon, `user_location`); **`app`** at **DEBUG** includes **`ui.device_list`** lines for bundled vs remote icon paths and GTK fallbacks.
 - **`DiscoveryManager.register_presence_transition_hook`** (internal extension point): optional callbacks when a cached device transitions **online** or **offline** (no hooks registered by core UI yet). Intended for future plugins / scripting; callers may run off the GTK thread.
 
 ## In progress / next
 
 1. **Cross-protocol deduplication hardening**  
    - Host identity-based override keys are in place (`UID`/`MAC`/IP fallback).  
-   - Continue validation on real networks for edge cases (sleep/wake, endpoint shifts, mixed protocol timing).
+   - Recent work improved **same-host mDNS** stability (aggregate representative scoring, host icon index); continue validation on real networks for edge cases (sleep/wake, endpoint shifts, mixed protocol timing, SSDP+mDNS bundle races).
 
 2. **Runtime mode (baseline chosen)**  
    - **Primary mode:** standalone GTK window (single instance); matches current implementation and MVP packaging path.  
