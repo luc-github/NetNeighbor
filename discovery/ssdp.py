@@ -22,6 +22,8 @@ _DEFAULT_TIMEOUT_SECONDS = 180
 _REFRESH_INTERVAL_SECONDS = 60
 _MAX_TIMEOUT_SECONDS = 3600
 _RULES_PATH = Path(__file__).resolve().parent.parent / "config" / "ssdp_rules.json"
+_RX_FRAME_DELIMITER = ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+_TX_FRAME_DELIMITER = "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
 
 
 class SSDPDiscovery(BaseDiscovery):
@@ -92,7 +94,15 @@ class SSDPDiscovery(BaseDiscovery):
             ).encode("utf-8")
             try:
                 sock.sendto(payload, _SSDP_ADDR)
-                self._logger.debug("SSDP TX %s:%s\n%s", _SSDP_ADDR[0], _SSDP_ADDR[1], payload.decode("utf-8", errors="ignore"))
+                payload_text = payload.decode("utf-8", errors="ignore")
+                self._logger.debug(
+                    "SSDP TX %s:%s\n%s\n%s\n%s",
+                    _SSDP_ADDR[0],
+                    _SSDP_ADDR[1],
+                    _TX_FRAME_DELIMITER,
+                    payload_text,
+                    _TX_FRAME_DELIMITER,
+                )
             except OSError:
                 self._logger.exception("Failed to send SSDP M-SEARCH for ST=%s", st)
 
@@ -132,7 +142,13 @@ class SSDPDiscovery(BaseDiscovery):
             is_notify = payload.startswith("NOTIFY * HTTP/1.1")
             if not (is_reply or is_notify):
                 continue
-            self._logger.debug("SSDP RX from %s\n%s", addr[0], payload)
+            self._logger.debug(
+                "SSDP RX from %s\n%s\n%s\n%s",
+                addr[0],
+                _RX_FRAME_DELIMITER,
+                payload,
+                _RX_FRAME_DELIMITER,
+            )
             headers = self._parse_headers(payload)
             if not headers:
                 continue

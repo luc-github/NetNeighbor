@@ -16,6 +16,7 @@ documentation remains in the repository root [`README.md`](../README.md).
 | [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) | User overlays in `~/.config/netneighbor/` merging with bundled `device_types` and rules JSON. |
 | [`UI_ARCHITECTURE.md`](UI_ARCHITECTURE.md) | GTK layer: main window, device list, threading, preferences, notifications history. |
 | [`MAINTENANCE.md`](MAINTENANCE.md) | Ongoing care: logging, config paths, debugging discovery, suggested future docs. |
+| [`PACKAGING.md`](PACKAGING.md) | Build and validate release artifacts (`.deb` + `tar.gz`) with helper scripts. |
 | [`I18N.md`](I18N.md) | How to add/update translations (`.po`/`.mo`), merge catalogs, and test locales. |
 | [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md) | Icon assets and `device_types.json` contributions (existing). |
 

@@ -1,7 +1,7 @@
 """Orchestrates all protocol providers and keeps a simple device cache."""
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import ipaddress
 import logging
 from typing import Literal
@@ -14,6 +14,7 @@ from utils.location_label import is_plausible_room_location
 
 PresenceTransitionKind = Literal["online", "offline"]
 PresenceTransitionHook = Callable[[Device, PresenceTransitionKind], None]
+_IDENTITY_HOLD_SECONDS = 3.0
 
 
 class DiscoveryManager:
@@ -31,10 +32,16 @@ class DiscoveryManager:
         self._location_overrides: dict[str, str] = {}
         self._monitored_overrides: dict[str, bool] = {}
         self._last_seen_overrides: dict[str, str] = {}
+        self._identity_pending: dict[str, tuple[datetime, Device]] = {}
         self._demo_mode = demo_mode
+        self._location_prefs_need_reapply = False
+        self._location_prefs_dirty_callback: Callable[[], None] | None = None
 
         for protocol in self._protocols:
             protocol.set_callback(self._on_protocol_event)
+
+    def set_location_prefs_dirty_callback(self, callback: Callable[[], None] | None) -> None:
+        self._location_prefs_dirty_callback = callback
 
     def add_listener(self, callback: Callable[[list[Device]], None]) -> None:
         self._listeners.append(callback)
@@ -71,6 +78,7 @@ class DiscoveryManager:
         self._logger.info("Stopping discovery protocols")
         for protocol in self._protocols:
             protocol.stop()
+        self._identity_pending.clear()
 
     def refresh(self) -> None:
         self._logger.debug("Manual refresh requested")
@@ -85,6 +93,19 @@ class DiscoveryManager:
         return self._logger
 
     def add_or_update_device(self, device: Device) -> None:
+        sip = str(device.ip).strip()
+        if sip in {"", "0.0.0.0"}:
+            self._device_event_logger(device.source).debug(
+                "Ignoring device with placeholder IP: source=%s name=%s port=%s online=%s",
+                device.source,
+                device.name,
+                device.port,
+                device.online,
+            )
+            return
+        if self._should_hold_for_stable_identity(device):
+            return
+
         override_key = self._make_override_key_for_device(device)
         existing_seen = self._last_seen_overrides.get(override_key)
         if not existing_seen:
@@ -144,8 +165,9 @@ class DiscoveryManager:
             self._arrival_sequence += 1
             existing_arrival = self._arrival_sequence
         device.metadata["_arrival_index"] = existing_arrival
-        self._supplement_missing_mdns_user_location(device, existing)
+        self._supplement_missing_user_location(device, existing)
         self._devices[existing_key] = device
+        self._run_location_reapply_sweep()
         device_log = self._device_event_logger(device.source)
         device_log.info(
             "Device %s: source=%s name=%s ip=%s port=%s type=%s category=%s online=%s",
@@ -179,6 +201,52 @@ class DiscoveryManager:
         )
         self._emit_presence_hooks_if_transition(device, prev_online, device.online)
         self._notify()
+
+    def _stable_identity_available(self, device: Device) -> bool:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        return bool(self._extract_uid(metadata) or self._extract_mac(metadata))
+
+    def _pending_identity_key(self, device: Device) -> str:
+        return f"{(device.source or '').strip().lower()}:{str(device.ip).strip()}:{int(device.port)}"
+
+    def _should_hold_for_stable_identity(self, device: Device) -> bool:
+        """Delay first appearance briefly until UID/MAC shows up, then release."""
+        if device.source not in {"mdns", "ssdp"} or not bool(device.online):
+            return False
+        if self._stable_identity_available(device):
+            pending_key = self._pending_identity_key(device)
+            if pending_key in self._identity_pending:
+                self._identity_pending.pop(pending_key, None)
+                self._device_event_logger(device.source).debug(
+                    "identity_resolved ip=%s port=%s source=%s",
+                    device.ip,
+                    device.port,
+                    device.source,
+                )
+            return False
+
+        now = datetime.now(timezone.utc)
+        pending_key = self._pending_identity_key(device)
+        first_seen, _prev = self._identity_pending.get(pending_key, (now, device))
+        self._identity_pending[pending_key] = (first_seen, device)
+        if now - first_seen < timedelta(seconds=_IDENTITY_HOLD_SECONDS):
+            self._device_event_logger(device.source).debug(
+                "identity_pending ip=%s port=%s source=%s held_for_ms=%s",
+                device.ip,
+                device.port,
+                device.source,
+                int((now - first_seen).total_seconds() * 1000),
+            )
+            return True
+        self._device_event_logger(device.source).debug(
+            "identity_pending_timeout ip=%s port=%s source=%s hold_s=%s",
+            device.ip,
+            device.port,
+            device.source,
+            _IDENTITY_HOLD_SECONDS,
+        )
+        self._identity_pending.pop(pending_key, None)
+        return False
 
     def _emit_presence_hooks_if_transition(self, device: Device, prev_online: bool | None, now_online: bool) -> None:
         # Skip first-seen already-offline rows (monitoring placeholders, etc.).
@@ -244,6 +312,8 @@ class DiscoveryManager:
             after = after_raw if isinstance(after_raw, str) else ""
             if before != after:
                 changed = True
+        if self._run_location_reapply_sweep():
+            changed = True
         if changed:
             self._notify()
 
@@ -594,36 +664,98 @@ class DiscoveryManager:
             return
         device.name = override_name
 
+    def _clip_loc_log(self, value: str) -> str:
+        return value if len(value) <= 120 else value[:117] + "..."
+
+    def _store_location_preference_for_device(self, device: Device, location: str) -> bool:
+        """Write identity-based location prefs (same key rules as set_device_location_override)."""
+        loc = str(location).strip()
+        if not loc or not is_plausible_room_location(loc):
+            return False
+        preferred_key = self._make_name_override_key_for_device(device)
+        legacy_key = self._make_legacy_identity_key_for_device(device)
+        endpoint_key = self._make_override_key(device.source, device.ip, device.port)
+        if self._location_overrides.get(preferred_key) == loc:
+            return False
+        if legacy_key:
+            self._location_overrides.pop(legacy_key, None)
+        self._location_overrides.pop(endpoint_key, None)
+        self._location_overrides[preferred_key] = loc
+        self._location_prefs_need_reapply = True
+        return True
+
+    def _consume_location_prefs_need_reapply(self) -> bool:
+        if not self._location_prefs_need_reapply:
+            return False
+        self._location_prefs_need_reapply = False
+        return True
+
+    def _run_location_reapply_sweep(self) -> bool:
+        """Re-apply location rules to all cached devices after prefs mutation; persist if needed."""
+        any_round = False
+        rounds = 0
+        while self._consume_location_prefs_need_reapply() and rounds < 8:
+            rounds += 1
+            any_round = True
+            for existing in list(self._devices.values()):
+                self._apply_location_override(existing)
+        if any_round and self._location_prefs_dirty_callback is not None:
+            try:
+                self._location_prefs_dirty_callback()
+            except Exception:
+                self._logger.exception("location_prefs_dirty_callback failed")
+        return any_round
+
     def _apply_location_override(self, device: Device) -> None:
         if not isinstance(device.metadata, dict):
             device.metadata = {}
         dev_log = self._device_event_logger(device.source)
-        location = self._find_location_override_value(device)
-        if location:
-            device.metadata["user_location"] = location
-            dev_log.debug(
-                "Location: prefs override ip=%s port=%s value=%r",
-                device.ip,
-                device.port,
-                location if len(location) <= 120 else location[:117] + "...",
-            )
-        else:
-            auto_location = self._default_location_for_device(device)
-            if auto_location:
-                device.metadata["user_location"] = auto_location
+        cached_raw = self._find_location_override_value(device)
+        discovered_raw = self._default_location_for_device(device)
+        c_norm = cached_raw.strip() if isinstance(cached_raw, str) and cached_raw.strip() else ""
+        d_norm = discovered_raw.strip() if isinstance(discovered_raw, str) and discovered_raw.strip() else ""
+
+        chosen = ""
+
+        if c_norm:
+            if d_norm and d_norm != c_norm and is_plausible_room_location(d_norm):
+                self._store_location_preference_for_device(device, d_norm)
+                chosen = d_norm
                 dev_log.debug(
-                    "Location: auto from metadata ip=%s port=%s value=%r",
+                    "Location: discovery overrides cache ip=%s port=%s old=%r new=%r",
                     device.ip,
                     device.port,
-                    auto_location if len(auto_location) <= 120 else auto_location[:117] + "...",
+                    self._clip_loc_log(c_norm),
+                    self._clip_loc_log(d_norm),
                 )
             else:
-                device.metadata.pop("user_location", None)
+                chosen = c_norm
                 dev_log.debug(
-                    "Location: empty ip=%s port=%s (no RoomName/xml_fields or TXT keys matched)",
+                    "Location: prefs cache ip=%s port=%s value=%r",
                     device.ip,
                     device.port,
+                    self._clip_loc_log(chosen),
                 )
+        elif d_norm and is_plausible_room_location(d_norm):
+            self._store_location_preference_for_device(device, d_norm)
+            chosen = d_norm
+            dev_log.debug(
+                "Location: auto from discovery (persisted) ip=%s port=%s value=%r",
+                device.ip,
+                device.port,
+                self._clip_loc_log(chosen),
+            )
+        else:
+            dev_log.debug(
+                "Location: empty ip=%s port=%s (no RoomName/xml_fields or TXT keys matched)",
+                device.ip,
+                device.port,
+            )
+
+        if chosen:
+            device.metadata["user_location"] = chosen
+        else:
+            device.metadata.pop("user_location", None)
 
     def _apply_monitored_override(self, device: Device) -> None:
         override_value = self._find_override_value(self._monitored_overrides, device)
@@ -727,9 +859,9 @@ class DiscoveryManager:
         widest = max(matches, key=lambda k: int(k.rsplit(":", 1)[-1]))
         return store.get(widest)
 
-    def _supplement_missing_mdns_user_location(self, device: Device, prior_row: Device | None) -> None:
-        """Stabilise lieu quand métadonnées mDNS/flap de port vide `user_location` après overrides."""
-        if device.source != "mdns":
+    def _supplement_missing_user_location(self, device: Device, prior_row: Device | None) -> None:
+        """Stabilise location when fresh payload lacks room info but cache already had one."""
+        if device.source not in {"mdns", "ssdp"}:
             return
         if not isinstance(device.metadata, dict):
             device.metadata = {}
@@ -739,19 +871,43 @@ class DiscoveryManager:
         sip = str(device.ip).strip()
         if not sip or sip == "0.0.0.0":
             return
-        if prior_row is not None and prior_row.source == "mdns" and prior_row.key == device.key:
+        if prior_row is not None and prior_row.source == device.source and prior_row.key == device.key:
             dm = prior_row.metadata if isinstance(prior_row.metadata, dict) else {}
             preserved = dm.get("user_location")
             if isinstance(preserved, str) and preserved.strip():
                 ps = preserved.strip()
                 if is_plausible_room_location(ps):
                     device.metadata["user_location"] = ps
-                    self._mdns_logger.debug(
-                        "Location: mDNS carry-over from prior row ip=%s value=%r",
+                    self._device_event_logger(device.source).debug(
+                        "Location: %s carry-over from prior row ip=%s value=%r",
+                        device.source,
                         sip,
                         ps if len(ps) <= 120 else ps[:117] + "...",
                     )
                     return
+        if device.source == "ssdp":
+            for row in self._devices.values():
+                if row is prior_row:
+                    continue
+                if row.source != "ssdp" or row.key == device.key:
+                    continue
+                if str(row.ip).strip() != sip:
+                    continue
+                dm = row.metadata if isinstance(row.metadata, dict) else {}
+                borrowed = dm.get("user_location")
+                if isinstance(borrowed, str) and borrowed.strip():
+                    bs = borrowed.strip()
+                    if not is_plausible_room_location(bs):
+                        continue
+                    device.metadata["user_location"] = bs
+                    self._ssdp_logger.debug(
+                        "Location: SSDP borrowed same-ip ip=%s from key=%s value=%r",
+                        sip,
+                        row.key,
+                        bs if len(bs) <= 120 else bs[:117] + "...",
+                    )
+                    return
+            return
         for row in self._devices.values():
             if row is prior_row:
                 continue

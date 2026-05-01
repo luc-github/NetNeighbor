@@ -11,6 +11,7 @@ from gi.repository import Gdk, GLib, Gtk
 from discovery.manager import DiscoveryManager
 from ui.device_list import DeviceList
 from model.device import Device
+from utils.app_version import get_app_version
 from utils.location_label import is_plausible_room_location
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 from utils.notifications import send_notification
@@ -159,6 +160,7 @@ class MainWindow(Gtk.ApplicationWindow):
         # DeviceList will call this when user chooses Monitor/Unfollow.
         self._content.add2(self._device_list)
 
+        self._manager.set_location_prefs_dirty_callback(self._persist_ui_preferences)
         self._apply_ui_preferences()
 
         self._manager.add_listener(self._on_devices_updated)
@@ -380,7 +382,7 @@ class MainWindow(Gtk.ApplicationWindow):
             close_button.grab_focus()
             dialog.set_focus(close_button)
         dialog.set_program_name("NetNeighbor")
-        dialog.set_version("0.1.0-dev")
+        dialog.set_version(get_app_version())
         dialog.set_authors(["Luc"])
         dialog.set_comments(_("Linux network neighborhood for SSDP/mDNS discovery."))
         dialog.add_credit_section(

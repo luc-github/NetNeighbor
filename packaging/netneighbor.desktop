@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=@APP_VERSION@
+Name=NetNeighbor
+Comment=Linux network neighborhood for SSDP/mDNS discovery
+Exec=netneighbor
+Icon=io.esp3d.netneighbor
+Terminal=false
+Categories=Network;Utility;GTK;
+StartupNotify=true
