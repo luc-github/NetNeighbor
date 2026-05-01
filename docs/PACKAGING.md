@@ -23,21 +23,49 @@ From repository root:
 
 ```bash
 chmod +x packaging/build_deb.sh packaging/build_tarball.sh packaging/netneighbor
-./packaging/build_deb.sh 0.6.0
-./packaging/build_tarball.sh 0.6.0
+./packaging/build_deb.sh
+./packaging/build_tarball.sh
+```
+
+Both scripts default to the repository root `VERSION` file (first non-empty line).  
+You can still override explicitly, e.g. `./packaging/build_deb.sh 0.7.0`.
+
+## One-command release helper
+
+Use `packaging/release.sh` to run build + checks in one go:
+
+```bash
+./packaging/release.sh
+```
+
+What it does:
+
+- Python syntax sanity checks (`app.py`, `ui/main_window.py`, `discovery/manager.py`, `utils/app_version.py`)
+- Bash syntax checks for packaging scripts
+- Build `.deb` and `tar.gz`
+- Verify `.deb` metadata (`Version`, `Installed-Size`)
+- Verify embedded runtime `VERSION` and desktop entry `Version=...`
+- Generate checksums file: `dist/SHA256SUMS-<version>.txt`
+
+Optional arguments:
+
+```bash
+./packaging/release.sh <version> [architecture]
 ```
 
 Outputs:
 
-- `dist/netneighbor_0.6.0_<arch>.deb`
-- `dist/netneighbor-0.6.0.tar.gz`
+- `dist/netneighbor_<version>_<arch>.deb`
+- `dist/netneighbor-<version>.tar.gz`
 
 ## `.deb` package layout
 
 - App files: `/usr/share/netneighbor/`
 - Launcher: `/usr/bin/netneighbor`
 - Desktop entry: `/usr/share/applications/netneighbor.desktop`
-- Icon: `/usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png`
+- Icons:
+  - `/usr/share/icons/hicolor/64x64/apps/io.esp3d.netneighbor.png`
+  - `/usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png`
 
 The `.deb` embeds runtime-relevant tracked paths only (`discovery/`, `ui/`, `utils/`, `model/`, `data/`, `config/`, `assets/`, `locale/`, plus entrypoint/docs files listed in `packaging/build_deb.sh`).
 
@@ -60,7 +88,7 @@ Categories=Network;Utility;GTK;
 ## Install / uninstall (`.deb`)
 
 ```bash
-sudo apt install ./dist/netneighbor_0.6.0_amd64.deb
+sudo apt install ./dist/netneighbor_<version>_amd64.deb
 netneighbor
 sudo apt remove netneighbor
 ```
@@ -77,8 +105,8 @@ Notes:
 ## `tar.gz` usage
 
 ```bash
-tar -xzf dist/netneighbor-0.6.0.tar.gz
-cd netneighbor-0.6.0
+tar -xzf dist/netneighbor-<version>.tar.gz
+cd netneighbor-<version>
 ./run.sh
 ```
 

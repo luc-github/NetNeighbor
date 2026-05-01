@@ -18,6 +18,10 @@ This file tracks **implementation** progress. Product vision and constraints liv
 - **Remote icon persistence**: SSDP/mDNS device icon URLs normalized and cached under `~/.cache/netneighbor/remote_icons/` (raw **`.payload`** per SHA-256 of a **canonical URL**; optional legacy **`.png`**). **Canonicalization** omits default HTTP/HTTPS ports and probes **legacy `:80` / `:443`** variants so older on-disk digests still match. A **host-level RAM cache** and **`~/.cache/netneighbor/remote_icon_index.json`** map **LAN IP → `{canonical_url, payload_sha256, updated_at}`** so the correct **`.payload`** loads immediately at startup even when the representative mDNS port or advertised URL string drifts; **`remote_icon_bindings.json`** is migrated once if present. UI tries **all** icon URLs from merged service TXT before falling back to bundled / GTK icons.
 - **Discovery / UI debugging (optional)**: `logging.json` keys **`mdns`** / **`ssdp`** at **DEBUG** surface manager lines for **location** resolution and **device appearance** (type, icon, `user_location`); **`app`** at **DEBUG** includes **`ui.device_list`** lines for bundled vs remote icon paths and GTK fallbacks.
 - **`DiscoveryManager.register_presence_transition_hook`** (internal extension point): optional callbacks when a cached device transitions **online** or **offline** (no hooks registered by core UI yet). Intended for future plugins / scripting; callers may run off the GTK thread.
+- **Location stability hardening**: location cache is now preferred and persisted automatically; discovery updates can promote a new plausible room value and trigger cache reapply/persist, reducing `No location` flicker during metadata races.
+- **Identity gating (early discovery)**: first-seen SSDP/mDNS rows without stable identity (`UID`/MAC) are briefly held (~3s) before UI publication; immediate release occurs once identity resolves.
+- **Release/version unification**: single root `VERSION` file is now consumed by About dialog, build scripts, and desktop entry templating; release artifacts embed `VERSION` explicitly.
+- **Packaging quality updates**: `.deb` now sets `Installed-Size`; launcher icon install matches hicolor size buckets (64 + 256); manual user-data cleanup helper script added for optional full local wipe.
 
 ## In progress / next
 
@@ -30,7 +34,7 @@ This file tracks **implementation** progress. Product vision and constraints liv
    - **Deferred variants:** optional tray/minimize-to-background later; heavier split (system service + UI) or file-manager integration only if needs clearly justify the maintenance cost.
 
 3. **Packaging and release**  
-   - AppImage / `.deb`, dependency checks, user-facing troubleshooting (see brief).
+   - AppImage track + optional lint/signing/checksum automation around current `.deb`/`tar.gz` flow (see brief).
 
 4. **Optional UX**  
    - Search / filter bar, copy IP, IPv6 (out of current MVP per brief but listed as future).
