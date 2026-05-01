@@ -6,8 +6,11 @@ import json
 import logging
 from pathlib import Path
 import socket
+import threading
 
 from discovery.base import BaseDiscovery
+from utils.mdns_rules import cached_mdns_rules, evaluate_type_rules
+from utils.user_config_overlay import USER_DEVICE_TYPES_JSON, merge_device_types_trees, optional_user_json
 
 try:
     from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
@@ -15,6 +18,19 @@ except Exception:  # pragma: no cover - dependency/runtime availability
     ServiceBrowser = None
     ServiceListener = object
     Zeroconf = None
+
+try:
+    from zeroconf import ZeroconfServiceTypes
+except Exception:  # pragma: no cover - older zeroconf builds
+    ZeroconfServiceTypes = None
+
+try:
+    from gi.repository import GLib
+except Exception:  # pragma: no cover
+    GLib = None
+
+_ENUMERATION_TIMEOUT_S = 8.0
+_ENUMERATION_REFRESH_INTERVAL_S = 240
 
 
 _TYPE_MAP_PATH = Path(__file__).resolve().parent.parent / "data" / "device_types.json"
@@ -38,14 +54,18 @@ class MDNSDiscovery(BaseDiscovery):
     def __init__(self) -> None:
         super().__init__(source="mdns")
         self._logger = logging.getLogger(__name__)
+        self._mdns_rules = cached_mdns_rules()
         self._running = False
         self._zeroconf = None
         self._browsers: list[ServiceBrowser] = []
+        self._browsers_started: set[str] = set()
         self._listener = _MDNSListener(self)
         self._seen_by_service: dict[tuple[str, str], dict] = {}
         self._service_host_keys: dict[tuple[str, str], str] = {}
         self._host_last_endpoint: dict[str, tuple[str, int]] = {}
         self._type_map = self._load_mdns_type_map()
+        self._enumeration_timer_id: int | None = None
+        self._enumeration_busy = False
 
     def start(self) -> None:
         if self._running:
@@ -61,13 +81,11 @@ class MDNSDiscovery(BaseDiscovery):
             self._running = False
             return
 
-        for service_type in self._service_types_to_browse():
-            try:
-                browser = ServiceBrowser(self._zeroconf, service_type, self._listener)
-                self._browsers.append(browser)
-                self._logger.debug("mDNS browser started for %s", service_type)
-            except Exception:
-                self._logger.exception("Failed to start mDNS browser for %s", service_type)
+        self._browsers_started.clear()
+        for service_type in self._service_types_to_browse_from_config():
+            self._ensure_browser(service_type)
+        self._kick_service_type_enumeration()
+        self._schedule_enumeration_timer()
         if not self._browsers:
             self._logger.warning("No mDNS service browser started")
 
@@ -75,9 +93,17 @@ class MDNSDiscovery(BaseDiscovery):
         if not self._running:
             return
         self._running = False
+        self._enumeration_busy = False
+        if GLib is not None and self._enumeration_timer_id is not None:
+            try:
+                GLib.source_remove(self._enumeration_timer_id)
+            except Exception:
+                pass
+            self._enumeration_timer_id = None
         self._seen_by_service.clear()
         self._host_last_endpoint.clear()
         self._browsers.clear()
+        self._browsers_started.clear()
         zc = self._zeroconf
         self._zeroconf = None
         if zc is not None:
@@ -91,12 +117,98 @@ class MDNSDiscovery(BaseDiscovery):
         if not self._running:
             return
         self._logger.debug("mDNS refresh requested (passive browse)")
+        self._kick_service_type_enumeration()
 
-    def _service_types_to_browse(self) -> list[str]:
+    def _service_types_to_browse_from_config(self) -> list[str]:
         known_types = sorted(self._type_map.keys()) if self._type_map else []
         if not known_types:
             known_types = ["_http._tcp"]
         return [self._normalize_service_type(service) for service in known_types]
+
+    def _ensure_browser(self, service_type: str) -> None:
+        if not self._running or self._zeroconf is None or ServiceBrowser is None:
+            return
+        normalized = self._normalize_service_type(service_type)
+        if normalized in self._browsers_started:
+            return
+        try:
+            browser = ServiceBrowser(self._zeroconf, normalized, self._listener)
+            self._browsers.append(browser)
+            self._browsers_started.add(normalized)
+            self._logger.debug("mDNS browser started for %s", normalized)
+        except Exception:
+            self._logger.exception("Failed to start mDNS browser for %s", normalized)
+
+    def _enqueue_browsers_for_types(self, service_types: list[str]) -> None:
+        """Register browsers on the GTK main thread (callbacks must stay GUI-safe)."""
+
+        def apply_pending() -> bool:
+            if not self._running or self._zeroconf is None:
+                return False
+            for service_type in service_types:
+                self._ensure_browser(service_type)
+            return False
+
+        if GLib is not None:
+            GLib.idle_add(apply_pending)
+        else:
+            self._logger.warning("GLib not available; starting enumerated mDNS browsers inline (thread may be unsafe)")
+            apply_pending()
+
+    def _kick_service_type_enumeration(self) -> None:
+        """DNS-SD: discover which service types are advertised on the LAN (beyond config file)."""
+
+        if ZeroconfServiceTypes is None or not self._running:
+            return
+        if self._enumeration_busy:
+            self._logger.debug("mDNS enumeration skipped (already in progress)")
+            return
+
+        self._enumeration_busy = True
+
+        def worker() -> None:
+            try:
+                try:
+                    found = ZeroconfServiceTypes.find(zc=None, timeout=_ENUMERATION_TIMEOUT_S)
+                except Exception:
+                    self._logger.exception("mDNS service type enumeration failed")
+                    return
+
+                additions: list[str] = []
+                seen: set[str] = set()
+                for raw in found:
+                    if not isinstance(raw, str) or not raw.strip():
+                        continue
+                    normalized = self._normalize_service_type(raw)
+                    if normalized in seen:
+                        continue
+                    meta = "_services._dns-sd._udp" in normalized
+                    # Avoid browsing the enumerator itself as a generic service catalogue.
+                    if meta:
+                        continue
+                    seen.add(normalized)
+                    additions.append(normalized)
+
+                self._enqueue_browsers_for_types(additions)
+                self._logger.info("mDNS enumeration found %d service type(s)", len(additions))
+            finally:
+                self._enumeration_busy = False
+
+        threading.Thread(target=worker, name="NetNeighbor-mdns-enumerate", daemon=True).start()
+
+    def _schedule_enumeration_timer(self) -> None:
+        if GLib is None:
+            return
+
+        def on_timer() -> bool:
+            if not self._running or self._zeroconf is None:
+                self._enumeration_timer_id = None
+                return False
+            self._kick_service_type_enumeration()
+            return True
+
+        if self._enumeration_timer_id is None:
+            self._enumeration_timer_id = GLib.timeout_add_seconds(_ENUMERATION_REFRESH_INTERVAL_S, on_timer)
 
     def _normalize_service_type(self, service: str) -> str:
         value = (service or "").strip().lower()
@@ -111,6 +223,11 @@ class MDNSDiscovery(BaseDiscovery):
     def _load_mdns_type_map(self) -> dict[str, dict]:
         try:
             parsed = json.loads(_TYPE_MAP_PATH.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                overlay = optional_user_json(USER_DEVICE_TYPES_JSON)
+                if overlay is not None:
+                    parsed = merge_device_types_trees(parsed, overlay)
+                    self._logger.info("Merged device_types.json with user overlay %s", USER_DEVICE_TYPES_JSON)
             mdns_map = parsed.get("mdns") if isinstance(parsed, dict) else {}
             if isinstance(mdns_map, dict):
                 normalized: dict[str, dict] = {}
@@ -178,7 +295,8 @@ class MDNSDiscovery(BaseDiscovery):
         server = getattr(info, "server", "")
         priority = int(getattr(info, "priority", 0) or 0)
         weight = int(getattr(info, "weight", 0) or 0)
-        txt = self._decode_properties(getattr(info, "properties", {}))
+        txt, txt_records = self._txt_from_service_info(info)
+        instance_label = name.split("._", 1)[0].strip() if name else ""
 
         display_name = self._infer_display_name(name, txt)
         type_name = str(mapping.get("type", "unknown")).strip().lower() or "unknown"
@@ -205,6 +323,9 @@ class MDNSDiscovery(BaseDiscovery):
                     "port": port,
                     "hostname": hostname,
                     "server": server,
+                    "instance": instance_label,
+                    "txt": txt,
+                    "txt_records": txt_records,
                 }
             ],
             "txt": txt,
@@ -258,9 +379,16 @@ class MDNSDiscovery(BaseDiscovery):
             return "esp32"
         if "_smb._tcp" in service_key:
             return "computer"
-        if "_printer._tcp" in service_key or "_ipp._tcp" in service_key:
+        if "_printer._tcp" in service_key or "_ipp._tcp" in service_key or "_ipps._tcp" in service_key:
             return "networkprinter"
-        if "_http._tcp" in service_key:
+        if "_airplay._tcp" in service_key or "_raop._tcp" in service_key or "_companion-link._tcp" in service_key:
+            return "smartspeaker"
+        if "_ftp._tcp" in service_key or "_afpovertcp._tcp" in service_key or "_webdav._tcp" in service_key:
+            # NAS heuristic refines Synology/QNAP in TXT / name.
+            return "computer"
+        if "_scanner" in service_key or "_uscan" in service_key or "_uscans." in service_key:
+            return "scanner"
+        if "_http._tcp" in service_key or "_https._tcp" in service_key:
             return "http"
         return "unknown"
 
@@ -286,7 +414,7 @@ class MDNSDiscovery(BaseDiscovery):
             return "networkprinter"
         if "synology" in haystack or "qnap" in haystack or " nas " in f" {haystack} ":
             return "nas"
-        return base
+        return evaluate_type_rules(haystack, base, self._mdns_rules)
 
     def _infer_display_name(self, service_instance: str, txt: dict[str, str]) -> str:
         for key in ("name", "friendlyname", "friendly_name", "device", "model"):
@@ -323,6 +451,54 @@ class MDNSDiscovery(BaseDiscovery):
             if value not in unique:
                 unique.append(value)
         return unique
+
+    def _unpack_txt_bytes(self, text: bytes) -> list[tuple[str, str]]:
+        """Parse concatenated RFC 6763 TXT blobs; preserves order and duplicate keys.
+
+        zeroconf's internal unpack keeps only the first occurrence per key — some devices expose
+        multiple strings or duplicated keys across the TXT compound.
+        """
+        if not text:
+            return []
+        pairs: list[tuple[str, str]] = []
+        index = 0
+        end = len(text)
+        while index < end:
+            length = text[index]
+            index += 1
+            if length == 0:
+                continue
+            segment = text[index : index + length]
+            index += length
+            split = segment.split(b"=", 1)
+            key = self._to_text(split[0]).strip()
+            if not key and len(split) < 2:
+                continue
+            value = self._to_text(split[1]).strip() if len(split) > 1 else ""
+            pairs.append((key, value))
+        return pairs
+
+    def _txt_from_service_info(self, info) -> tuple[dict[str, str], list[tuple[str, str]]]:
+        """TXT as dict (last wins duplicate keys for heuristics) + ordered record list."""
+
+        pairs: list[tuple[str, str]] = []
+        raw_text = getattr(info, "text", None)
+        if isinstance(raw_text, (bytes, bytearray)) and len(raw_text) > 0:
+            pairs = self._unpack_txt_bytes(bytes(raw_text))
+        if not pairs:
+            props = getattr(info, "properties", None)
+            if isinstance(props, dict):
+                for raw_key, raw_value in props.items():
+                    key = self._to_text(raw_key).strip()
+                    if not key:
+                        continue
+                    val = "" if raw_value is None else self._to_text(raw_value).strip()
+                    pairs.append((key, val))
+        merged: dict[str, str] = {}
+        for key, val in pairs:
+            if key:
+                merged[key] = val
+        return merged, pairs
 
     def _decode_properties(self, props) -> dict[str, str]:
         if not isinstance(props, dict):
@@ -382,17 +558,23 @@ class MDNSDiscovery(BaseDiscovery):
         representative = sorted(entries, key=_score)[0]
         rep_metadata = representative.get("metadata") if isinstance(representative.get("metadata"), dict) else {}
         merged_services: list[dict] = []
+        combined_txt: dict[str, str] = {}
         for entry in entries:
             metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
-            services = metadata.get("services") if isinstance(metadata.get("services"), list) else []
-            for service in services:
+            entry_txt = metadata.get("txt")
+            if isinstance(entry_txt, dict):
+                combined_txt.update(entry_txt)
+            services_list = metadata.get("services") if isinstance(metadata.get("services"), list) else []
+            for service in services_list:
                 if not isinstance(service, dict):
                     continue
                 normalized_service = str(service.get("service", "")).strip()
                 normalized_port = int(service.get("port", 0) or 0)
+                inst_norm = str(service.get("instance", "")).strip()
                 duplicate = any(
                     str(existing.get("service", "")).strip() == normalized_service
                     and int(existing.get("port", 0) or 0) == normalized_port
+                    and str(existing.get("instance", "")).strip() == inst_norm
                     for existing in merged_services
                 )
                 if not duplicate:
@@ -414,6 +596,8 @@ class MDNSDiscovery(BaseDiscovery):
 
         merged_metadata = dict(rep_metadata)
         merged_metadata["services"] = merged_services
+        if combined_txt:
+            merged_metadata["txt"] = combined_txt
 
         return {
             "name": representative.get("name", "mDNS Device"),
@@ -441,6 +625,7 @@ class MDNSDiscovery(BaseDiscovery):
         return {
             "router": "Routers & Gateways",
             "mediaserver": "Media Servers",
+            "scanner": "Printers",
             "printer": "Printers",
             "networkprinter": "Printers",
             "smartspeaker": "Smart Speakers",
@@ -461,6 +646,7 @@ class MDNSDiscovery(BaseDiscovery):
         return {
             "router": "router.png",
             "mediaserver": "mediaserver.png",
+            "scanner": "printer.png",
             "printer": "printer.png",
             "networkprinter": "printer.png",
             "smartspeaker": "smartspeaker.png",

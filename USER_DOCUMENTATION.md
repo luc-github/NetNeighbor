@@ -18,7 +18,7 @@ Current behavior:
 - device list and icon view
 - categories in the sidebar
 - optional desktop notifications for status changes
-- right-click actions on devices (open, details, monitor, type override, icon source)
+- right-click actions on devices (open, details, monitor, type override, rename, location, icon appearance)
 
 Important scope note:
 
@@ -77,6 +77,5 @@ If a device appears/disappears:
 
 ## Current limits
 
-- mDNS section is not included yet in this user doc
-- protocol coverage is SSDP-first in the current milestone
+- this user doc remains SSDP-focused for now (mDNS behavior exists in app but is not yet documented here)
 - packaging/distribution mode is still under decision

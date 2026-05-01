@@ -10,9 +10,10 @@ without changing Python code.
 The app loads this file at SSDP discovery startup. If the file is missing or invalid,
 built-in defaults are used and a log message is emitted.
 
-**Location in repo:** `config/ssdp_rules.json` (shipped with the project).  
-Users may eventually override via a path in preferences; until then, editing the repo file
-is the supported customization for developers and packagers.
+**Location in repo:** `config/ssdp_rules.json` (shipped with the project).
+
+**Optional user overlay:** `~/.config/netneighbor/ssdp_rules.json` — merged automatically
+(details in [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md)); no need to edit the install tree.
 
 ## Relationship to code
 

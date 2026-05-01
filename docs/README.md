@@ -12,8 +12,11 @@ documentation remains in the repository root [`README.md`](../README.md).
 | [`SSDP_INTEGRATION.md`](SSDP_INTEGRATION.md) | SSDP protocol basics and how this app listens, parses, times out, and maps to `Device`. |
 | [`MDNS_INTEGRATION.md`](MDNS_INTEGRATION.md) | mDNS browse/aggregation model, service mapping, URL rules, and lifecycle behavior. |
 | [`SSDP_RULES_JSON.md`](SSDP_RULES_JSON.md) | `config/ssdp_rules.json`: purpose, schema, how to extend classification and naming. |
+| [`MDNS_RULES_JSON.md`](MDNS_RULES_JSON.md) | `config/mdns_rules.json`: TXT→summary mappings and optional mDNS type rules. |
+| [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) | User overlays in `~/.config/netneighbor/` merging with bundled `device_types` and rules JSON. |
 | [`UI_ARCHITECTURE.md`](UI_ARCHITECTURE.md) | GTK layer: main window, device list, threading, preferences, notifications history. |
 | [`MAINTENANCE.md`](MAINTENANCE.md) | Ongoing care: logging, config paths, debugging discovery, suggested future docs. |
+| [`I18N.md`](I18N.md) | How to add/update translations (`.po`/`.mo`), merge catalogs, and test locales. |
 | [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md) | Icon assets and `device_types.json` contributions (existing). |
 
 ## Quick orientation

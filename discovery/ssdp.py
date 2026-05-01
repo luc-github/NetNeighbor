@@ -15,6 +15,7 @@ from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
 from discovery.base import BaseDiscovery
+from utils.user_config_overlay import merge_ssdp_rules_overlays
 
 _SSDP_ADDR = ("239.255.255.250", 1900)
 _DEFAULT_TIMEOUT_SECONDS = 180
@@ -615,17 +616,17 @@ class SSDPDiscovery(BaseDiscovery):
         }
         try:
             if not _RULES_PATH.exists():
-                return default_rules
+                return merge_ssdp_rules_overlays(default_rules)
             parsed = json.loads(_RULES_PATH.read_text(encoding="utf-8"))
             if not isinstance(parsed, dict):
-                return default_rules
+                return merge_ssdp_rules_overlays(default_rules)
             merged = dict(default_rules)
             merged.update(parsed)
             self._logger.info("Loaded SSDP rules from %s", _RULES_PATH)
-            return merged
+            return merge_ssdp_rules_overlays(merged)
         except (OSError, json.JSONDecodeError):
             self._logger.exception("Failed to load SSDP rules, using defaults")
-            return default_rules
+            return merge_ssdp_rules_overlays(default_rules)
 
     def _apply_name_rules(self, xml_fields: dict[str, str]) -> str:
         rules = self._rules.get("name_rules", {})

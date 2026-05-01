@@ -63,6 +63,9 @@ Run app in French for testing:
 LANG=fr_FR.UTF-8 python main.py
 ```
 
+Full translation workflow (new language, POT merge/update, runtime checks):
+[`docs/I18N.md`](docs/I18N.md).
+
 Only one NetNeighbor instance is allowed at a time on Linux to avoid discovery conflicts.
 A second launch asks the first instance to bring its window to the foreground.
 

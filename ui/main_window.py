@@ -457,8 +457,8 @@ class MainWindow(Gtk.ApplicationWindow):
     def _update_ui_devices(self, devices) -> bool:
         self._notify_device_transitions(devices)
         self._merge_sonos_location_suggestions(devices)
-        self._rebuild_sidebar(devices)
         self._device_list.set_devices(devices)
+        self._rebuild_sidebar(devices)
         return False
 
     def _merge_sonos_location_suggestions(self, devices: list[Device]) -> None:
@@ -571,15 +571,18 @@ class MainWindow(Gtk.ApplicationWindow):
         sidebar_mode = self._sidebar_group_mode()
         counts: dict[str, int] = {}
         bundle_filter_keys: dict[str, str] = {}
-        for device in devices:
+        # Count merged host bundles, not raw Device rows — otherwise SSDP+mDNS pairs
+        # inflate category totals (e.g. "Unknown" shows more than visible tiles).
+        bundles = self._device_list.build_bundles(devices) if devices else []
+        for bundle in bundles:
             if sidebar_mode == "location":
-                location = self._device_location_label(device)
+                location = self._device_list.bundle_location_label(bundle)
                 counts[location] = counts.get(location, 0) + 1
                 bundle_filter_keys[location] = "location:__none__" if location == _("No location") else f"location:{location}"
             else:
-                counts[device.category] = counts.get(device.category, 0) + 1
-                bundle_filter_keys[device.category] = device.category
-        signature = (sidebar_mode, len(devices), tuple(sorted(counts.items())))
+                counts[bundle.category] = counts.get(bundle.category, 0) + 1
+                bundle_filter_keys[bundle.category] = bundle.category
+        signature = (sidebar_mode, len(bundles), tuple(sorted(counts.items())))
         if signature == self._sidebar_signature:
             return
         self._sidebar_signature = signature
@@ -591,7 +594,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._category_rows.clear()
 
         all_text = _("All Locations") if sidebar_mode == "location" else _("All Types")
-        all_label = f"{all_text} ({len(devices)})"
+        all_label = f"{all_text} ({len(bundles)})"
         self._add_sidebar_row(all_label, None)
         for key in sorted(counts.keys(), key=str.lower):
             if sidebar_mode == "location" and key == _("No location"):
@@ -623,13 +626,6 @@ class MainWindow(Gtk.ApplicationWindow):
         if self._device_list.view_mode == "icons" and self._device_list.icon_sort_mode == "location":
             return "location"
         return "category"
-
-    def _device_location_label(self, device: Device) -> str:
-        metadata = device.metadata if isinstance(device.metadata, dict) else {}
-        value = metadata.get("user_location")
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-        return _("No location")
 
     def _on_sidebar_row_selected(self, _listbox: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
         if self._is_updating_sidebar or row is None:

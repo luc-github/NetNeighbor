@@ -21,9 +21,9 @@ keeping the project healthy between releases.
 
 ## Common tasks
 
-- **Rules tuning**: edit `config/ssdp_rules.json` — see [`SSDP_RULES_JSON.md`](SSDP_RULES_JSON.md).
-- **Icons / types**: `data/device_types.json` and [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md).
-- **Translations**: `locale/*/LC_MESSAGES/netneighbor.po`, compile with `msgfmt`.
+- **Rules tuning**: shipped `config/ssdp_rules.json` / `config/mdns_rules.json`; user overlays in **`~/.config/netneighbor/`** — [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md).
+- **Icons / types**: `data/device_types.json` and [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md); optional user merge from `~/.config/netneighbor/device_types.json` ([`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md)).
+- **Translations**: `locale/*/LC_MESSAGES/netneighbor.po`, compile with `msgfmt`; see [`I18N.md`](I18N.md) for full workflow.
 
 ## Debugging discovery issues
 

@@ -79,7 +79,8 @@ netneighbor/
 ├── assets/icons/            # Bundled PNG/SVG
 ├── data/device_types.json   # Optional mapping (icons / labels)
 ├── config/
-│   └── ssdp_rules.json      # Heuristic name / type / information rules (shipped)
+│   ├── ssdp_rules.json      # Heuristic SSDP name / type / information rules (shipped)
+│   └── mdns_rules.json      # Heuristic mDNS TXT summary + optional type_rules (shipped)
 ├── utils/
 │   ├── browser.py
 │   ├── details_payload.py   # SSDP/mDNS detail panels
@@ -91,7 +92,7 @@ netneighbor/
 └── LICENSE
 ```
 
-**Runtime config (user):** `~/.config/netneighbor/ui_prefs.json` — view mode, overrides, notification mode, monitored snapshots (restore greyed monitored rows after restart).  
+**Runtime config (user):** `~/.config/netneighbor/` — `ui_prefs.json` (UI + overrides); optional **`device_types.json`**, **`ssdp_rules.json`**, **`mdns_rules.json`** merged with bundled defaults (`COMMUNITY_OVERRIDES.md`).  
 **Optional log:** `~/.cache/netneighbor/netneighbor.log` when file logging is enabled.
 
 ---
@@ -154,17 +155,17 @@ Still used for icon/type hints where applicable. See embedded example in v1.3 or
 
 - SSDP multicast discovery, M-SEARCH refresh, NOTIFY handling, XML descriptors
 - Offline policy: NOTIFY byebye immediate; TTL timeout uses **`2 × max-age`** when present (bounded)
-- Configurable SSDP heuristics via `config/ssdp_rules.json`
+- Configurable SSDP heuristics via `config/ssdp_rules.json`; mDNS TXT→summary and optional type rules via `config/mdns_rules.json`
 - Device list + **icon grid**, category sidebar, manual reload
 - Details dialogs (SSDP/mDNS payload builders with protocol metadata and services)
-- Monitor / unfollow, user type override, icon source override
+- Monitor / unfollow, user type/name/location overrides, icon appearance override (system/provided/custom with picker)
 - Desktop notifications (connected / left) with optional **session notification history**
 - Monitored devices restored as offline from prefs snapshots until rediscovered
 - Single-instance behavior (one discovery stack per machine)
 
 ### MVP still open
 
-- Stronger **cross-protocol deduplication** once both stacks emit real data (today: UI bundles same `ip:port`)
+- Continue field validation of **cross-protocol deduplication hardening** on diverse networks (edge cases around sleep/wake and endpoint changes)
 
 ### Future
 
@@ -176,7 +177,7 @@ Still used for icon/type hints where applicable. See embedded example in v1.3 or
 
 ### 1) Cross-protocol deduplication
 
-Same host may appear via SSDP and mDNS. The UI bundles rows with the same `(ip, port)`; metadata merge may evolve to host identifiers (USN/UDN, hostname, MAC) for stronger matching across protocols.
+Same host may appear via SSDP and mDNS. The UI bundles rows with the same `(ip, port)`, and override persistence now prefers host identity (`UID`, then `MAC`, then IP fallback) to keep behavior stable across sources.
 
 ### 2) Thread-safe GTK updates
 

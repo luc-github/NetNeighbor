@@ -1,0 +1,13 @@
+{
+  "summary_from_txt": [
+    {
+      "label": "Manufacturer",
+      "keys": ["mfg", "manufacturer", "make"]
+    },
+    {
+      "label": "Model",
+      "keys": ["mdl", "model", "product"]
+    }
+  ],
+  "type_rules": []
+}

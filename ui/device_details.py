@@ -5,9 +5,10 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 import subprocess
+from typing import Any
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, GdkPixbuf, Gtk
+from gi.repository import Gdk, GdkPixbuf, Gtk, Pango
 
 _LOG = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
         fields: list[tuple[str, str]],
         services_records: list[tuple[str, str, str]] | None = None,
         txt_records: list[tuple[str, str]] | None = None,
+        mdns_service_sections: list[dict[str, Any]] | None = None,
         raw_content: str | None = None,
         raw_button_label: str | None = None,
         troubleshooting_records: list[tuple[str, str]] | None = None,
@@ -31,12 +33,14 @@ class DeviceDetailsDialog(Gtk.Dialog):
         custom_icons_dir: str | None = None,
         initial_tab: str | None = None,
         has_device_icon_source: bool = True,
+        provided_icon_display: str | None = None,
     ) -> None:
         super().__init__(title=title, transient_for=parent, modal=True)
         fields = self._filter_unavailable_pairs(fields)
         troubleshooting_records = self._filter_unavailable_pairs(troubleshooting_records)
         txt_records = self._filter_unavailable_pairs(txt_records)
         services_records = self._filter_unavailable_services(services_records)
+        mdns_service_sections_list = mdns_service_sections if isinstance(mdns_service_sections, list) else None
         # Simplify UI: merge troubleshooting rows into the main details tab.
         if troubleshooting_records:
             fields.extend(troubleshooting_records)
@@ -61,6 +65,8 @@ class DeviceDetailsDialog(Gtk.Dialog):
         self._has_device_icon_source = bool(has_device_icon_source)
         self._last_icon_mode = "provided"
         self._suppress_icon_mode_events = False
+        disp = (provided_icon_display or "").strip()
+        self._provided_icon_display: str | None = disp or None
 
         area = self.get_content_area()
         area.set_spacing(8)
@@ -92,7 +98,12 @@ class DeviceDetailsDialog(Gtk.Dialog):
         details_scroll.add(details_grid)
         notebook.append_page(details_scroll, Gtk.Label(label=_("Device details")))
 
-        if services_records is not None:
+        if mdns_service_sections_list:
+            notebook.append_page(
+                self._build_mdns_services_page(mdns_service_sections_list),
+                Gtk.Label(label=_("Services")),
+            )
+        elif services_records is not None:
             services_store = Gtk.ListStore(str, str, str)
             for service_type, target, port in services_records:
                 services_store.append([service_type, target, port])
@@ -121,7 +132,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
             trouble_scroll.add(trouble_tree)
             notebook.append_page(trouble_scroll, Gtk.Label(label=_("Troubleshooting Information")))
 
-        if txt_records:
+        if txt_records and not mdns_service_sections_list:
             txt_store = Gtk.ListStore(str, str)
             for key, value in txt_records:
                 txt_store.append([key, value])
@@ -180,7 +191,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
             appearance_box.pack_start(mode_label, False, False, 0)
             self._icon_mode_system_item = Gtk.RadioButton.new_with_label_from_widget(None, _("System"))
             self._icon_mode_provided_item = Gtk.RadioButton.new_with_label_from_widget(
-                self._icon_mode_system_item, _("Device (SSDP)")
+                self._icon_mode_system_item, _("From device")
             )
             self._icon_mode_custom_item = Gtk.RadioButton.new_with_label_from_widget(
                 self._icon_mode_system_item, _("Custom")
@@ -190,8 +201,9 @@ class DeviceDetailsDialog(Gtk.Dialog):
                 appearance_box.pack_start(self._icon_mode_provided_item, False, False, 0)
             appearance_box.pack_start(self._icon_mode_custom_item, False, False, 0)
 
-            self._selected_icon_label_widget = Gtk.Label(label=_("Selected icon: none"), xalign=0.0)
+            self._selected_icon_label_widget = Gtk.Label(label="", xalign=0.0)
             self._selected_icon_label_widget.set_line_wrap(True)
+            self._selected_icon_label_widget.set_selectable(True)
             appearance_box.pack_start(self._selected_icon_label_widget, False, False, 0)
 
             open_folder_button = Gtk.Button.new_with_label(_("Open custom icons folder"))
@@ -237,22 +249,44 @@ class DeviceDetailsDialog(Gtk.Dialog):
         clipboard.store()
         _LOG.debug("Raw XML copied to clipboard")
 
+    def _current_icon_mode(self) -> str:
+        if self._icon_mode_system_item.get_active():
+            return "system"
+        if self._icon_mode_custom_item.get_active():
+            return "custom"
+        if self._has_device_icon_source and self._icon_mode_provided_item.get_active():
+            return "provided"
+        return "system"
+
+    def _refresh_icon_detail_line(self) -> None:
+        if not hasattr(self, "_selected_icon_label_widget"):
+            return
+        w = self._selected_icon_label_widget
+        mode = self._current_icon_mode()
+        if mode == "system":
+            w.hide()
+            return
+        w.show()
+        if mode == "provided":
+            detail = self._provided_icon_display or _("unavailable")
+            w.set_text(f"{_('Image from device')}: {detail}")
+            return
+        label = self._selected_icon_label or _("none")
+        w.set_text(f"{_('Selected icon')}: {label}")
+
     def _select_custom_icon(self, icon_name: str | None) -> None:
         if not icon_name:
             self._selected_icon_id = None
             self._selected_icon_label = _("none")
-            if hasattr(self, "_selected_icon_label_widget"):
-                self._selected_icon_label_widget.set_text(f"{_('Selected icon')}: {self._selected_icon_label}")
-            return
-        self._selected_icon_id = icon_name
-        for icon_id, icon_label, _pix in self._icon_choices:
-            if icon_id == icon_name:
-                self._selected_icon_label = icon_label
-                break
         else:
-            self._selected_icon_label = icon_name
-        if hasattr(self, "_selected_icon_label_widget"):
-            self._selected_icon_label_widget.set_text(f"{_('Selected icon')}: {self._selected_icon_label}")
+            self._selected_icon_id = icon_name
+            for icon_id, icon_label, _pix in self._icon_choices:
+                if icon_id == icon_name:
+                    self._selected_icon_label = icon_label
+                    break
+            else:
+                self._selected_icon_label = icon_name
+        self._refresh_icon_detail_line()
 
     def _on_icon_mode_toggled(self, button: Gtk.RadioButton, mode: str) -> None:
         if self._on_apply_icon_settings is None or self._suppress_icon_mode_events:
@@ -266,6 +300,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
             return
         self._on_apply_icon_settings(mode, None)
         self._last_icon_mode = mode
+        self._refresh_icon_detail_line()
 
     def _on_custom_mode_clicked(self, button: Gtk.RadioButton) -> None:
         if self._on_apply_icon_settings is None or self._suppress_icon_mode_events:
@@ -291,6 +326,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
         else:
             self._icon_mode_system_item.set_active(True)
         self._suppress_icon_mode_events = False
+        self._refresh_icon_detail_line()
 
     def _open_icon_picker_dialog(self) -> str | None:
         dialog = Gtk.Dialog(title=_("Choose icon"), transient_for=self, modal=True)
@@ -376,6 +412,138 @@ class DeviceDetailsDialog(Gtk.Dialog):
         label.set_line_wrap(True)
         label.set_halign(Gtk.Align.START)
         return label
+
+    def _filter_mdns_txt_pairs(self, pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        """Drop unusable decoded rows while keeping TXT flags (empty value ok)."""
+
+        cleaned: list[tuple[str, str]] = []
+        for key, value in pairs:
+            key_str = str(key).strip() if isinstance(key, str) else str(key)
+            vs = value.strip().lower() if isinstance(value, str) else str(value).strip().lower()
+            if vs == "unavailable":
+                continue
+            if not key_str:
+                continue
+            cleaned.append((key_str, value if isinstance(value, str) else str(value)))
+        return cleaned
+
+    def _build_mdns_services_page(self, sections: list[dict[str, Any]]) -> Gtk.ScrolledWindow:
+        outer_scroll = Gtk.ScrolledWindow()
+        outer_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        outer_scroll.set_hexpand(True)
+        outer_scroll.set_vexpand(True)
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.set_margin_start(12)
+        vbox.set_margin_end(12)
+        vbox.set_margin_top(12)
+        vbox.set_margin_bottom(12)
+
+        for raw in sections:
+            if not isinstance(raw, dict):
+                continue
+            heading = raw.get("heading") or raw.get("service_type") or _("Service")
+            service_type = str(raw.get("service_type", "")).strip() or _("unavailable")
+            target = str(raw.get("target", "")).strip() or _("unavailable")
+            port = str(raw.get("port", "")).strip()
+
+            row_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            row_ctx = row_outer.get_style_context()
+            row_ctx.add_class("nn-mdns-service-block")
+
+            header_btn = Gtk.Button()
+            header_btn.set_relief(Gtk.ReliefStyle.NONE)
+            header_btn.get_style_context().add_class("flat")
+            header_btn.get_style_context().add_class("nn-mdns-service-header")
+
+            arrow_lbl = Gtk.Label(label="▸", xalign=0.0)
+            arrow_lbl.get_style_context().add_class("dim-label")
+            title_lbl = Gtk.Label(label=str(heading), xalign=0.0)
+            title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            title_lbl.set_hexpand(True)
+            header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            header_box.pack_start(arrow_lbl, False, False, 0)
+            header_box.pack_start(title_lbl, True, True, 0)
+            header_btn.add(header_box)
+
+            inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            inner.set_margin_start(8)
+            inner.get_style_context().add_class("nn-mdns-service-body")
+
+            meta_grid = Gtk.Grid(column_spacing=10, row_spacing=4)
+            row_i = 0
+            lbl_st = Gtk.Label(label=f"{_('Service type')}:", xalign=0.0)
+            lbl_st.get_style_context().add_class("dim-label")
+            val_st = Gtk.Label(label=service_type, xalign=0.0)
+            val_st.set_selectable(True)
+            meta_grid.attach(lbl_st, 0, row_i, 1, 1)
+            meta_grid.attach(val_st, 1, row_i, 1, 1)
+            row_i += 1
+
+            lbl_tgt = Gtk.Label(label=f"{_('Target')}:", xalign=0.0)
+            lbl_tgt.get_style_context().add_class("dim-label")
+            val_tgt = Gtk.Label(label=target, xalign=0.0)
+            val_tgt.set_selectable(True)
+            meta_grid.attach(lbl_tgt, 0, row_i, 1, 1)
+            meta_grid.attach(val_tgt, 1, row_i, 1, 1)
+            row_i += 1
+
+            lbl_pt = Gtk.Label(label=f"{_('Port')}:", xalign=0.0)
+            lbl_pt.get_style_context().add_class("dim-label")
+            val_pt = Gtk.Label(label=port or "—", xalign=0.0)
+            val_pt.set_selectable(True)
+            meta_grid.attach(lbl_pt, 0, row_i, 1, 1)
+            meta_grid.attach(val_pt, 1, row_i, 1, 1)
+
+            inner.pack_start(meta_grid, False, False, 0)
+
+            lbl_kv = Gtk.Label(label=f"{_('TXT records')}:", xalign=0.0)
+            lbl_kv.get_style_context().add_class("dim-label")
+            lbl_kv.set_margin_top(8)
+            inner.pack_start(lbl_kv, False, False, 0)
+
+            pairs_f: list[tuple[str, str]] = []
+            pairs_raw = raw.get("txt_records")
+            if isinstance(pairs_raw, list):
+                for row in pairs_raw:
+                    if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        pairs_f.append((str(row[0]), "" if row[1] is None else str(row[1])))
+            filtered = self._filter_mdns_txt_pairs(pairs_f)
+            if not filtered:
+                none_lbl = Gtk.Label(label=_("No TXT records"), xalign=0.0)
+                none_lbl.get_style_context().add_class("dim-label")
+                inner.pack_start(none_lbl, False, False, 0)
+            else:
+                txt_store = Gtk.ListStore(str, str)
+                for tk, tv in filtered:
+                    txt_store.append([tk, tv])
+                txt_tree = Gtk.TreeView(model=txt_store)
+                txt_tree.append_column(Gtk.TreeViewColumn(_("Name"), Gtk.CellRendererText(), text=0))
+                txt_tree.append_column(Gtk.TreeViewColumn(_("Value"), Gtk.CellRendererText(), text=1))
+                # No nested ScrolledWindow: full TXT height so only the tab's outer scrollbar scrolls.
+                row_h = 26
+                tree_h = len(filtered) * row_h + 40
+                txt_tree.set_size_request(-1, tree_h)
+                inner.pack_start(txt_tree, False, False, 0)
+
+            revealer = Gtk.Revealer()
+            revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+            revealer.set_reveal_child(False)
+            revealer.add(inner)
+
+            def _toggle_header(_b: Gtk.Button, ar=arrow_lbl, rv=revealer) -> None:
+                open_ = not rv.get_reveal_child()
+                rv.set_reveal_child(open_)
+                ar.set_label("▼" if open_ else "▸")
+
+            header_btn.connect("clicked", _toggle_header)
+
+            row_outer.pack_start(header_btn, False, False, 0)
+            row_outer.pack_start(revealer, False, False, 0)
+            vbox.pack_start(row_outer, False, False, 0)
+
+        outer_scroll.add(vbox)
+        return outer_scroll
 
     def _filter_unavailable_pairs(self, records: list[tuple[str, str]] | None) -> list[tuple[str, str]]:
         if not records:

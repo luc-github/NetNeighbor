@@ -20,13 +20,15 @@ Typical examples:
 | Provider | `discovery/mdns.py` | `MDNSDiscovery` — zeroconf browser/listener, TXT decode, mapping, host aggregation. |
 | Contract | `discovery/base.py` | `BaseDiscovery._emit("device", payload)` — normalized dict to manager. |
 | Orchestration | `discovery/manager.py` | Receives `mdns` payloads, applies overrides, stores and notifies listeners. |
-| Mapping hints | `data/device_types.json` | Optional per-service defaults (`type`, `icon`, `default_port`, `info_url`). |
-| UI payload | `utils/details_payload.py` | `build_mdns_payload` — fields, TXT and services for details dialog. |
+| Mapping hints | `data/device_types.json` | Optional per-service defaults (`type`, `icon`, `default_port`, `info_url`). Optionally extended by **`~/.config/netneighbor/device_types.json`**. |
+| UI payload | `utils/details_payload.py` | `build_mdns_payload` — summary fields plus **per-service sections** (type, target, port, TXT pairs) for the expandable Services tab in details. |
+| Rules | `config/mdns_rules.json` | User-extendible **TXT → summary line** mappings and optional `type_rules`; see [`MDNS_RULES_JSON.md`](MDNS_RULES_JSON.md). Loaded via `utils/mdns_rules.py`. |
 
 ## Browse strategy
 
-- Service types are loaded from `data/device_types.json` (`mdns` section).
-- One `ServiceBrowser` is started per known service type.
+- Service types are loaded from `data/device_types.json` (`mdns` section) and browsed immediately (labels / defaults from JSON).
+- **DNS-SD service type enumeration** (`zeroconf.ZeroconfServiceTypes.find`, built on `_services._dns-sd._udp` queries) runs in a background thread so the UI is not blocked. Every type returned on the LAN is normalized to `…._tcp.local.` (or other transport) and gets its own `ServiceBrowser` if not already started.
+- Enumeration repeats on a timer (every few minutes) and when `refresh()` is called, so devices that appear later or advertise uncommon types are still picked up without listing them all in JSON.
 - Each add/update callback resolves `ServiceInfo`, decodes TXT, and emits a normalized payload.
 
 ## Host-level aggregation
@@ -46,6 +48,12 @@ NetNeighbor builds a presentation URL for mDNS **only if `_http._tcp` is actuall
 the host. It does **not** infer HTTP from a port number alone.
 
 This avoids wrong browser links when non-HTTP services happen to use common ports.
+
+## TXT records
+
+- Per service instance, TXT is decoded from the raw `ServiceInfo.text` blob so **duplicate keys and all length-prefixed strings** are preserved in `metadata["services"][].txt_records` (ordered). A flat `metadata["txt"]` is still kept for heuristics (**last key wins**).
+
+- After host-level aggregation, **`metadata["txt"]`** merges TXT from every service on that host for classification. The details dialog shows **one expandable row per discovered service**, with TXT nested under each row (`Gtk.Expander` via `DeviceDetailsDialog`).
 
 ## Type and name heuristics
 
