@@ -398,13 +398,14 @@ class MDNSDiscovery(BaseDiscovery):
         service_key: str,
         display_name: str,
         txt: dict[str, str],
+        merged_services_line: str = "",
     ) -> str:
         base = mapped_type if mapped_type and mapped_type != "unknown" else self._infer_type_from_service(service_key)
         # Normalize legacy printer label to avoid duplicate "Printer" vs "Network Printer" classes in mDNS.
         if base == "printer":
             base = "networkprinter"
 
-        haystack_parts = [service_key, display_name]
+        haystack_parts = [service_key, display_name, merged_services_line]
         haystack_parts.extend([f"{k}={v}" for k, v in txt.items()])
         haystack = " ".join([part.lower() for part in haystack_parts if isinstance(part, str)])
 
@@ -415,6 +416,37 @@ class MDNSDiscovery(BaseDiscovery):
         if "synology" in haystack or "qnap" in haystack or " nas " in f" {haystack} ":
             return "nas"
         return evaluate_type_rules(haystack, base, self._mdns_rules)
+
+    def _aggregate_type_rank(self, device_type: str) -> int:
+        """Higher = stronger signal for host-level aggregate type (icon + category)."""
+        t = (device_type or "unknown").strip().lower()
+        return {
+            "unknown": 0,
+            "http": 12,
+            "https": 12,
+            "computer": 20,
+            "esp32": 22,
+            "nas": 38,
+            "mediaserver": 34,
+            "smartspeaker": 40,
+            "networkprinter": 55,
+            "printer": 55,
+            "scanner": 52,
+        }.get(t, 8)
+
+    def _best_aggregate_mdns_type(self, seed: str, merged_services: list) -> str:
+        best = (seed or "unknown").strip().lower()
+        best_r = self._aggregate_type_rank(best)
+        for svc in merged_services:
+            if not isinstance(svc, dict):
+                continue
+            svc_key = str(svc.get("service", "")).lower()
+            cand = self._infer_type_from_service(svc_key)
+            cr = self._aggregate_type_rank(cand)
+            if cr > best_r:
+                best = cand
+                best_r = cr
+        return best
 
     def _infer_display_name(self, service_instance: str, txt: dict[str, str]) -> str:
         for key in ("name", "friendlyname", "friendly_name", "device", "model"):
@@ -549,11 +581,31 @@ class MDNSDiscovery(BaseDiscovery):
         def _score(entry: dict) -> tuple[int, int]:
             metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
             service_text = str(metadata.get("service", "")).lower()
-            if "_http._tcp" in service_text:
+            # Prefer print-related rows over bare _http so aggregate type/icon stay printer-like
+            # (avoids http → GTK "browser" flash before IPP TXT / device icon URL arrives).
+            if any(
+                x in service_text
+                for x in ("_ipp._tcp", "_ipps._tcp", "_printer._tcp", "_pdl-datastream._tcp")
+            ):
                 return (0, 0)
-            if "_esp3d._tcp" in service_text:
+            # Prefer playback / casting rows over bare _http (room TXT + artwork URLs).
+            if any(
+                x in service_text
+                for x in (
+                    "_airplay._tcp",
+                    "_raop._tcp",
+                    "_companion-link._tcp",
+                    "_sonos._tcp",
+                    "_spotify-connect._tcp",
+                    "_googlecast._tcp",
+                )
+            ):
                 return (1, 0)
-            return (2, int(entry.get("port", 0) or 0))
+            if "_http._tcp" in service_text or "_https._tcp" in service_text:
+                return (2, 0)
+            if "_esp3d._tcp" in service_text:
+                return (3, 0)
+            return (4, int(entry.get("port", 0) or 0))
 
         representative = sorted(entries, key=_score)[0]
         rep_metadata = representative.get("metadata") if isinstance(representative.get("metadata"), dict) else {}
@@ -599,17 +651,52 @@ class MDNSDiscovery(BaseDiscovery):
         if combined_txt:
             merged_metadata["txt"] = combined_txt
 
+        seed_type = str(representative.get("type", "unknown")).strip().lower()
+        services_line_for_infer = " ".join(
+            str(s.get("service", "")).lower() for s in merged_services if isinstance(s, dict)
+        )
+        agg_type = self._infer_type_from_context(
+            seed_type,
+            str(rep_metadata.get("service", "")).lower(),
+            str(representative.get("name", "mDNS Device")),
+            combined_txt,
+            services_line_for_infer,
+        )
+        agg_type = self._best_aggregate_mdns_type(agg_type, merged_services)
+        icon_out = representative.get("icon")
+        if not isinstance(icon_out, str) or not icon_out.strip():
+            icon_out = self._icon_for_type(agg_type)
+        elif self._aggregate_type_rank(agg_type) > self._aggregate_type_rank(seed_type):
+            icon_out = self._icon_for_type(agg_type)
+        category = self._category_for_type(agg_type, representative.get("category", "Unknown Devices"))
+
+        rep_svc = str(rep_metadata.get("service", ""))
+        self._logger.debug(
+            "mDNS aggregate host=%s ip=%s rows=%d rep_service=%r rep_port=%s seed_type=%s agg_type=%s icon=%s "
+            "merged_txt_keys=%d merged_services=%d",
+            host_key,
+            ip,
+            len(entries),
+            rep_svc,
+            representative.get("port"),
+            seed_type,
+            agg_type,
+            icon_out,
+            len(combined_txt),
+            len(merged_services),
+        )
+
         return {
             "name": representative.get("name", "mDNS Device"),
             "ip": ip,
             "port": int(representative.get("port", 0) or 0),
-            "type": representative.get("type", "unknown"),
-            "category": representative.get("category", "Unknown Devices"),
+            "type": agg_type,
+            "category": category,
             "source": "mdns",
             "url": url,
             "metadata": merged_metadata,
             "online": bool(online),
-            "icon": representative.get("icon"),
+            "icon": icon_out,
         }
 
     def _build_url(self, mapping: dict, ip: str, port: int) -> str | None:

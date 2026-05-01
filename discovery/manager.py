@@ -2,12 +2,18 @@
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+import ipaddress
 import logging
+from typing import Literal
 
 from discovery.base import BaseDiscovery
 from discovery.mdns import MDNSDiscovery
 from discovery.ssdp import SSDPDiscovery
 from model.device import Device
+from utils.location_label import is_plausible_room_location
+
+PresenceTransitionKind = Literal["online", "offline"]
+PresenceTransitionHook = Callable[[Device, PresenceTransitionKind], None]
 
 
 class DiscoveryManager:
@@ -19,6 +25,7 @@ class DiscoveryManager:
         self._devices: dict[str, Device] = {}
         self._arrival_sequence = 0
         self._listeners: list[Callable[[list[Device]], None]] = []
+        self._presence_hooks: list[PresenceTransitionHook] = []
         self._type_overrides: dict[str, str] = {}
         self._name_overrides: dict[str, str] = {}
         self._location_overrides: dict[str, str] = {}
@@ -32,6 +39,24 @@ class DiscoveryManager:
     def add_listener(self, callback: Callable[[list[Device]], None]) -> None:
         self._listeners.append(callback)
         callback(self.devices)
+
+    def register_presence_transition_hook(self, hook: PresenceTransitionHook) -> None:
+        """Notify when a device becomes reachable or unreachable (same identity row).
+
+        Fires only on transitions: newly online (including back from offline), or offline from
+        online. Silent for first-seen rows that are already offline (e.g. restored monitored
+        ghosts). Plugins should treat callbacks as potentially running on a discovery thread —
+        marshal to the UI thread before touching GTK.
+
+        Reserved for future automation / plugins; core code does not register hooks today.
+        """
+        self._presence_hooks.append(hook)
+
+    def unregister_presence_transition_hook(self, hook: PresenceTransitionHook) -> None:
+        try:
+            self._presence_hooks.remove(hook)
+        except ValueError:
+            pass
 
     @property
     def devices(self) -> list[Device]:
@@ -74,14 +99,17 @@ class DiscoveryManager:
             except ValueError:
                 pass
 
-        self._apply_type_override(device)
-        self._apply_name_override(device)
-        self._apply_location_override(device)
-        self._apply_monitored_override(device)
         existing_key = device.key
         existing = self._devices.get(existing_key)
         if existing is None and device.source == "ssdp":
             existing_key, existing = self._find_existing_ssdp_by_endpoint(device)
+
+        self._apply_type_override(device)
+        self._apply_name_override(device)
+        self._apply_location_override(device)
+        self._apply_monitored_override(device)
+
+        prev_online: bool | None = existing.online if existing is not None else None
 
         if existing is not None:
             # Preserve user-follow choice across updates.
@@ -116,6 +144,7 @@ class DiscoveryManager:
             self._arrival_sequence += 1
             existing_arrival = self._arrival_sequence
         device.metadata["_arrival_index"] = existing_arrival
+        self._supplement_missing_mdns_user_location(device, existing)
         self._devices[existing_key] = device
         device_log = self._device_event_logger(device.source)
         device_log.info(
@@ -139,7 +168,33 @@ class DiscoveryManager:
             device.online,
             device.category,
         )
+        uloc = device.metadata.get("user_location") if isinstance(device.metadata, dict) else None
+        device_log.debug(
+            "Device appearance: ip=%s port=%s type=%s icon=%s user_location=%r",
+            device.ip,
+            device.port,
+            device.type,
+            device.icon,
+            uloc,
+        )
+        self._emit_presence_hooks_if_transition(device, prev_online, device.online)
         self._notify()
+
+    def _emit_presence_hooks_if_transition(self, device: Device, prev_online: bool | None, now_online: bool) -> None:
+        # Skip first-seen already-offline rows (monitoring placeholders, etc.).
+        if now_online and prev_online is not True:
+            transition: PresenceTransitionKind = "online"
+        elif prev_online is True and not now_online:
+            transition = "offline"
+        else:
+            return
+        if not self._presence_hooks:
+            return
+        for hook in tuple(self._presence_hooks):
+            try:
+                hook(device, transition)
+            except Exception:
+                self._logger.exception("Presence transition hook failed (event=%s)", transition)
 
     def set_type_overrides(self, overrides: dict[str, str]) -> None:
         normalized: dict[str, str] = {}
@@ -501,9 +556,30 @@ class DiscoveryManager:
             or metadata.get("MAC")
             or metadata.get("macAddress")
         )
-        if not isinstance(mac, str):
+        if isinstance(mac, str) and mac.strip():
+            return mac.strip().lower()
+
+        def _mac_from_txt(txt: dict) -> str:
+            if not isinstance(txt, dict):
+                return ""
+            for key in ("mac", "hardware-address", "hwaddr", "device-mac", "machine"):
+                raw = txt.get(key)
+                if isinstance(raw, str) and raw.strip():
+                    return raw.strip().lower()
             return ""
-        return mac.strip().lower()
+
+        top = _mac_from_txt(metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {})
+        if top:
+            return top
+        services = metadata.get("services")
+        if isinstance(services, list):
+            for svc in services:
+                if not isinstance(svc, dict):
+                    continue
+                got = _mac_from_txt(svc.get("txt") if isinstance(svc.get("txt"), dict) else {})
+                if got:
+                    return got
+        return ""
 
     def _apply_type_override(self, device: Device) -> None:
         override_type = self._find_override_value(self._type_overrides, device)
@@ -521,15 +597,33 @@ class DiscoveryManager:
     def _apply_location_override(self, device: Device) -> None:
         if not isinstance(device.metadata, dict):
             device.metadata = {}
+        dev_log = self._device_event_logger(device.source)
         location = self._find_location_override_value(device)
         if location:
             device.metadata["user_location"] = location
+            dev_log.debug(
+                "Location: prefs override ip=%s port=%s value=%r",
+                device.ip,
+                device.port,
+                location if len(location) <= 120 else location[:117] + "...",
+            )
         else:
             auto_location = self._default_location_for_device(device)
             if auto_location:
                 device.metadata["user_location"] = auto_location
+                dev_log.debug(
+                    "Location: auto from metadata ip=%s port=%s value=%r",
+                    device.ip,
+                    device.port,
+                    auto_location if len(auto_location) <= 120 else auto_location[:117] + "...",
+                )
             else:
                 device.metadata.pop("user_location", None)
+                dev_log.debug(
+                    "Location: empty ip=%s port=%s (no RoomName/xml_fields or TXT keys matched)",
+                    device.ip,
+                    device.port,
+                )
 
     def _apply_monitored_override(self, device: Device) -> None:
         override_value = self._find_override_value(self._monitored_overrides, device)
@@ -544,12 +638,18 @@ class DiscoveryManager:
         if legacy_key and legacy_key in store:
             return store[legacy_key]
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
-        return store.get(endpoint_key)
+        if endpoint_key in store:
+            return store[endpoint_key]
+        hit = self._prefs_entry_same_source_ipv4_any_port(store, device)
+        if hit is not None:
+            return hit
+        return self._prefs_entry_for_host_ip_fallback(store, device)
 
     def _find_name_override_value(self, device: Device) -> str | None:
         preferred_key = self._make_name_override_key_for_device(device)
-        if preferred_key in self._name_overrides:
-            return self._name_overrides[preferred_key]
+        value = self._name_overrides.get(preferred_key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
         legacy_key = self._make_legacy_identity_key_for_device(device)
         if legacy_key and legacy_key in self._name_overrides:
             value = self._name_overrides.get(legacy_key)
@@ -559,12 +659,19 @@ class DiscoveryManager:
         value = self._name_overrides.get(endpoint_key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+        hit_ep = self._prefs_entry_same_source_ipv4_any_port(self._name_overrides, device)
+        if isinstance(hit_ep, str) and hit_ep.strip():
+            return hit_ep.strip()
+        hit = self._prefs_entry_for_host_ip_fallback(self._name_overrides, device)
+        if isinstance(hit, str) and hit.strip():
+            return hit.strip()
         return None
 
     def _find_location_override_value(self, device: Device) -> str | None:
         preferred_key = self._make_name_override_key_for_device(device)
-        if preferred_key in self._location_overrides:
-            return self._location_overrides[preferred_key]
+        value = self._location_overrides.get(preferred_key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
         legacy_key = self._make_legacy_identity_key_for_device(device)
         if legacy_key and legacy_key in self._location_overrides:
             value = self._location_overrides.get(legacy_key)
@@ -574,7 +681,98 @@ class DiscoveryManager:
         value = self._location_overrides.get(endpoint_key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+        hit_ep = self._prefs_entry_same_source_ipv4_any_port(self._location_overrides, device)
+        if isinstance(hit_ep, str) and hit_ep.strip():
+            return hit_ep.strip()
+        hit = self._prefs_entry_for_host_ip_fallback(self._location_overrides, device)
+        if isinstance(hit, str) and hit.strip():
+            return hit.strip()
         return None
+
+    def _prefs_entry_for_host_ip_fallback(self, store: dict, device: Device):
+        """Prefs may use host:ip:… while identity later resolves to host:uid:… / host:mac:… (richer mDNS)."""
+        ip_only = str(device.ip).strip()
+        if not ip_only or ip_only == "0.0.0.0":
+            return None
+        host_ip_key = f"host:ip:{ip_only}"
+        if self._make_override_key_for_device(device) == host_ip_key:
+            return None
+        if host_ip_key in store:
+            return store[host_ip_key]
+        return None
+
+    def _prefs_entry_same_source_ipv4_any_port(self, store: dict, device: Device):
+        """Match `mdns:192.168.1.10:8611` when aggregated row moves to `:631`, etc. (IPv4-only)."""
+        sip = str(device.ip).strip()
+        if sip in {"", "0.0.0.0"}:
+            return None
+        try:
+            if not isinstance(ipaddress.ip_address(sip), ipaddress.IPv4Address):
+                return None
+        except ValueError:
+            return None
+        prefix = f"{(device.source or '').strip().lower()}:{sip}:"
+        matches: list[str] = []
+        for key in store:
+            if isinstance(key, str) and key.startswith(prefix):
+                tail = key[len(prefix) :]
+                if tail.isdigit():
+                    matches.append(key)
+        if not matches:
+            return None
+
+        endpoint_exact = prefix + str(int(device.port))
+        if endpoint_exact in store:
+            return store.get(endpoint_exact)
+        widest = max(matches, key=lambda k: int(k.rsplit(":", 1)[-1]))
+        return store.get(widest)
+
+    def _supplement_missing_mdns_user_location(self, device: Device, prior_row: Device | None) -> None:
+        """Stabilise lieu quand métadonnées mDNS/flap de port vide `user_location` après overrides."""
+        if device.source != "mdns":
+            return
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        cur = device.metadata.get("user_location")
+        if isinstance(cur, str) and cur.strip():
+            return
+        sip = str(device.ip).strip()
+        if not sip or sip == "0.0.0.0":
+            return
+        if prior_row is not None and prior_row.source == "mdns" and prior_row.key == device.key:
+            dm = prior_row.metadata if isinstance(prior_row.metadata, dict) else {}
+            preserved = dm.get("user_location")
+            if isinstance(preserved, str) and preserved.strip():
+                ps = preserved.strip()
+                if is_plausible_room_location(ps):
+                    device.metadata["user_location"] = ps
+                    self._mdns_logger.debug(
+                        "Location: mDNS carry-over from prior row ip=%s value=%r",
+                        sip,
+                        ps if len(ps) <= 120 else ps[:117] + "...",
+                    )
+                    return
+        for row in self._devices.values():
+            if row is prior_row:
+                continue
+            if row.source != "mdns" or row.key == device.key:
+                continue
+            if str(row.ip).strip() != sip:
+                continue
+            dm = row.metadata if isinstance(row.metadata, dict) else {}
+            borrowed = dm.get("user_location")
+            if isinstance(borrowed, str) and borrowed.strip():
+                bs = borrowed.strip()
+                if not is_plausible_room_location(bs):
+                    continue
+                device.metadata["user_location"] = bs
+                self._mdns_logger.debug(
+                    "Location: mDNS borrowed same-ip ip=%s from key=%s value=%r",
+                    sip,
+                    row.key,
+                    bs if len(bs) <= 120 else bs[:117] + "...",
+                )
+                return
 
     def _make_override_key(self, source: str, ip: str, port: int) -> str:
         return f"{source}:{ip}:{int(port)}"
@@ -673,12 +871,46 @@ class DiscoveryManager:
         # Sonos commonly exposes a room label in SSDP XML fields.
         for value in (xml_fields.get("RoomName"), xml_fields.get("roomName"), metadata.get("RoomName"), metadata.get("roomName")):
             if isinstance(value, str) and value.strip():
-                return value.strip()
+                s = value.strip()
+                if is_plausible_room_location(s):
+                    return s
 
-        for key in ("roomname", "room_name", "room"):
-            value = txt_fields.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
+        def txt_by_key_ci(txt: dict, *wanted_lower: str) -> str:
+            index: dict[str, str] = {}
+            if isinstance(txt, dict):
+                for rk, rv in txt.items():
+                    if isinstance(rk, str) and isinstance(rv, str):
+                        index[rk.lower()] = rv
+            for wl in wanted_lower:
+                cand = index.get(wl.lower())
+                if isinstance(cand, str) and cand.strip():
+                    s = cand.strip()
+                    if is_plausible_room_location(s):
+                        return s
+            return ""
+
+        loc = txt_by_key_ci(
+            txt_fields,
+            "roomname",
+            "room_name",
+            "room",
+            "location",
+            "locationname",
+            "location_name",
+            "zonename",
+            "zone_name",
+            "zone",
+        )
+        if loc:
+            return loc
+        services = metadata.get("services") if isinstance(metadata.get("services"), list) else []
+        for svc in services:
+            if not isinstance(svc, dict):
+                continue
+            st = svc.get("txt") if isinstance(svc.get("txt"), dict) else {}
+            loc = txt_by_key_ci(st, "roomname", "room_name", "room", "location", "locationname", "zonename", "zone")
+            if loc:
+                return loc
         return ""
 
     def _category_for_type(self, device_type: str) -> str:

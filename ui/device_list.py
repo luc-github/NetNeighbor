@@ -1,10 +1,18 @@
 """Device view supporting list and icon modes."""
 
 import gi
+import hashlib
+import ipaddress
+import json
+import logging
+import os
+from datetime import datetime, timezone
+import ssl
+import threading
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-import threading
+from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
 
 gi.require_version("Gtk", "3.0")
@@ -15,6 +23,7 @@ from model.device import Device
 from ui.device_details import DeviceDetailsDialog
 from ui.icons import resolve_icon_path
 from utils.browser import open_url
+from utils.location_label import is_plausible_room_location
 from utils.details_payload import (
     aggregate_ports_display,
     build_mdns_payload,
@@ -22,6 +31,8 @@ from utils.details_payload import (
     merge_ssdp_mdns_detail_fields,
     with_aggregate_ports_field,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -103,7 +114,12 @@ class DeviceList(Gtk.Box):
         self._custom_icon_overrides: dict[tuple[str, int], str] = {}
         self._remote_icon_cache: dict[str, GdkPixbuf.Pixbuf] = {}
         self._remote_icon_by_endpoint: dict[tuple[str, int], GdkPixbuf.Pixbuf] = {}
+        self._remote_icon_by_host_ip: dict[str, GdkPixbuf.Pixbuf] = {}
         self._remote_icon_fetching: set[str] = set()
+        self._remote_icon_disk_dir = Path.home() / ".cache" / "netneighbor" / "remote_icons"
+        self._remote_icon_index_path = Path.home() / ".cache" / "netneighbor" / "remote_icon_index.json"
+        self._remote_icon_index: dict[str, dict[str, str]] = {}
+        self._remote_icon_index_loaded = False
         self._custom_icons_dir = Path.home() / ".config" / "netneighbor" / "custom_icons"
         self._builtin_icons_dir = Path(__file__).resolve().parent.parent / "assets" / "icons"
         self._install_css()
@@ -336,7 +352,9 @@ class DeviceList(Gtk.Box):
             metadata = device.metadata if isinstance(device.metadata, dict) else {}
             location = metadata.get("user_location")
             if isinstance(location, str) and location.strip():
-                return location.strip()
+                s = location.strip()
+                if is_plausible_room_location(s):
+                    return s
         return _("No location")
 
     def _bundle_arrival_index(self, bundle: _DeviceBundle) -> int:
@@ -557,18 +575,18 @@ class DeviceList(Gtk.Box):
         if response not in {Gtk.ResponseType.OK, Gtk.ResponseType.REJECT}:
             return
         for device in bundle.devices:
-            self._on_set_name_override(device.source, bundle.ip, bundle.port, new_name)
+            self._on_set_name_override(device.source, device.ip, device.port, new_name)
 
     def _on_location_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle, value: str | None) -> None:
         if self._on_set_location_override is None:
             return
         for device in bundle.devices:
-            self._on_set_location_override(device.source, bundle.ip, bundle.port, value)
+            self._on_set_location_override(device.source, device.ip, device.port, value)
 
     def _on_type_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle, device_type: str | None) -> None:
         if self._on_set_type_override is None:
             return
-        self._on_set_type_override(bundle.primary.source, bundle.ip, bundle.port, device_type)
+        self._on_set_type_override(bundle.primary.source, bundle.primary.ip, bundle.primary.port, device_type)
 
     def _on_open_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_device(bundle)
@@ -739,7 +757,7 @@ class DeviceList(Gtk.Box):
         for dev in (bundle.ssdp_device, bundle.mdns_device):
             if dev is None:
                 continue
-            url = self._remote_icon_url_for_device(dev)
+            url = self._resolved_remote_icon_url(dev)
             if url:
                 return url
         primary = bundle.primary
@@ -779,6 +797,62 @@ class DeviceList(Gtk.Box):
                     return url
         return None
 
+    def _iter_remote_icon_disk_keys(self, device: Device) -> list[str]:
+        """Distinct canonical URLs (+ aliases + last-known binding per IP) to match RAM/disk cache."""
+        keys: list[str] = []
+        seen: set[str] = set()
+        sip = str(device.ip).strip()
+        raw_list: list[str] = []
+
+        def push_logical_url(candidate: str) -> None:
+            if not isinstance(candidate, str) or not candidate.strip():
+                return
+            base = DeviceList._canonical_remote_icon_url(candidate.strip())
+            for alias in DeviceList._expand_cached_remote_icon_aliases(base):
+                if alias not in seen:
+                    seen.add(alias)
+                    keys.append(alias)
+
+        self._ensure_remote_icon_index()
+        if sip and device.source in {"mdns", "ssdp"}:
+            entry = self._remote_icon_index.get(sip)
+            if isinstance(entry, dict):
+                remembered = entry.get("canonical_url")
+                if isinstance(remembered, str) and remembered.strip():
+                    push_logical_url(remembered)
+
+        if device.source == "ssdp":
+            single = self._remote_icon_url_for_device(device)
+            if single:
+                raw_list.append(single)
+        elif device.source == "mdns":
+            metadata = device.metadata if isinstance(device.metadata, dict) else {}
+            raw_list.extend(u for u in self._mdns_icon_urls_from_metadata(metadata, sip, device.port) if u)
+
+        for raw in raw_list:
+            if not isinstance(raw, str) or not raw.strip():
+                continue
+            ref = raw.strip()
+            rewrote = self._rewrite_remote_icon_url_to_device_ip(ref, sip)
+            push_logical_url(rewrote)
+            push_logical_url(ref)
+
+        return keys
+
+    def _primary_remote_icon_fetch_pair(self, device: Device) -> tuple[str, str] | None:
+        """Returns (fetch_url, cache_key for disk) using the preferred advertised icon."""
+        raw = self._remote_icon_url_for_device(device)
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        sip = str(device.ip).strip()
+        fetch_url = self._rewrite_remote_icon_url_to_device_ip(raw.strip(), sip).strip()
+        if not fetch_url:
+            return None
+        cache_key = self._canonical_remote_icon_url(fetch_url)
+        if not cache_key:
+            return None
+        return fetch_url, cache_key
+
     @staticmethod
     def _normalize_icon_url(ref: str, ip: str, port: int) -> str:
         ref = ref.strip()
@@ -793,13 +867,301 @@ class DeviceList(Gtk.Box):
             return base + ref
         return f"{base}/{ref.lstrip('/')}"
 
+    @staticmethod
+    def _canonical_remote_icon_url(icon_url: str) -> str:
+        """Stable cache / dedup key: scheme + normalized host/port, omit default ports (fixes sha256 mismatches vs older cache)."""
+        u = icon_url.strip()
+        try:
+            p = urlparse(u)
+        except ValueError:
+            return u
+        if not p.scheme or not p.hostname:
+            return u
+        scheme = (p.scheme or "").lower()
+        host_txt = (p.hostname or "").lower().rstrip(".")
+        port = p.port
+
+        host_literal = host_txt
+        try:
+            parsed_ip = ipaddress.ip_address(host_txt)
+            if isinstance(parsed_ip, ipaddress.IPv6Address):
+                host_literal = f"[{parsed_ip.compressed}]"
+        except ValueError:
+            host_literal = host_txt
+
+        omit_default = (scheme == "http" and port in {None, 80}) or (scheme == "https" and port in {None, 443})
+
+        netloc_final: str
+        if omit_default:
+            netloc_final = host_literal
+        elif port is not None:
+            netloc_final = f"{host_literal}:{port}"
+        else:
+            netloc_final = host_literal
+
+        path = p.path.strip() if p.path else ""
+        if not path:
+            path = "/"
+        query = (p.query or "").strip()
+
+        # Ignore fragment fragment is not preserved in urlparse for url unparse similarly
+        return urlunparse((scheme, netloc_final, path, "", query, ""))
+
+    @staticmethod
+    def _expand_cached_remote_icon_aliases(canonical_key: str) -> list[str]:
+        """Try legacy / alternate filenames (e.g. http://host:80/... saved under old hashing rules)."""
+        out: list[str] = []
+        seen: set[str] = set()
+        ck = (canonical_key or "").strip()
+
+        def add(s: str) -> None:
+            if s and s not in seen:
+                seen.add(s)
+                out.append(s)
+
+        if not ck:
+            return out
+
+        try:
+            p = urlparse(ck)
+        except ValueError:
+            add(ck)
+            return out
+        add(ck)
+        if not p.scheme or not p.hostname:
+            return out
+
+        scheme = (p.scheme or "").lower()
+        host_txt = (p.hostname or "").lower().rstrip(".")
+        port = p.port
+        path = (p.path or "").strip() or "/"
+        query = p.query or ""
+
+        try:
+            parsed_ip = ipaddress.ip_address(host_txt)
+            if isinstance(parsed_ip, ipaddress.IPv6Address):
+                host_literal = f"[{parsed_ip.compressed}]"
+            else:
+                host_literal = host_txt
+        except ValueError:
+            host_literal = host_txt
+
+        def build(netloc_piece: str) -> str:
+            return urlunparse((scheme, netloc_piece, path, "", query, ""))
+
+        if scheme == "http":
+            # implicit default port ↔ explicit :80
+            if port in {None, 80}:
+                add(build(f"{host_literal}:80"))
+        elif scheme == "https" and port in {None, 443}:
+            add(build(f"{host_literal}:443"))
+
+        return out
+
+    @staticmethod
+    def _normalize_host_icon_index_row(row: dict) -> dict[str, str] | None:
+        raw_url = row.get("canonical_url")
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            return None
+        canonical = DeviceList._canonical_remote_icon_url(raw_url.strip())
+        sha = row.get("payload_sha256")
+        sl = sha.lower() if isinstance(sha, str) else ""
+        if len(sl) != 64 or not all(c in "0123456789abcdef" for c in sl):
+            sl = DeviceList._remote_icon_digest(canonical)
+        ts = row.get("updated_at")
+        if not isinstance(ts, str) or not ts.strip():
+            ts = datetime.now(timezone.utc).isoformat()
+        return {"canonical_url": canonical, "payload_sha256": sl, "updated_at": ts}
+
+    def _ensure_remote_icon_index(self) -> None:
+        if self._remote_icon_index_loaded:
+            return
+        self._remote_icon_index_loaded = True
+        index_path = self._remote_icon_index_path
+        legacy_bindings = index_path.parent / "remote_icon_bindings.json"
+        try:
+            if index_path.is_file():
+                data = json.loads(index_path.read_text(encoding="utf-8"))
+                ver_raw = data.get("version", 0) if isinstance(data, dict) else 0
+                try:
+                    vern = int(ver_raw)
+                except (TypeError, ValueError):
+                    vern = 0
+                if isinstance(data, dict) and vern >= 2:
+                    hosts = data.get("hosts")
+                    if isinstance(hosts, dict):
+                        for sip, row in hosts.items():
+                            if not isinstance(sip, str) or not isinstance(row, dict):
+                                continue
+                            entry = self._normalize_host_icon_index_row(row)
+                            if entry is not None:
+                                self._remote_icon_index[sip.strip()] = entry
+                return
+            if legacy_bindings.is_file():
+                old = json.loads(legacy_bindings.read_text(encoding="utf-8"))
+                bi = old.get("by_ip") if isinstance(old, dict) else None
+                if isinstance(bi, dict):
+                    for sip, canon in bi.items():
+                        if not isinstance(sip, str) or not isinstance(canon, str):
+                            continue
+                        if not sip.strip() or not canon.strip():
+                            continue
+                        entry = self._normalize_host_icon_index_row(
+                            {
+                                "canonical_url": canon.strip(),
+                                "updated_at": datetime.now(timezone.utc).isoformat(),
+                            }
+                        )
+                        if entry is not None:
+                            self._remote_icon_index[sip.strip()] = entry
+                if self._remote_icon_index:
+                    self._write_remote_icon_index_file()
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            return
+
+    def _write_remote_icon_index_file(self) -> None:
+        path = self._remote_icon_index_path
+        tmp = path.with_suffix(".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            blob = {"version": 2, "hosts": dict(sorted(self._remote_icon_index.items()))}
+            tmp.write_text(json.dumps(blob, indent=2, sort_keys=True), encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError:
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+            except OSError:
+                pass
+
+    def _persist_remote_icon_index_entry(self, sip: str, canonical_url: str) -> None:
+        if not sip or not isinstance(canonical_url, str) or not canonical_url.strip():
+            return
+        self._ensure_remote_icon_index()
+        row = self._normalize_host_icon_index_row(
+            {"canonical_url": canonical_url.strip(), "updated_at": datetime.now(timezone.utc).isoformat()}
+        )
+        if row is None:
+            return
+        prev = self._remote_icon_index.get(sip.strip())
+        if isinstance(prev, dict):
+            if prev.get("canonical_url") == row["canonical_url"] and prev.get("payload_sha256") == row["payload_sha256"]:
+                return
+        self._remote_icon_index[sip.strip()] = row
+        self._write_remote_icon_index_file()
+
+    @staticmethod
+    def _should_rewrite_icon_hostname_to_lan_ip(hostname: str) -> bool:
+        """Replace mDNS-style names with the device IP for fetch/cache stability."""
+        h = (hostname or "").lower().rstrip(".")
+        if not h:
+            return False
+        try:
+            ipaddress.ip_address(h)
+            return False
+        except ValueError:
+            pass
+        if h.endswith(".local") or h.endswith(".lan"):
+            return True
+        if "." not in h:
+            return True
+        return False
+
+    @staticmethod
+    def _rewrite_remote_icon_url_to_device_ip(url: str, ip: str) -> str:
+        """Use device IP as host for typical LAN icon URLs (avoids .local resolution / hash drift)."""
+        ip_stripped = str(ip).strip()
+        if not ip_stripped or ip_stripped in {"0.0.0.0", "::"}:
+            return url.strip()
+        try:
+            p = urlparse(url.strip())
+        except ValueError:
+            return url.strip()
+        if p.scheme.lower() not in {"http", "https"} or not p.netloc:
+            return url.strip()
+        host = p.hostname
+        if not host or not DeviceList._should_rewrite_icon_hostname_to_lan_ip(host):
+            return url.strip()
+        try:
+            dev_ip = ipaddress.ip_address(ip_stripped)
+        except ValueError:
+            return url.strip()
+        port = p.port
+        if isinstance(dev_ip, ipaddress.IPv6Address):
+            netloc = f"[{ip_stripped}]"
+            if port is not None:
+                netloc += f":{port}"
+        else:
+            netloc = ip_stripped
+            if port is not None:
+                netloc += f":{port}"
+        path = p.path or "/"
+        return urlunparse((p.scheme.lower(), netloc, path, "", p.query, ""))
+
+    def _resolved_remote_icon_url(self, device: Device) -> str | None:
+        """Canonical URL used for fetch, RAM cache, and disk (IP host when applicable)."""
+        raw = self._remote_icon_url_for_device(device)
+        if not raw:
+            return None
+        mapped = self._rewrite_remote_icon_url_to_device_ip(raw, device.ip)
+        return self._canonical_remote_icon_url(mapped)
+
+    @staticmethod
+    def _urlopen_remote_icon(url: str):
+        """HTTPS for LAN printers (.local / private IP) often uses self-signed certs — relax verify only there."""
+        parsed = urlparse(url)
+        scheme = (parsed.scheme or "").lower()
+        host = (parsed.hostname or "").lower().rstrip(".")
+        ctx = None
+        if scheme == "https":
+            allow_insecure = host.endswith(".local") or host.endswith(".lan")
+            if not allow_insecure and host:
+                try:
+                    allow_insecure = ipaddress.ip_address(host).is_private
+                except ValueError:
+                    pass
+            if allow_insecure:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+        timeout = 4.5 if scheme == "https" else 2.0
+        if ctx is not None:
+            return urlopen(url, timeout=timeout, context=ctx)
+        return urlopen(url, timeout=timeout)
+
+    @staticmethod
+    def _mdns_preferred_icon_base_port(metadata: dict, fallback_port: int) -> int:
+        """Sonos-like hosts: TXT icon paths are often served by the `_http._tcp` port, not ephemeral mDNS ports."""
+        if not isinstance(metadata, dict):
+            return fallback_port
+        services = metadata.get("services")
+        if not isinstance(services, list):
+            return fallback_port
+        for svc in services:
+            if not isinstance(svc, dict):
+                continue
+            name = str(svc.get("service", "")).lower()
+            if "_http._tcp" not in name:
+                continue
+            try:
+                candidate = int(svc.get("port", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if candidate > 0:
+                return candidate
+        try:
+            return int(fallback_port) if fallback_port else 80
+        except (TypeError, ValueError):
+            return 80
+
     def _mdns_icon_urls_from_metadata(self, metadata: dict, ip: str, port: int) -> list[str]:
         icon_keys = frozenset({"representation", "icon", "iconurl"})
         urls: list[str] = []
         seen: set[str] = set()
+        base_port = self._mdns_preferred_icon_base_port(metadata, port)
 
         def _push(raw_val: str) -> None:
-            u = self._normalize_icon_url(raw_val.strip(), ip, port)
+            u = self._normalize_icon_url(raw_val.strip(), ip, base_port)
             if u not in seen:
                 seen.add(u)
                 urls.append(u)
@@ -893,12 +1255,36 @@ class DeviceList(Gtk.Box):
                 remote_icon = self._load_remote_icon(cand, 64)
                 if remote_icon is not None:
                     return remote_icon
+            for cand in (bundle.ssdp_device, bundle.mdns_device):
+                if cand is None:
+                    continue
+                if self._remote_icon_fetch_pending(cand):
+                    icon_path = resolve_icon_path(cand.icon or device.icon)
+                    try:
+                        return GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), 64, 64)
+                    except Exception:
+                        break
             icon_path = resolve_icon_path(device.icon)
             try:
                 return GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), 64, 64)
-            except Exception:
-                pass
+            except Exception as exc:
+                _logger.debug(
+                    "Icon: bundled PNG failed ip=%s type=%s icon_field=%r path=%s err=%s",
+                    device.ip,
+                    device.type,
+                    device.icon,
+                    icon_path,
+                    exc,
+                )
 
+        _logger.debug(
+            "Icon: GTK theme fallback ip=%s port=%s type=%s icon_mode=%s name=%r",
+            device.ip,
+            device.port,
+            device.type,
+            icon_mode,
+            device.name,
+        )
         theme = Gtk.IconTheme.get_default()
         fallback_by_type = {
             "esp32": ["cpu", "application-x-firmware", "network-wireless"],
@@ -1000,43 +1386,174 @@ class DeviceList(Gtk.Box):
         return self._builtin_icons_dir / icon_id
 
     def _load_remote_icon(self, device: Device, size: int) -> GdkPixbuf.Pixbuf | None:
-        icon_url = self._remote_icon_url_for_device(device)
         endpoint = (device.ip, device.port)
-        if not icon_url:
+        sip = str(device.ip).strip()
+
+        host_cached = self._remote_icon_by_host_ip.get(sip) if sip else None
+        if host_cached is not None:
+            scaled = self._normalize_icon_pixbuf(host_cached, size)
+            self._remote_icon_by_endpoint[endpoint] = scaled
+            return scaled
+
+        def _register_hit(pixbuf: GdkPixbuf.Pixbuf, binding_disk_key: str | None = None) -> GdkPixbuf.Pixbuf:
+            self._remote_icon_by_endpoint[endpoint] = pixbuf
+            if sip:
+                self._remote_icon_by_host_ip[sip] = pixbuf
+                if isinstance(binding_disk_key, str) and binding_disk_key.strip():
+                    bk = binding_disk_key.strip()
+                    if bk.startswith(("http://", "https://")):
+                        self._persist_remote_icon_index_entry(sip, bk)
+            return pixbuf
+
+        if sip:
+            self._ensure_remote_icon_index()
+            entry = self._remote_icon_index.get(sip)
+            if isinstance(entry, dict):
+                sha = entry.get("payload_sha256")
+                if isinstance(sha, str) and len(sha) == 64:
+                    sl = sha.lower()
+                    if all(c in "0123456789abcdef" for c in sl):
+                        pl = self._remote_icon_disk_dir / f"{sl}.payload"
+                        if pl.is_file():
+                            pb = self._pixbuf_from_image_bytes(pl.read_bytes())
+                            if pb is not None:
+                                scaled = self._normalize_icon_pixbuf(pb, size)
+                                bind_key = entry.get("canonical_url")
+                                if not isinstance(bind_key, str) or not bind_key.strip():
+                                    bind_key = None
+                                return _register_hit(scaled, bind_key)
+
+        disk_keys = self._iter_remote_icon_disk_keys(device)
+
+        if not disk_keys:
             return self._remote_icon_by_endpoint.get(endpoint)
-        cached = self._remote_icon_cache.get(icon_url)
-        if cached is not None:
-            normalized_cached = self._normalize_icon_pixbuf(cached, size)
-            self._remote_icon_by_endpoint[endpoint] = normalized_cached
-            return normalized_cached
-        self._start_remote_icon_fetch(icon_url, endpoint, size)
+
+        for lk in disk_keys:
+            cached = self._remote_icon_cache.get(lk)
+            if cached is not None:
+                normalized = self._normalize_icon_pixbuf(cached, size)
+                pair = self._primary_remote_icon_fetch_pair(device)
+                if pair:
+                    self._remote_icon_cache.setdefault(pair[1], normalized)
+                return _register_hit(normalized, lk)
+
+        for lk in disk_keys:
+            disk_pixbuf = self._load_remote_icon_from_disk(lk, size)
+            if disk_pixbuf is not None:
+                self._remote_icon_cache[lk] = disk_pixbuf
+                pair = self._primary_remote_icon_fetch_pair(device)
+                if pair:
+                    self._remote_icon_cache.setdefault(pair[1], disk_pixbuf)
+                return _register_hit(disk_pixbuf, lk)
+
+        pair = self._primary_remote_icon_fetch_pair(device)
+        if pair is None:
+            return self._remote_icon_by_endpoint.get(endpoint)
+        fetch_url, cache_key = pair
+        self._start_remote_icon_fetch(fetch_url, cache_key, endpoint, size, sip=sip)
         return self._remote_icon_by_endpoint.get(endpoint)
 
-    def _start_remote_icon_fetch(self, icon_url: str, endpoint: tuple[str, int], size: int) -> None:
-        if icon_url in self._remote_icon_fetching:
+    def _remote_icon_fetch_pending(self, device: Device) -> bool:
+        pair = self._primary_remote_icon_fetch_pair(device)
+        if pair is None:
+            return False
+        _fetch_url, cache_key = pair
+        return cache_key in self._remote_icon_fetching
+
+    @staticmethod
+    def _remote_icon_digest(icon_url: str) -> str:
+        return hashlib.sha256(icon_url.encode("utf-8")).hexdigest()
+
+    def _remote_icon_disk_path_payload(self, icon_url: str) -> Path:
+        return self._remote_icon_disk_dir / f"{self._remote_icon_digest(icon_url)}.payload"
+
+    def _remote_icon_disk_path_legacy_png(self, icon_url: str) -> Path:
+        return self._remote_icon_disk_dir / f"{self._remote_icon_digest(icon_url)}.png"
+
+    @staticmethod
+    def _pixbuf_from_image_bytes(data: bytes) -> GdkPixbuf.Pixbuf | None:
+        try:
+            loader = GdkPixbuf.PixbufLoader()
+            loader.write(data)
+            loader.close()
+            return loader.get_pixbuf()
+        except Exception:
+            return None
+
+    def _load_remote_icon_from_disk(self, icon_url: str, size: int) -> GdkPixbuf.Pixbuf | None:
+        payload_path = self._remote_icon_disk_path_payload(icon_url)
+        if payload_path.is_file():
+            pixbuf = self._pixbuf_from_image_bytes(payload_path.read_bytes())
+            if pixbuf is not None:
+                return self._normalize_icon_pixbuf(pixbuf, size)
+            try:
+                payload_path.unlink()
+            except OSError:
+                pass
+        png_path = self._remote_icon_disk_path_legacy_png(icon_url)
+        if not png_path.is_file():
+            return None
+        try:
+            raw = GdkPixbuf.Pixbuf.new_from_file(str(png_path))
+        except Exception:
+            try:
+                png_path.unlink()
+            except OSError:
+                pass
+            return None
+        return self._normalize_icon_pixbuf(raw, size)
+
+    def _save_remote_icon_payload(self, icon_url: str, data: bytes) -> None:
+        if not data:
             return
-        self._remote_icon_fetching.add(icon_url)
+        path = self._remote_icon_disk_path_payload(icon_url)
+        tmp = path.with_name(path.name + ".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_bytes(data)
+            os.replace(tmp, path)
+        except Exception:
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+            except OSError:
+                pass
+
+    def _start_remote_icon_fetch(
+        self, fetch_url: str, cache_key: str, endpoint: tuple[str, int], size: int, sip: str = ""
+    ) -> None:
+        if cache_key in self._remote_icon_fetching:
+            return
+        self._remote_icon_fetching.add(cache_key)
 
         def _worker() -> None:
             try:
-                with urlopen(icon_url, timeout=1.5) as response:
+                with self._urlopen_remote_icon(fetch_url) as response:
                     data = response.read()
-                loader = GdkPixbuf.PixbufLoader()
-                loader.write(data)
-                loader.close()
-                pixbuf = loader.get_pixbuf()
+                self._save_remote_icon_payload(cache_key, data)
+                pixbuf = self._pixbuf_from_image_bytes(data)
                 if pixbuf is not None:
                     scaled = self._normalize_icon_pixbuf(pixbuf, size)
                     if scaled is not None:
-                        self._remote_icon_cache[icon_url] = scaled
-                        self._remote_icon_by_endpoint[endpoint] = scaled
+                        endpoint_c = (endpoint[0], int(endpoint[1]))
+                        ck = cache_key
+                        sip_bind = sip.strip()
                         from gi.repository import GLib
 
-                        GLib.idle_add(self._refresh_icons_after_async_fetch)
-            except Exception:
-                pass
+                        def _commit_fetch() -> bool:
+                            self._remote_icon_cache[ck] = scaled
+                            self._remote_icon_by_endpoint[endpoint_c] = scaled
+                            if sip_bind:
+                                self._remote_icon_by_host_ip[sip_bind] = scaled
+                                self._persist_remote_icon_index_entry(sip_bind, ck)
+                            self._rebuild_icon_sections(self._filtered_devices)
+                            return False
+
+                        GLib.idle_add(_commit_fetch)
+            except Exception as exc:
+                _logger.debug("Remote icon fetch failed url=%s: %s", fetch_url, exc)
             finally:
-                self._remote_icon_fetching.discard(icon_url)
+                self._remote_icon_fetching.discard(cache_key)
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1183,7 +1700,12 @@ class DeviceList(Gtk.Box):
 
             for key in bundle_keys:
                 host_to_bundle_id[key] = bundle_id
-        return [bundles_by_id[key] for key in order]
+        ordered = [bundles_by_id[key] for key in order]
+        for bundle in ordered:
+            # Prefer primary row IP:port for display and prefs (`ip:port` icon keys align with SSDP/http).
+            bundle.ip = bundle.primary.ip
+            bundle.port = int(bundle.primary.port)
+        return ordered
 
     def _device_host_bundle_keys(self, device: Device) -> list[str]:
         """Keys that may refer to the same physical host (cross-protocol merging).

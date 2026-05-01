@@ -30,6 +30,48 @@
       "default_port": 445,
       "info_url": null
     },
+    "_airplay._tcp": {
+      "label": "AirPlay Speaker",
+      "category": "Smart Speakers",
+      "icon": "smartspeaker.png",
+      "default_port": 4700,
+      "info_url": null
+    },
+    "_raop._tcp": {
+      "label": "AirPlay / RAOP",
+      "category": "Smart Speakers",
+      "icon": "smartspeaker.png",
+      "default_port": 7000,
+      "info_url": null
+    },
+    "_companion-link._tcp": {
+      "label": "Companion Link Speaker",
+      "category": "Smart Speakers",
+      "icon": "smartspeaker.png",
+      "default_port": 0,
+      "info_url": null
+    },
+    "_sonos._tcp": {
+      "label": "Sonos",
+      "category": "Smart Speakers",
+      "icon": "smartspeaker.png",
+      "default_port": 1443,
+      "info_url": null
+    },
+    "_spotify-connect._tcp": {
+      "label": "Spotify Connect",
+      "category": "Smart Speakers",
+      "icon": "smartspeaker.png",
+      "default_port": 0,
+      "info_url": null
+    },
+    "_googlecast._tcp": {
+      "label": "Google Cast",
+      "category": "Smart Speakers",
+      "icon": "smartspeaker.png",
+      "default_port": 8010,
+      "info_url": null
+    },
     "_http._tcp": {
       "label": "HTTP Device",
       "category": "Unknown Devices",

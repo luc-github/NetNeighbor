@@ -11,6 +11,7 @@ from gi.repository import Gdk, GLib, Gtk
 from discovery.manager import DiscoveryManager
 from ui.device_list import DeviceList
 from model.device import Device
+from utils.location_label import is_plausible_room_location
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 from utils.notifications import send_notification
 
@@ -33,6 +34,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._prefs = load_ui_preferences()
         self._notification_history: list[dict[str, str]] = []
         self._location_options: list[str] = []
+        self._defer_persist_cleaned_location_prefs = False
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         root.set_border_width(8)
@@ -163,6 +165,9 @@ class MainWindow(Gtk.ApplicationWindow):
         GLib.idle_add(self._start_discovery_protocols)
 
         self._initializing = False
+        if self._defer_persist_cleaned_location_prefs:
+            self._defer_persist_cleaned_location_prefs = False
+            self._persist_ui_preferences()
         self.connect("destroy", self._on_destroy)
         self.show_all()
 
@@ -467,7 +472,7 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         changed = False
         for value in discovered:
-            if value not in self._location_options:
+            if is_plausible_room_location(value) and value not in self._location_options:
                 self._location_options.append(value)
                 changed = True
         if not changed:
@@ -482,6 +487,15 @@ class MainWindow(Gtk.ApplicationWindow):
             xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
             txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
 
+            def txt_ci(txt: dict, keys: tuple[str, ...]) -> list[str]:
+                indexed = {str(k).lower(): v for k, v in txt.items() if isinstance(k, str)}
+                out: list[str] = []
+                for lk in keys:
+                    v = indexed.get(lk.lower())
+                    if isinstance(v, str) and v.strip() and v.strip() not in out:
+                        out.append(v.strip())
+                return out
+
             candidates = [
                 xml_fields.get("RoomName"),
                 xml_fields.get("roomName"),
@@ -491,11 +505,22 @@ class MainWindow(Gtk.ApplicationWindow):
                 txt_fields.get("room_name"),
                 txt_fields.get("room"),
             ]
+            candidates.extend(
+                txt_ci(
+                    txt_fields,
+                    ("location", "locationname", "location_name", "zonename", "zone_name"),
+                )
+            )
+            for svc in metadata.get("services") if isinstance(metadata.get("services"), list) else []:
+                if not isinstance(svc, dict):
+                    continue
+                stxt = svc.get("txt") if isinstance(svc.get("txt"), dict) else {}
+                candidates.extend(txt_ci(stxt, ("location", "room_name", "room", "zonename")))
             for raw in candidates:
                 if not isinstance(raw, str):
                     continue
                 value = raw.strip()
-                if value and value not in names:
+                if value and is_plausible_room_location(value) and value not in names:
                     names.append(value)
         return names
 
@@ -661,7 +686,10 @@ class MainWindow(Gtk.ApplicationWindow):
             self._device_list.set_custom_icon_overrides(custom_icon_overrides)
         location_options = self._prefs.get("location_options")
         if isinstance(location_options, list):
-            self._location_options = [str(v).strip() for v in location_options if isinstance(v, str) and str(v).strip()]
+            raw_opts = [str(v).strip() for v in location_options if isinstance(v, str) and str(v).strip()]
+            self._location_options = [v for v in raw_opts if is_plausible_room_location(v)]
+            if raw_opts != self._location_options:
+                self._defer_persist_cleaned_location_prefs = True
         if not self._location_options:
             self._location_options = list(_DEFAULT_LOCATION_OPTIONS)
         self._device_list.set_location_options(self._location_options)
@@ -674,7 +702,22 @@ class MainWindow(Gtk.ApplicationWindow):
             self._manager.set_name_overrides(name_overrides)
         location_overrides = self._prefs.get("location_overrides")
         if isinstance(location_overrides, dict):
-            self._manager.set_location_overrides(location_overrides)
+            if any(
+                isinstance(v, str)
+                and str(v).strip()
+                and not is_plausible_room_location(str(v).strip())
+                for v in location_overrides.values()
+            ):
+                self._defer_persist_cleaned_location_prefs = True
+            cleaned_overrides = {
+                str(k): str(v).strip()
+                for k, v in location_overrides.items()
+                if isinstance(k, str)
+                and isinstance(v, str)
+                and str(v).strip()
+                and is_plausible_room_location(str(v).strip())
+            }
+            self._manager.set_location_overrides(cleaned_overrides)
         monitored_overrides = self._prefs.get("monitored_overrides")
         if isinstance(monitored_overrides, dict):
             self._manager.set_monitored_overrides(monitored_overrides)
