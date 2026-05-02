@@ -25,6 +25,22 @@ Important scope note:
 - NetNeighbor listens to discovery announcements.
 - It does not run a full active network scan.
 
+### Autodetection is heuristic
+
+Classification and friendly names are inferred from **SSDP**, **mDNS**, and **cached** SSDP/XML data.
+That logic is tuned from real LAN behaviour; it will not always match every device or firmware. Treat
+auto-detected **type** and **name** as best-effort hints.
+
+When something is wrong, you have two complementary mechanisms:
+
+1. **Overrides (per device)** — via the context menu / details flow: **type**, **display name**,
+   **location**, and **icon** can be set explicitly. These preferences override discovery for that device
+   and are meant for quick, precise fixes on your network.
+
+2. **User rules** — optional JSON overlays in `~/.config/netneighbor/` extend or adjust **mDNS** and
+   **SSDP** matching (see developer docs [`COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md)). Rules
+   that work well across setups can be proposed as **bundled app rules** so they become generic defaults.
+
 ## SSDP section
 
 ### What SSDP means in NetNeighbor
@@ -77,5 +93,6 @@ If a device appears/disappears:
 
 ## Current limits
 
-- this user doc remains SSDP-focused for now (mDNS behavior exists in app but is not yet documented here)
+- SSDP is documented in depth below; mDNS behaviour exists in the app — see developer docs
+  [`docs/MDNS_INTEGRATION.md`](docs/MDNS_INTEGRATION.md) for mechanics.
 - packaging/distribution mode is still under decision

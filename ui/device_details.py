@@ -8,7 +8,7 @@ import subprocess
 from typing import Any
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, GdkPixbuf, Gtk, Pango
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 
 _LOG = logging.getLogger(__name__)
 
@@ -34,6 +34,10 @@ class DeviceDetailsDialog(Gtk.Dialog):
         initial_tab: str | None = None,
         has_device_icon_source: bool = True,
         provided_icon_display: str | None = None,
+        details_field_rule_map: dict[str, str] | None = None,
+        active_field_rules: dict[str, list[str]] | None = None,
+        on_add_field_rule: Callable[[str, str], None] | None = None,
+        on_remove_field_rule: Callable[[str, str | None], None] | None = None,
     ) -> None:
         super().__init__(title=title, transient_for=parent, modal=True)
         fields = self._filter_unavailable_pairs(fields)
@@ -67,6 +71,10 @@ class DeviceDetailsDialog(Gtk.Dialog):
         self._suppress_icon_mode_events = False
         disp = (provided_icon_display or "").strip()
         self._provided_icon_display: str | None = disp or None
+        self._details_field_rule_map = details_field_rule_map if isinstance(details_field_rule_map, dict) else {}
+        self._active_field_rules = active_field_rules if isinstance(active_field_rules, dict) else {}
+        self._on_add_field_rule = on_add_field_rule
+        self._on_remove_field_rule = on_remove_field_rule
 
         area = self.get_content_area()
         area.set_spacing(8)
@@ -76,7 +84,19 @@ class DeviceDetailsDialog(Gtk.Dialog):
         notebook.set_hexpand(True)
         notebook.set_vexpand(True)
         area.add(notebook)
+        self._notebook = notebook
+        self._rules_box: Gtk.Widget | None = None
+        self._rules_tab_label: Gtk.Widget | None = None
+        self._feedback_timer_id: int | None = None
+        self._feedback_revealer = Gtk.Revealer()
+        self._feedback_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self._feedback_revealer.set_reveal_child(False)
+        self._feedback_label = Gtk.Label(label="", xalign=0.0)
+        self._feedback_label.get_style_context().add_class("dim-label")
+        self._feedback_revealer.add(self._feedback_label)
+        area.pack_start(self._feedback_revealer, False, False, 0)
         appearance_page_index: int | None = None
+        rules_page_index: int | None = None
 
         details_grid = Gtk.Grid(column_spacing=16, row_spacing=8)
         details_grid.set_margin_start(12)
@@ -89,7 +109,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
             key_label.get_style_context().add_class("dim-label")
             key_label.set_halign(Gtk.Align.START)
             details_grid.attach(key_label, 0, row, 1, 1)
-            details_grid.attach(self._create_value_widget(value), 1, row, 1, 1)
+            details_grid.attach(self._create_value_widget(value, self._details_field_rule_map.get(key)), 1, row, 1, 1)
             row += 1
         details_scroll = Gtk.ScrolledWindow()
         details_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
@@ -97,6 +117,48 @@ class DeviceDetailsDialog(Gtk.Dialog):
         details_scroll.set_vexpand(True)
         details_scroll.add(details_grid)
         notebook.append_page(details_scroll, Gtk.Label(label=_("Device details")))
+
+        if self._on_remove_field_rule is not None or self._on_add_field_rule is not None:
+            rules_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            rules_box.set_margin_start(8)
+            rules_box.set_margin_end(8)
+            rules_box.set_margin_top(8)
+            rules_box.set_margin_bottom(8)
+            header = Gtk.Label(
+                label=_("Per-device field mapping rules. Select rows and remove if needed."),
+                xalign=0.0,
+            )
+            header.set_line_wrap(True)
+            rules_box.pack_start(header, False, False, 0)
+
+            self._rules_store = Gtk.ListStore(bool, str, str, str)
+            self._rules_tree = Gtk.TreeView(model=self._rules_store)
+            toggle = Gtk.CellRendererToggle()
+            toggle.connect("toggled", self._on_rules_row_toggled)
+            self._rules_tree.append_column(Gtk.TreeViewColumn(_("Select"), toggle, active=0))
+            self._rules_tree.append_column(Gtk.TreeViewColumn(_("Target"), Gtk.CellRendererText(), text=1))
+            self._rules_tree.append_column(Gtk.TreeViewColumn(_("Source field"), Gtk.CellRendererText(), text=2))
+            rules_scroll = Gtk.ScrolledWindow()
+            rules_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            rules_scroll.set_hexpand(True)
+            rules_scroll.set_vexpand(True)
+            rules_scroll.add(self._rules_tree)
+            rules_box.pack_start(rules_scroll, True, True, 0)
+
+            controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            remove_selected = Gtk.Button.new_with_label(_("Remove selected"))
+            remove_selected.connect("clicked", self._on_remove_selected_rules_clicked)
+            controls.pack_start(remove_selected, False, False, 0)
+            remove_all = Gtk.Button.new_with_label(_("Remove all"))
+            remove_all.connect("clicked", self._on_remove_all_rules_clicked)
+            controls.pack_start(remove_all, False, False, 0)
+            rules_box.pack_start(controls, False, False, 0)
+
+            self._rules_box = rules_box
+            self._rules_tab_label = Gtk.Label(label=_("Rules"))
+            self._refresh_rules_store()
+            if self._has_any_rules():
+                rules_page_index = notebook.append_page(rules_box, self._rules_tab_label)
 
         if mdns_service_sections_list:
             notebook.append_page(
@@ -227,18 +289,23 @@ class DeviceDetailsDialog(Gtk.Dialog):
             self._select_custom_icon(selected_icon_id)
             self._icon_mode_system_item.connect("toggled", self._on_icon_mode_toggled, "system")
             self._icon_mode_provided_item.connect("toggled", self._on_icon_mode_toggled, "provided")
-            self._icon_mode_custom_item.connect("clicked", self._on_custom_mode_clicked)
+            self._icon_mode_custom_item.connect("toggled", self._on_custom_mode_toggled)
             appearance_page_index = notebook.append_page(appearance_box, Gtk.Label(label=_("Appearance")))
         self.connect("response", self._on_response)
         self.show_all()
         if self._initial_tab == "appearance" and appearance_page_index is not None:
             notebook.set_current_page(appearance_page_index)
+        if self._initial_tab == "rules" and rules_page_index is not None:
+            notebook.set_current_page(rules_page_index)
 
     def _on_close_clicked(self, _button: Gtk.Button) -> None:
         _LOG.debug("Device details dialog close button clicked")
 
     def _on_response(self, _dialog: Gtk.Dialog, response_id: int) -> None:
         _LOG.debug("Device details dialog response=%s", response_id)
+        if self._feedback_timer_id is not None:
+            GLib.source_remove(self._feedback_timer_id)
+            self._feedback_timer_id = None
         return
 
     def _on_raw_copy_clicked(self, _button: Gtk.Button) -> None:
@@ -302,13 +369,11 @@ class DeviceDetailsDialog(Gtk.Dialog):
         self._last_icon_mode = mode
         self._refresh_icon_detail_line()
 
-    def _on_custom_mode_clicked(self, button: Gtk.RadioButton) -> None:
+    def _on_custom_mode_toggled(self, button: Gtk.RadioButton) -> None:
         if self._on_apply_icon_settings is None or self._suppress_icon_mode_events:
             return
         if not button.get_active():
-            self._suppress_icon_mode_events = True
-            button.set_active(True)
-            self._suppress_icon_mode_events = False
+            return
         selected_id = self._open_icon_picker_dialog()
         if not selected_id:
             self._restore_previous_icon_mode()
@@ -378,6 +443,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
             if getattr(child, "icon_id", None) == self._selected_icon_id:
                 flow.select_child(child)
                 break
+        flow.connect("child-activated", self._on_icon_picker_child_activated, dialog)
 
         response = dialog.run()
         selected_result = None
@@ -390,6 +456,9 @@ class DeviceDetailsDialog(Gtk.Dialog):
         dialog.destroy()
         return selected_result
 
+    def _on_icon_picker_child_activated(self, _flow: Gtk.FlowBox, _child: Gtk.FlowBoxChild, dialog: Gtk.Dialog) -> None:
+        dialog.response(Gtk.ResponseType.OK)
+
     def _on_open_custom_icons_folder_clicked(self, _button: Gtk.Button) -> None:
         folder = self._custom_icons_dir
         if not folder:
@@ -401,17 +470,189 @@ class DeviceDetailsDialog(Gtk.Dialog):
         except Exception:
             _LOG.debug("Failed to open custom icons folder: %s", folder, exc_info=True)
 
-    def _create_value_widget(self, value: str) -> Gtk.Widget:
+    def _create_value_widget(self, value: str, field_path: str | None = None) -> Gtk.Widget:
         text = value.strip() if isinstance(value, str) else str(value)
+        popup_handler = None
+        if isinstance(field_path, str) and field_path.strip():
+            path_norm = field_path.strip()
+
+            def _on_popup(widget, event) -> bool:
+                if event.type != Gdk.EventType.BUTTON_PRESS or event.button != 3:
+                    return False
+                self._show_field_rule_menu(path_norm, event.button, event.time)
+                return True
+
+            popup_handler = _on_popup
         if text.startswith("http://") or text.startswith("https://"):
             link = Gtk.LinkButton.new_with_label(text, text)
             link.set_halign(Gtk.Align.START)
+            if popup_handler is not None:
+                link.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+                link.connect("button-press-event", popup_handler)
             return link
         label = Gtk.Label(label=text, xalign=0.0)
         label.set_selectable(True)
         label.set_line_wrap(True)
         label.set_halign(Gtk.Align.START)
+        if popup_handler is not None:
+            label.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+            label.connect("button-press-event", popup_handler)
         return label
+
+    def _field_rule_is_active(self, target: str, field_path: str) -> bool:
+        bucket = self._active_field_rules.get(target)
+        return isinstance(bucket, list) and field_path in bucket
+
+    def _show_field_rule_menu(self, field_path: str, button: int, event_time: int) -> None:
+        if self._on_add_field_rule is None and self._on_remove_field_rule is None:
+            return
+        menu = Gtk.Menu()
+        labels = {
+            "name": _("Friendly name"),
+            "location": _("Location"),
+            "information": _("Information"),
+        }
+        for target in ("name", "location", "information"):
+            active = self._field_rule_is_active(target, field_path)
+            if self._on_add_field_rule is not None:
+                add_item = Gtk.MenuItem.new_with_label(_("Use as {target}").format(target=labels[target]))
+                add_item.set_sensitive(not active)
+                add_item.connect("activate", self._on_field_rule_add_activate, target, field_path)
+                menu.append(add_item)
+            if self._on_remove_field_rule is not None and active:
+                remove_item = Gtk.MenuItem.new_with_label(_("Remove {target} rule").format(target=labels[target]))
+                remove_item.connect("activate", self._on_field_rule_remove_activate, target, field_path)
+                menu.append(remove_item)
+        menu.show_all()
+        menu.popup(None, None, None, None, button, event_time)
+
+    def _on_field_rule_add_activate(self, _item: Gtk.MenuItem, target: str, field_path: str) -> None:
+        if self._on_add_field_rule is None:
+            return
+        self._on_add_field_rule(target, field_path)
+        bucket = self._active_field_rules.get(target)
+        if not isinstance(bucket, list):
+            bucket = []
+        if field_path not in bucket:
+            bucket.append(field_path)
+        self._active_field_rules[target] = bucket
+        self._refresh_rules_store()
+        self._show_feedback_message(_("Rule saved"))
+
+    def _on_field_rule_remove_activate(self, _item: Gtk.MenuItem, target: str, field_path: str) -> None:
+        if self._on_remove_field_rule is None:
+            return
+        self._on_remove_field_rule(target, field_path)
+        bucket = self._active_field_rules.get(target)
+        if isinstance(bucket, list):
+            self._active_field_rules[target] = [x for x in bucket if x != field_path]
+        self._refresh_rules_store()
+        self._show_feedback_message(_("Rule removed"))
+
+    def _refresh_rules_store(self) -> None:
+        if not hasattr(self, "_rules_store"):
+            return
+        self._rules_store.clear()
+        for target in ("name", "location", "information"):
+            bucket = self._active_field_rules.get(target)
+            if not isinstance(bucket, list):
+                continue
+            for field_path in bucket:
+                if isinstance(field_path, str) and field_path.strip():
+                    raw = field_path.strip()
+                    self._rules_store.append([False, target, self._pretty_field_path(raw), raw])
+        self._sync_rules_tab_visibility()
+
+    def _on_rules_row_toggled(self, _renderer: Gtk.CellRendererToggle, path_str: str) -> None:
+        if not hasattr(self, "_rules_store"):
+            return
+        path = Gtk.TreePath.new_from_string(path_str)
+        tree_iter = self._rules_store.get_iter(path)
+        current = bool(self._rules_store.get_value(tree_iter, 0))
+        self._rules_store.set_value(tree_iter, 0, not current)
+
+    def _on_remove_selected_rules_clicked(self, _button: Gtk.Button) -> None:
+        if self._on_remove_field_rule is None or not hasattr(self, "_rules_store"):
+            return
+        to_remove: list[tuple[str, str]] = []
+        tree_iter = self._rules_store.get_iter_first()
+        while tree_iter is not None:
+            selected = bool(self._rules_store.get_value(tree_iter, 0))
+            if selected:
+                target = str(self._rules_store.get_value(tree_iter, 1))
+                field_path = str(self._rules_store.get_value(tree_iter, 3))
+                to_remove.append((target, field_path))
+            tree_iter = self._rules_store.iter_next(tree_iter)
+        if not to_remove:
+            return
+        for target, field_path in to_remove:
+            self._on_remove_field_rule(target, field_path)
+            bucket = self._active_field_rules.get(target)
+            if isinstance(bucket, list):
+                self._active_field_rules[target] = [x for x in bucket if x != field_path]
+        self._refresh_rules_store()
+        self._show_feedback_message(_("Selected rules removed"))
+
+    def _on_remove_all_rules_clicked(self, _button: Gtk.Button) -> None:
+        if self._on_remove_field_rule is None:
+            return
+        for target in ("name", "location", "information"):
+            bucket = self._active_field_rules.get(target)
+            if not isinstance(bucket, list) or not bucket:
+                continue
+            self._on_remove_field_rule(target, None)
+            self._active_field_rules[target] = []
+        self._refresh_rules_store()
+        self._show_feedback_message(_("All rules removed"))
+
+    def _has_any_rules(self) -> bool:
+        for target in ("name", "location", "information"):
+            bucket = self._active_field_rules.get(target)
+            if isinstance(bucket, list) and any(isinstance(v, str) and v.strip() for v in bucket):
+                return True
+        return False
+
+    def _sync_rules_tab_visibility(self) -> None:
+        if not hasattr(self, "_notebook"):
+            return
+        if self._rules_box is None or self._rules_tab_label is None:
+            return
+        page_idx = self._notebook.page_num(self._rules_box)
+        if self._has_any_rules():
+            if page_idx < 0:
+                self._notebook.append_page(self._rules_box, self._rules_tab_label)
+        elif page_idx >= 0:
+            self._notebook.remove_page(page_idx)
+
+    def _show_feedback_message(self, message: str) -> None:
+        if not isinstance(message, str) or not message.strip():
+            return
+        if self._feedback_timer_id is not None:
+            GLib.source_remove(self._feedback_timer_id)
+            self._feedback_timer_id = None
+        self._feedback_label.set_text(message.strip())
+        self._feedback_revealer.set_reveal_child(True)
+
+        def _hide_feedback() -> bool:
+            self._feedback_revealer.set_reveal_child(False)
+            self._feedback_timer_id = None
+            return False
+
+        self._feedback_timer_id = GLib.timeout_add(1800, _hide_feedback)
+
+    def _pretty_field_path(self, raw: str) -> str:
+        text = str(raw).strip()
+        if ":" not in text:
+            return text
+        prefix, rest = text.split(":", 1)
+        key = rest.strip()
+        if prefix == "txt":
+            return f"mDNS TXT: {key}"
+        if prefix == "xml":
+            return f"SSDP XML: {key}"
+        if prefix == "meta":
+            return f"Metadata: {key}"
+        return text
 
     def _filter_mdns_txt_pairs(self, pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
         """Drop unusable decoded rows while keeping TXT flags (empty value ok)."""
@@ -520,6 +761,8 @@ class DeviceDetailsDialog(Gtk.Dialog):
                 txt_tree = Gtk.TreeView(model=txt_store)
                 txt_tree.append_column(Gtk.TreeViewColumn(_("Name"), Gtk.CellRendererText(), text=0))
                 txt_tree.append_column(Gtk.TreeViewColumn(_("Value"), Gtk.CellRendererText(), text=1))
+                txt_tree.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+                txt_tree.connect("button-press-event", self._on_mdns_txt_tree_button_press)
                 # No nested ScrolledWindow: full TXT height so only the tab's outer scrollbar scrolls.
                 row_h = 26
                 tree_h = len(filtered) * row_h + 40
@@ -544,6 +787,25 @@ class DeviceDetailsDialog(Gtk.Dialog):
 
         outer_scroll.add(vbox)
         return outer_scroll
+
+    def _on_mdns_txt_tree_button_press(self, tree: Gtk.TreeView, event) -> bool:
+        if event.type != Gdk.EventType.BUTTON_PRESS or event.button != 3:
+            return False
+        if self._on_add_field_rule is None and self._on_remove_field_rule is None:
+            return False
+        hit = tree.get_path_at_pos(int(event.x), int(event.y))
+        if hit is None:
+            return False
+        path, _col, _cx, _cy = hit
+        tree.grab_focus()
+        tree.set_cursor(path, None, False)
+        model = tree.get_model()
+        tree_iter = model.get_iter(path)
+        key = model.get_value(tree_iter, 0)
+        if not isinstance(key, str) or not key.strip():
+            return False
+        self._show_field_rule_menu(f"txt:{key.strip()}", event.button, event.time)
+        return True
 
     def _filter_unavailable_pairs(self, records: list[tuple[str, str]] | None) -> list[tuple[str, str]]:
         if not records:

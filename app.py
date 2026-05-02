@@ -16,6 +16,7 @@ from gi.repository import GLib, Gtk
 
 from discovery.manager import DiscoveryManager
 from i18n import setup_i18n
+from utils.discovery_config import load_discovery_protocol_config, normalize_information_precedence_list
 from ui.icons import resolve_app_icon_path
 from ui.main_window import MainWindow
 
@@ -147,7 +148,42 @@ class NetNeighborApplication(Gtk.Application):
         self._app_id = "io.esp3d.netneighbor"
         setup_i18n()
         super().__init__(application_id=self._app_id)
-        self._manager = DiscoveryManager()
+        proto_cfg = load_discovery_protocol_config()
+        mdns_cfg = proto_cfg.get("mdns")
+        ssdp_cfg = proto_cfg.get("ssdp")
+        if not isinstance(mdns_cfg, dict):
+            mdns_cfg = {}
+        if not isinstance(ssdp_cfg, dict):
+            ssdp_cfg = {}
+        mdns_q = mdns_cfg.get("query") if isinstance(mdns_cfg.get("query"), dict) else {}
+        ssdp_q = ssdp_cfg.get("query") if isinstance(ssdp_cfg.get("query"), dict) else {}
+        merge_cfg = proto_cfg.get("merge") if isinstance(proto_cfg.get("merge"), dict) else {}
+        protocol_order = merge_cfg.get("protocol_order")
+        order_list: list[str] | None = None
+        if isinstance(protocol_order, list) and protocol_order:
+            order_list = [str(x).strip().lower() for x in protocol_order if isinstance(x, str) and str(x).strip()]
+            order_list = list(dict.fromkeys(order_list))
+        ipc = merge_cfg.get("information_precedence")
+        information_precedence = normalize_information_precedence_list(ipc if isinstance(ipc, list) else None)
+        self._manager = DiscoveryManager(
+            enable_ssdp=bool(ssdp_cfg.get("enabled", True)),
+            enable_mdns=bool(mdns_cfg.get("enabled", True)),
+            enable_ssdp_rules=bool(ssdp_cfg.get("rules", True)),
+            enable_mdns_rules=bool(mdns_cfg.get("rules", True)),
+            ssdp_query_interval_seconds=ssdp_q.get("interval_seconds"),
+            ssdp_mx_seconds=ssdp_q.get("mx_seconds"),
+            ssdp_descriptor_http_min_interval_seconds=ssdp_q.get("descriptor_http_min_interval_seconds"),
+            mdns_enumeration_timeout_seconds=mdns_q.get("enumeration_timeout_seconds"),
+            mdns_enumeration_interval_seconds=mdns_q.get("enumeration_interval_seconds"),
+            mdns_service_info_timeout_ms=mdns_q.get("service_info_timeout_ms"),
+            protocol_merge_order=order_list,
+            information_precedence=information_precedence,
+        )
+        startup_refresh_seconds = proto_cfg.get("startup_refresh_seconds")
+        if not isinstance(startup_refresh_seconds, list) or not startup_refresh_seconds:
+            startup_refresh_seconds = [20, 45, 90]
+        self._startup_refresh_seconds = [int(v) for v in startup_refresh_seconds]
+        self._information_precedence = information_precedence
         self._window: MainWindow | None = None
         self._instance_lock = SingleInstanceLock(self._app_id)
         self._activation_server = InstanceActivationServer(self._app_id, self._present_window)
@@ -155,7 +191,12 @@ class NetNeighborApplication(Gtk.Application):
 
     def do_activate(self) -> None:
         if self._window is None:
-            self._window = MainWindow(application=self, discovery_manager=self._manager)
+            self._window = MainWindow(
+                application=self,
+                discovery_manager=self._manager,
+                startup_refresh_seconds=self._startup_refresh_seconds,
+                information_precedence=self._information_precedence,
+            )
         self._present_window()
 
     def _present_window(self) -> bool:

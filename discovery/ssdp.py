@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import ipaddress
 import json
 import logging
 from pathlib import Path
@@ -15,6 +16,7 @@ from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
 from discovery.base import BaseDiscovery
+from utils.discovery_cache import load_discovery_cache, save_discovery_cache
 from utils.user_config_overlay import merge_ssdp_rules_overlays
 
 _SSDP_ADDR = ("239.255.255.250", 1900)
@@ -24,12 +26,51 @@ _MAX_TIMEOUT_SECONDS = 3600
 _RULES_PATH = Path(__file__).resolve().parent.parent / "config" / "ssdp_rules.json"
 _RX_FRAME_DELIMITER = ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
 _TX_FRAME_DELIMITER = "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+_XML_CACHE_MEMORY_TTL_SECONDS = 60
+_XML_CACHE_DISK_TTL_SECONDS = 1800
+_PROFILE_CACHE_DISK_TTL_SECONDS = 86400
+_CACHE_FLUSH_INTERVAL_SECONDS = 3.0
+
+
+def _descriptor_xml_host_key(location: str) -> str:
+    """Group descriptor HTTP traffic by remote host: canonical IP literal or lowercase hostname.
+
+    All XML GETs whose LOCATION URL resolves to the same IP share one min-interval bucket.
+    """
+    p = urlparse((location or "").strip())
+    raw = (p.hostname or "").strip()
+    if not raw:
+        return ""
+    inner = raw[1:-1] if raw.startswith("[") and raw.endswith("]") else raw
+    try:
+        addr = ipaddress.ip_address(inner)
+        return addr.compressed
+    except ValueError:
+        return raw.lower()
 
 
 class SSDPDiscovery(BaseDiscovery):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        rules_enabled: bool = True,
+        query_interval_seconds: int | None = None,
+        mx_seconds: int | None = None,
+        descriptor_http_min_interval_seconds: float | None = None,
+    ) -> None:
         super().__init__(source="ssdp")
         self._logger = logging.getLogger(__name__)
+        self._rules_enabled = bool(rules_enabled)
+        self._refresh_interval_seconds = (
+            int(query_interval_seconds) if query_interval_seconds is not None else _REFRESH_INTERVAL_SECONDS
+        )
+        mx = int(mx_seconds) if mx_seconds is not None else 5
+        self._mx_seconds = max(5, min(6, mx))
+        if descriptor_http_min_interval_seconds is None:
+            self._descriptor_http_min_interval = 5.0
+        else:
+            self._descriptor_http_min_interval = max(0.0, float(descriptor_http_min_interval_seconds))
+        self._last_descriptor_http_mono: dict[str, float] = {}
+        self._xml_fetch_gate = threading.Lock()
         self._rules = self._load_rules()
         self._running = False
         self._socket: socket.socket | None = None
@@ -38,7 +79,11 @@ class SSDPDiscovery(BaseDiscovery):
         self._refresh_thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._seen_devices: dict[str, tuple[datetime, int, dict]] = {}
-        self._xml_cache: dict[str, tuple[datetime, dict[str, str], str | None]] = {}
+        self._xml_cache: dict[str, tuple[datetime, dict, str | None]] = {}
+        self._xml_disk_cache: dict[str, tuple[datetime, dict, str | None]] = self._load_persistent_xml_cache()
+        self._profile_disk_cache: dict[str, tuple[datetime, dict]] = self._load_persistent_profile_cache()
+        self._cache_dirty = False
+        self._last_cache_flush_monotonic = 0.0
         self._stop_event = threading.Event()
 
     def start(self) -> None:
@@ -74,6 +119,7 @@ class SSDPDiscovery(BaseDiscovery):
             self._gc_thread.join(timeout=0.25)
         if self._refresh_thread is not None:
             self._refresh_thread.join(timeout=0.25)
+        self._flush_persistent_caches_if_due(force=True)
         self._logger.info("SSDP discovery stopped")
 
     def refresh(self) -> None:
@@ -88,7 +134,7 @@ class SSDPDiscovery(BaseDiscovery):
                 "M-SEARCH * HTTP/1.1\r\n"
                 "HOST: 239.255.255.250:1900\r\n"
                 "MAN: \"ssdp:discover\"\r\n"
-                "MX: 2\r\n"
+                f"MX: {self._mx_seconds}\r\n"
                 f"ST: {st}\r\n"
                 "\r\n"
             ).encode("utf-8")
@@ -183,11 +229,12 @@ class SSDPDiscovery(BaseDiscovery):
 
     def _refresh_loop(self) -> None:
         while self._running:
-            if self._stop_event.wait(timeout=_REFRESH_INTERVAL_SECONDS):
+            if self._stop_event.wait(timeout=self._refresh_interval_seconds):
                 break
             if not self._running:
                 break
             self._logger.debug("Periodic SSDP refresh tick")
+            self._flush_persistent_caches_if_due()
             self.refresh()
 
     def _gc_loop(self) -> None:
@@ -234,30 +281,50 @@ class SSDPDiscovery(BaseDiscovery):
         nt = headers.get("NT")
         server = headers.get("SERVER", "")
         usn = headers.get("USN", "")
+        profile_key = self._profile_key_from_headers(headers, ip)
+        profile = self._best_profile_for_headers(headers, ip)
         name = self._infer_name(server=server, st=st, ip=ip)
         device_type = self._infer_type(st, usn=usn, server=server, model_name=None, manufacturer=None)
+        if profile is not None:
+            _seen_at, prof = profile
+            prof_name = prof.get("name")
+            prof_type = prof.get("type")
+            if isinstance(prof_name, str) and prof_name.strip():
+                name = prof_name.strip()
+            if isinstance(prof_type, str) and prof_type.strip():
+                device_type = prof_type.strip()
         xml_fields, raw_xml = self._fetch_and_parse_xml(location)
+        if not xml_fields and profile is not None:
+            _seen_at, prof = profile
+            prof_xml = prof.get("xml_fields")
+            prof_raw = prof.get("raw_xml")
+            if isinstance(prof_xml, dict):
+                xml_fields = dict(prof_xml)
+            if not raw_xml and isinstance(prof_raw, str) and prof_raw.strip():
+                raw_xml = prof_raw
         if xml_fields.get("friendlyName"):
             name = xml_fields["friendlyName"]
         elif xml_fields.get("displayName"):
             name = xml_fields["displayName"]
-        if xml_fields.get("deviceType"):
-            device_type = self._infer_type(
-                xml_fields["deviceType"],
-                usn=usn,
-                server=server,
-                model_name=xml_fields.get("modelName"),
-                manufacturer=xml_fields.get("manufacturer"),
-            )
+        type_seed = xml_fields.get("deviceType") or st
+        device_type = self._infer_type(
+            type_seed,
+            usn=usn,
+            server=server,
+            model_name=xml_fields.get("modelName"),
+            manufacturer=xml_fields.get("manufacturer"),
+            model_type=xml_fields.get("modelType"),
+        )
         info_text = self._build_information_text(xml_fields)
         if info_text:
             self._logger.debug("SSDP info extracted for %s:%s -> %s", ip, port, info_text)
-        rule_name = self._apply_name_rules(xml_fields)
-        if rule_name:
-            name = rule_name
-        rule_type = self._apply_type_rules(headers=headers, xml_fields=xml_fields)
-        if rule_type:
-            device_type = rule_type
+        if self._rules_enabled:
+            rule_name = self._apply_name_rules(xml_fields)
+            if rule_name:
+                name = rule_name
+            rule_type = self._apply_type_rules(headers=headers, xml_fields=xml_fields)
+            if rule_type:
+                device_type = rule_type
         presentation_url = xml_fields.get("presentationURL")
         services_description = self._build_services_description(xml_fields)
         payload = {
@@ -285,6 +352,7 @@ class SSDPDiscovery(BaseDiscovery):
                     "manufacturer": xml_fields.get("manufacturer"),
                     "manufacturerURL": xml_fields.get("manufacturerURL"),
                     "modelName": xml_fields.get("modelName"),
+                    "modelType": xml_fields.get("modelType"),
                     "displayName": xml_fields.get("displayName"),
                     "roomName": xml_fields.get("roomName"),
                     "modelURL": xml_fields.get("modelURL"),
@@ -301,6 +369,7 @@ class SSDPDiscovery(BaseDiscovery):
             },
             "online": True,
         }
+        self._persist_profile_cache_entries(headers, ip, payload)
         self._logger.info(
             "SSDP device detected: %s %s:%s type=%s category=%s st=%s nt=%s",
             payload["name"],
@@ -392,7 +461,10 @@ class SSDPDiscovery(BaseDiscovery):
         server: str = "",
         model_name: str | None = None,
         manufacturer: str | None = None,
+        model_type: str | None = None,
     ) -> str:
+        if (model_type or "").strip().lower() == "nas":
+            return "nas"
         st_l = st.lower()
         usn_l = usn.lower()
         server_l = server.lower()
@@ -437,6 +509,7 @@ class SSDPDiscovery(BaseDiscovery):
             "mediaserver": "Media Servers",
             "printer": "Printers",
             "networkprinter": "Printers",
+            "multifunction_printer": "Printers",
             "smartspeaker": "Smart Speakers",
             "smarttv": "Smart TVs",
             "smartdevice": "Smart Devices",
@@ -477,50 +550,331 @@ class SSDPDiscovery(BaseDiscovery):
         port = int(payload.get("port", 0))
         return f"ssdp:endpoint:{ip}:{port}"
 
-    def _fetch_and_parse_xml(self, location: str | None) -> tuple[dict[str, str], str | None]:
+    def _profile_key_from_headers(self, headers: dict[str, str], fallback_ip: str) -> str:
+        usn = headers.get("USN", "")
+        if isinstance(usn, str) and usn.strip():
+            usn_base = usn.strip().lower().split("::", 1)[0]
+            if usn_base:
+                return f"ssdp:usn:{usn_base}"
+        location = headers.get("LOCATION")
+        parsed = urlparse(location) if location else None
+        ip = parsed.hostname if parsed and parsed.hostname else fallback_ip
+        return f"ssdp:host:{str(ip).strip().lower()}"
+
+    def _profile_candidate_keys(self, headers: dict[str, str], fallback_ip: str) -> list[str]:
+        keys: list[str] = []
+        seen: set[str] = set()
+
+        def add(key: str) -> None:
+            k = str(key).strip().lower()
+            if not k or k in seen:
+                return
+            seen.add(k)
+            keys.append(k)
+
+        usn = headers.get("USN", "")
+        if isinstance(usn, str) and usn.strip():
+            usn_full = usn.strip().lower()
+            add(f"ssdp:usn:{usn_full}")
+            add(f"ssdp:usn:{usn_full.split('::', 1)[0]}")
+
+        location = headers.get("LOCATION")
+        parsed = urlparse(location) if location else None
+        ip = parsed.hostname if parsed and parsed.hostname else fallback_ip
+        ip_s = str(ip).strip().lower()
+        if ip_s:
+            add(f"ssdp:host:{ip_s}")
+        return keys
+
+    def _best_profile_for_headers(self, headers: dict[str, str], fallback_ip: str) -> tuple[datetime, dict] | None:
+        best: tuple[datetime, dict] | None = None
+        for key in self._profile_candidate_keys(headers, fallback_ip):
+            cached = self._profile_disk_cache.get(key)
+            if cached is None:
+                continue
+            if best is None or cached[0] > best[0]:
+                best = cached
+        return best
+
+    def fetch_descriptor_xml(self, location_url: str | None) -> tuple[dict, str | None]:
+        """Fetch and parse UPnP device descriptor XML (same caches as live SSDP LOCATION handling)."""
+        return self._fetch_and_parse_xml(location_url)
+
+    def _cached_xml_for_same_host(self, host_key: str, now: datetime) -> tuple[dict, str | None] | None:
+        """Return freshest valid cache entry for any LOCATION whose host matches ``host_key``."""
+        if not host_key:
+            return None
+        best: tuple[datetime, dict, str | None] | None = None
+        for loc_key, tup in self._xml_cache.items():
+            if _descriptor_xml_host_key(loc_key) != host_key:
+                continue
+            seen_at, fields, raw = tup
+            if (now - seen_at) >= timedelta(seconds=_XML_CACHE_MEMORY_TTL_SECONDS):
+                continue
+            if best is None or seen_at > best[0]:
+                best = (seen_at, dict(fields), raw)
+        if best is not None:
+            return best[1], best[2]
+        for loc_key, tup in self._xml_disk_cache.items():
+            if _descriptor_xml_host_key(loc_key) != host_key:
+                continue
+            seen_at, fields, raw = tup
+            if (now - seen_at) < timedelta(seconds=_XML_CACHE_DISK_TTL_SECONDS):
+                return dict(fields), raw
+        return None
+
+    def _fetch_and_parse_xml(self, location: str | None) -> tuple[dict, str | None]:
         if not location:
             return {}, None
         now = datetime.now(timezone.utc)
-        cached = self._xml_cache.get(location)
-        if cached is not None:
-            seen_at, cached_fields, cached_raw = cached
-            if (now - seen_at) < timedelta(seconds=60):
+        memory_cached = self._xml_cache.get(location)
+        if memory_cached is not None:
+            seen_at, cached_fields, cached_raw = memory_cached
+            if (now - seen_at) < timedelta(seconds=_XML_CACHE_MEMORY_TTL_SECONDS):
                 return dict(cached_fields), cached_raw
-        try:
-            with urlopen(location, timeout=1.5) as response:
-                raw_xml = response.read().decode("utf-8", errors="ignore")
-                self._logger.debug("SSDP XML fetched from %s\n%s", location, raw_xml)
-        except (URLError, OSError, TimeoutError):
-            self._logger.debug("Failed to fetch SSDP XML at %s", location, exc_info=True)
-            return {}, None
 
-        fields: dict[str, str] = {}
-        try:
-            root = ET.fromstring(raw_xml)
-            device_elem = self._find_first(root, "device")
-            if device_elem is not None:
-                fields["friendlyName"] = self._find_text(device_elem, "friendlyName")
-                fields["deviceType"] = self._find_text(device_elem, "deviceType")
-                fields["manufacturer"] = self._find_text(device_elem, "manufacturer")
-                fields["manufacturerURL"] = self._find_text(device_elem, "manufacturerURL")
-                fields["modelName"] = self._find_text(device_elem, "modelName")
-                fields["displayName"] = self._find_text(device_elem, "displayName")
-                fields["roomName"] = self._find_text(device_elem, "roomName")
-                fields["modelURL"] = self._find_text(device_elem, "modelURL")
-                fields["serialNumber"] = self._find_text(device_elem, "serialNumber")
-                fields["mac"] = self._find_text(device_elem, "MACAddress") or self._find_text(device_elem, "mac")
-                fields["UDN"] = self._find_text(device_elem, "UDN")
-                fields["presentationURL"] = self._find_text(device_elem, "presentationURL")
-                fields["icons_description"] = self._build_icons_description(device_elem)
-                fields["services_description"] = self._build_services_description_from_device(device_elem)
-                fields["services_records"] = self._build_services_records(device_elem, location)
-                fields["iconURL"] = self._build_preferred_icon_url(device_elem, location)
-        except ET.ParseError:
-            self._logger.debug("Invalid SSDP XML received from %s", location, exc_info=True)
-            return {}, raw_xml
-        normalized = {k: v for k, v in fields.items() if v}
-        self._xml_cache[location] = (now, normalized, raw_xml)
-        return dict(normalized), raw_xml
+        disk_cached = self._xml_disk_cache.get(location)
+        if disk_cached is not None:
+            seen_at, cached_fields, cached_raw = disk_cached
+            if (now - seen_at) < timedelta(seconds=_XML_CACHE_DISK_TTL_SECONDS):
+                self._xml_cache[location] = (now, dict(cached_fields), cached_raw)
+                self._logger.debug("SSDP XML cache hit (disk) for %s", location)
+                return dict(cached_fields), cached_raw
+
+        host_key = _descriptor_xml_host_key(location)
+        with self._xml_fetch_gate:
+            now = datetime.now(timezone.utc)
+            mem2 = self._xml_cache.get(location)
+            if mem2 is not None:
+                seen_at, cached_fields, cached_raw = mem2
+                if (now - seen_at) < timedelta(seconds=_XML_CACHE_MEMORY_TTL_SECONDS):
+                    return dict(cached_fields), cached_raw
+            disk2 = self._xml_disk_cache.get(location)
+            if disk2 is not None:
+                seen_at, cached_fields, cached_raw = disk2
+                if (now - seen_at) < timedelta(seconds=_XML_CACHE_DISK_TTL_SECONDS):
+                    self._xml_cache[location] = (now, dict(cached_fields), cached_raw)
+                    return dict(cached_fields), cached_raw
+
+            mono = time.monotonic()
+            if self._descriptor_http_min_interval > 0 and host_key:
+                last_http = self._last_descriptor_http_mono.get(host_key)
+                if last_http is not None and (mono - last_http) < self._descriptor_http_min_interval:
+                    alt = self._cached_xml_for_same_host(host_key, now)
+                    if alt is not None:
+                        fields_a, raw_a = alt
+                        self._xml_cache[location] = (now, dict(fields_a), raw_a)
+                        self._logger.debug(
+                            "SSDP descriptor coalesced (min-interval) for %s host=%s",
+                            location,
+                            host_key,
+                        )
+                        return dict(fields_a), raw_a
+                    self._logger.debug(
+                        "SSDP descriptor HTTP skipped (min-interval %.1fs, no cache for host %s) %s",
+                        self._descriptor_http_min_interval,
+                        host_key,
+                        location,
+                    )
+                    return {}, None
+
+            try:
+                with urlopen(location, timeout=1.5) as response:
+                    raw_xml = response.read().decode("utf-8", errors="ignore")
+                    self._logger.debug("SSDP XML fetched from %s\n%s", location, raw_xml)
+            except (URLError, OSError, TimeoutError):
+                self._logger.debug("Failed to fetch SSDP XML at %s", location, exc_info=True)
+                mem_f = self._xml_cache.get(location)
+                if mem_f is not None:
+                    _seen_at, cached_fields, cached_raw = mem_f
+                    return dict(cached_fields), cached_raw
+                disk_f = self._xml_disk_cache.get(location)
+                if disk_f is not None:
+                    _seen_at, cached_fields, cached_raw = disk_f
+                    return dict(cached_fields), cached_raw
+                return {}, None
+
+            fields: dict = {}
+            try:
+                root = ET.fromstring(raw_xml)
+                device_elem = self._find_first(root, "device")
+                if device_elem is not None:
+                    fields["friendlyName"] = self._find_text(device_elem, "friendlyName")
+                    fields["deviceType"] = self._find_text(device_elem, "deviceType")
+                    fields["manufacturer"] = self._find_text(device_elem, "manufacturer")
+                    fields["manufacturerURL"] = self._find_text(device_elem, "manufacturerURL")
+                    fields["modelName"] = self._find_text(device_elem, "modelName")
+                    fields["modelType"] = self._find_text(device_elem, "modelType")
+                    fields["displayName"] = self._find_text(device_elem, "displayName")
+                    fields["roomName"] = self._find_text(device_elem, "roomName")
+                    fields["modelURL"] = self._find_text(device_elem, "modelURL")
+                    fields["serialNumber"] = self._find_text(device_elem, "serialNumber")
+                    fields["mac"] = self._find_text(device_elem, "MACAddress") or self._find_text(device_elem, "mac")
+                    fields["UDN"] = self._find_text(device_elem, "UDN")
+                    fields["presentationURL"] = self._find_text(device_elem, "presentationURL")
+                    fields["icons_description"] = self._build_icons_description(device_elem)
+                    fields["services_description"] = self._build_services_description_from_device(device_elem)
+                    fields["services_records"] = self._build_services_records(device_elem, location)
+                    fields["iconURL"] = self._build_preferred_icon_url(device_elem, location)
+            except ET.ParseError:
+                self._logger.debug("Invalid SSDP XML received from %s", location, exc_info=True)
+                if host_key:
+                    self._last_descriptor_http_mono[host_key] = time.monotonic()
+                return {}, raw_xml
+            normalized = {k: v for k, v in fields.items() if v}
+            self._xml_cache[location] = (now, normalized, raw_xml)
+            self._xml_disk_cache[location] = (now, dict(normalized), raw_xml)
+            if host_key:
+                self._last_descriptor_http_mono[host_key] = time.monotonic()
+            self._mark_cache_dirty()
+            return dict(normalized), raw_xml
+
+    def _load_persistent_xml_cache(self) -> dict[str, tuple[datetime, dict, str | None]]:
+        out: dict[str, tuple[datetime, dict, str | None]] = {}
+        cache_data = load_discovery_cache()
+        raw = cache_data.get("ssdp_xml_cache")
+        if not isinstance(raw, dict):
+            return out
+        entries = raw.get("entries")
+        if not isinstance(entries, dict):
+            return out
+        now = datetime.now(timezone.utc)
+        for location, row in entries.items():
+            if not isinstance(location, str) or not location.strip() or not isinstance(row, dict):
+                continue
+            ts_text = row.get("updated_at")
+            if not isinstance(ts_text, str) or not ts_text.strip():
+                continue
+            try:
+                seen_at = datetime.fromisoformat(ts_text)
+            except ValueError:
+                continue
+            if seen_at.tzinfo is None:
+                seen_at = seen_at.replace(tzinfo=timezone.utc)
+            if (now - seen_at) >= timedelta(seconds=_XML_CACHE_DISK_TTL_SECONDS):
+                continue
+            xml_fields = row.get("xml_fields")
+            if not isinstance(xml_fields, dict):
+                xml_fields = {}
+            raw_xml = row.get("raw_xml")
+            if not isinstance(raw_xml, str) or not raw_xml.strip():
+                raw_xml = None
+            out[location.strip()] = (seen_at, dict(xml_fields), raw_xml)
+        return out
+
+    def _build_persistent_xml_cache_entries(self) -> dict[str, dict]:
+        entries: dict[str, dict] = {}
+        now = datetime.now(timezone.utc)
+        for location, cached in self._xml_disk_cache.items():
+            if not isinstance(location, str) or not location.strip():
+                continue
+            seen_at, xml_fields, raw_xml = cached
+            if (now - seen_at) >= timedelta(seconds=_XML_CACHE_DISK_TTL_SECONDS):
+                continue
+            entries[location] = {
+                "updated_at": seen_at.isoformat(),
+                "xml_fields": dict(xml_fields) if isinstance(xml_fields, dict) else {},
+                "raw_xml": raw_xml if isinstance(raw_xml, str) else None,
+            }
+        return entries
+
+    def _load_persistent_profile_cache(self) -> dict[str, tuple[datetime, dict]]:
+        out: dict[str, tuple[datetime, dict]] = {}
+        cache_data = load_discovery_cache()
+        raw = cache_data.get("ssdp_profile_cache")
+        if not isinstance(raw, dict):
+            return out
+        entries = raw.get("entries")
+        if not isinstance(entries, dict):
+            return out
+        now = datetime.now(timezone.utc)
+        for key, row in entries.items():
+            if not isinstance(key, str) or not key.strip() or not isinstance(row, dict):
+                continue
+            ts_text = row.get("updated_at")
+            if not isinstance(ts_text, str) or not ts_text.strip():
+                continue
+            try:
+                seen_at = datetime.fromisoformat(ts_text)
+            except ValueError:
+                continue
+            if seen_at.tzinfo is None:
+                seen_at = seen_at.replace(tzinfo=timezone.utc)
+            if (now - seen_at) >= timedelta(seconds=_PROFILE_CACHE_DISK_TTL_SECONDS):
+                continue
+            out[key.strip()] = (seen_at, dict(row))
+        return out
+
+    def _build_persistent_profile_cache_entries(self) -> dict[str, dict]:
+        entries: dict[str, dict] = {}
+        now = datetime.now(timezone.utc)
+        for key, cached in self._profile_disk_cache.items():
+            if not isinstance(key, str) or not key.strip():
+                continue
+            seen_at, row = cached
+            if (now - seen_at) >= timedelta(seconds=_PROFILE_CACHE_DISK_TTL_SECONDS):
+                continue
+            payload = dict(row)
+            payload["updated_at"] = seen_at.isoformat()
+            entries[key] = payload
+        return entries
+
+    def _persist_profile_cache_entry(self, profile_key: str, payload: dict) -> None:
+        if not isinstance(profile_key, str) or not profile_key.strip() or not isinstance(payload, dict):
+            return
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        xml_fields = metadata.get("xml_fields") if isinstance(metadata, dict) else {}
+        if not isinstance(xml_fields, dict):
+            xml_fields = {}
+        now = datetime.now(timezone.utc)
+        ssdp_loc = metadata.get("location") if isinstance(metadata.get("location"), str) else ""
+        row = {
+            "name": payload.get("name"),
+            "type": payload.get("type"),
+            "category": payload.get("category"),
+            "url": payload.get("url"),
+            "xml_fields": dict(xml_fields),
+            "raw_xml": metadata.get("xml") if isinstance(metadata, dict) else None,
+            "ssdp_location": ssdp_loc.strip() if ssdp_loc.strip() else None,
+        }
+        self._profile_disk_cache[profile_key.strip()] = (now, row)
+        self._mark_cache_dirty()
+
+    def _persist_profile_cache_entries(self, headers: dict[str, str], fallback_ip: str, payload: dict) -> None:
+        for key in self._profile_candidate_keys(headers, fallback_ip):
+            self._persist_profile_cache_entry(key, payload)
+
+    def _mark_cache_dirty(self) -> None:
+        self._cache_dirty = True
+        self._flush_persistent_caches_if_due()
+
+    def _flush_persistent_caches_if_due(self, force: bool = False) -> None:
+        if not self._cache_dirty and not force:
+            return
+        now_mono = time.monotonic()
+        if not force and self._last_cache_flush_monotonic > 0:
+            if (now_mono - self._last_cache_flush_monotonic) < _CACHE_FLUSH_INTERVAL_SECONDS:
+                return
+
+        xml_entries = self._build_persistent_xml_cache_entries()
+        profile_entries = self._build_persistent_profile_cache_entries()
+        save_discovery_cache(
+            {
+                "ssdp_xml_cache": {"version": 1, "entries": xml_entries},
+                "ssdp_profile_cache": {"version": 1, "entries": profile_entries},
+            }
+        )
+
+        self._xml_disk_cache = {
+            loc: (datetime.fromisoformat(row["updated_at"]), row["xml_fields"], row.get("raw_xml"))
+            for loc, row in xml_entries.items()
+        }
+        self._profile_disk_cache = {
+            key: (datetime.fromisoformat(row["updated_at"]), dict(row))
+            for key, row in profile_entries.items()
+        }
+        self._cache_dirty = False
+        self._last_cache_flush_monotonic = now_mono
 
     def _build_services_description(self, xml_fields: dict[str, str]) -> str:
         return xml_fields.get("services_description", "")
@@ -662,6 +1016,8 @@ class SSDPDiscovery(BaseDiscovery):
         return ""
 
     def _build_information_text(self, xml_fields: dict[str, str]) -> str:
+        if not self._rules_enabled:
+            return ""
         rules = self._rules.get("information_rules", {})
         if not isinstance(rules, dict):
             return ""
@@ -690,6 +1046,7 @@ class SSDPDiscovery(BaseDiscovery):
             str(xml_fields.get("deviceType", "")),
             str(xml_fields.get("manufacturer", "")),
             str(xml_fields.get("modelName", "")),
+            str(xml_fields.get("modelType", "")),
             str(xml_fields.get("friendlyName", "")),
             str(xml_fields.get("displayName", "")),
             str(xml_fields.get("roomName", "")),

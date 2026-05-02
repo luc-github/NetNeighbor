@@ -14,6 +14,25 @@ Neighborhood experience.
 Developer documentation lives under [`docs/README.md`](docs/README.md).
 User documentation (MVP) lives in [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
 
+## Autodetection (limits) and corrections
+
+Device **names**, **types**, and related hints come from passive discovery (SSDP, mDNS, and cached
+profiles on disk). Heuristics reflect what your LAN advertises; they are **not infallible** and may
+differ on another network or firmware revision.
+
+When the UI does not match reality, NetNeighbor provides:
+
+1. **Per-device overrides** — display **name**, **type**, **location**, and **icon** choices (stored in
+   user preferences) are applied **after** discovery and override protocol-derived values for that
+   device identity.
+
+2. **User rule overlays** — optional pattern rules under `~/.config/netneighbor/` (mDNS and SSDP)
+   adjust classification and labels for recurring equipment. Rules that prove stable and broadly useful
+   can be **contributed upstream** as bundled defaults so they apply for everyone.
+
+Merge ordering between discovery inputs (`discovery.json`, including `merge.information_precedence`) is
+described for contributors in [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md).
+
 ## Requirements
 
 - Linux desktop with GTK3 runtime

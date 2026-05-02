@@ -4,25 +4,151 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 import ipaddress
 import logging
+import threading
+from urllib.parse import urljoin, urlparse, urlunparse
 from typing import Literal
 
 from discovery.base import BaseDiscovery
 from discovery.mdns import MDNSDiscovery
 from discovery.ssdp import SSDPDiscovery
 from model.device import Device
+from utils.discovery_cache import load_discovery_cache
+from utils.discovery_config import normalize_information_precedence_list
 from utils.location_label import is_plausible_room_location
+
+AnticipatoryDescriptorSource = Literal["ssdp_profile_cache", "mdns_txt"]
 
 PresenceTransitionKind = Literal["online", "offline"]
 PresenceTransitionHook = Callable[[Device, PresenceTransitionKind], None]
 _IDENTITY_HOLD_SECONDS = 3.0
 
 
+def _descriptor_url_with_ip(descriptor_template: str, ip_s: str) -> str | None:
+    """Rebuild SSDP LOCATION-style URL with ``ip_s`` as host (same path/port/query as template)."""
+    t = (descriptor_template or "").strip()
+    if not t:
+        return None
+    try:
+        addr = ipaddress.ip_address(ip_s.strip())
+    except ValueError:
+        return None
+    p = urlparse(t)
+    if not p.scheme or not p.netloc:
+        return None
+    port = p.port
+    if isinstance(addr, ipaddress.IPv6Address):
+        host = f"[{addr.compressed}]"
+    else:
+        host = addr.compressed
+    netloc = f"{host}:{port}" if port is not None else host
+    return urlunparse((p.scheme, netloc, p.path or "/", p.params, p.query, p.fragment))
+
+
+def _http_base_url_for_descriptor(ip_s: str, port: int, *, https: bool = False) -> str | None:
+    """Build ``http(s)://host[:port]/`` for resolving relative descriptor paths from mDNS TXT."""
+    try:
+        addr = ipaddress.ip_address(ip_s.strip())
+    except ValueError:
+        return None
+    scheme = "https" if https else "http"
+    default_port = 443 if https else 80
+    if isinstance(addr, ipaddress.IPv6Address):
+        h = f"[{addr.compressed}]"
+    else:
+        h = addr.compressed
+    p = int(port) if port else 0
+    if p > 0 and p != default_port:
+        netloc = f"{h}:{p}"
+    else:
+        netloc = h
+    return urlunparse((scheme, netloc, "/", "", "", ""))
+
+
+def _normalize_mdns_relative_descriptor_path(raw: str) -> str | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    if s.startswith(("http://", "https://")):
+        return s
+    low = s.lower()
+    if ".xml" not in low:
+        return None
+    if s.startswith("/"):
+        return s
+    # Some TXT records use ``description.xml`` without a leading slash.
+    return "/" + s.lstrip("/")
+
+
+def _join_descriptor_base_and_path(base_url: str, absolute_path: str) -> str | None:
+    """Like URL concatenation but preserves non-default port (``urljoin`` strips it for absolute paths)."""
+    path = absolute_path if absolute_path.startswith("/") else f"/{absolute_path}"
+    try:
+        p = urlparse(base_url)
+    except ValueError:
+        return None
+    if not p.scheme or not p.netloc:
+        return None
+    return urlunparse((p.scheme, p.netloc, path, "", "", ""))
+
+
 class DiscoveryManager:
-    def __init__(self, demo_mode: bool = False) -> None:
+    def __init__(
+        self,
+        demo_mode: bool = False,
+        enable_ssdp: bool = True,
+        enable_mdns: bool = True,
+        enable_ssdp_rules: bool = True,
+        enable_mdns_rules: bool = True,
+        ssdp_query_interval_seconds: int | None = None,
+        ssdp_mx_seconds: int | None = None,
+        ssdp_descriptor_http_min_interval_seconds: float | None = None,
+        mdns_enumeration_timeout_seconds: float | None = None,
+        mdns_enumeration_interval_seconds: int | None = None,
+        mdns_service_info_timeout_ms: int | None = None,
+        protocol_merge_order: list[str] | None = None,
+        information_precedence: list[str] | None = None,
+    ) -> None:
         self._logger = logging.getLogger(__name__)
         self._ssdp_logger = logging.getLogger(f"{__name__}.ssdp")
         self._mdns_logger = logging.getLogger(f"{__name__}.mdns")
-        self._protocols: list[BaseDiscovery] = [SSDPDiscovery(), MDNSDiscovery()]
+        self._protocol_merge_order: list[str] = (
+            list(protocol_merge_order)
+            if protocol_merge_order
+            else ["ssdp", "mdns"]
+        )
+        self._information_precedence: list[str] = (
+            list(information_precedence)
+            if information_precedence
+            else normalize_information_precedence_list(None)
+        )
+        self._logger.debug("merge.information_precedence (manager) = %s", self._information_precedence)
+        protocols: list[BaseDiscovery] = []
+        if enable_ssdp:
+            protocols.append(
+                SSDPDiscovery(
+                    rules_enabled=enable_ssdp_rules,
+                    query_interval_seconds=ssdp_query_interval_seconds,
+                    mx_seconds=ssdp_mx_seconds,
+                    descriptor_http_min_interval_seconds=ssdp_descriptor_http_min_interval_seconds,
+                )
+            )
+        if enable_mdns:
+            protocols.append(
+                MDNSDiscovery(
+                    rules_enabled=enable_mdns_rules,
+                    enumeration_timeout_seconds=mdns_enumeration_timeout_seconds,
+                    enumeration_interval_seconds=mdns_enumeration_interval_seconds,
+                    service_info_timeout_ms=mdns_service_info_timeout_ms,
+                )
+            )
+        self._protocols = protocols
+        self._ssdp_discovery: SSDPDiscovery | None = None
+        for _p in protocols:
+            if isinstance(_p, SSDPDiscovery):
+                self._ssdp_discovery = _p
+                break
+        self._anticipatory_fetch_attempted: set[str] = set()
+        self._anticipatory_reentrant: set[str] = set()
         self._devices: dict[str, Device] = {}
         self._arrival_sequence = 0
         self._listeners: list[Callable[[list[Device]], None]] = []
@@ -30,9 +156,11 @@ class DiscoveryManager:
         self._type_overrides: dict[str, str] = {}
         self._name_overrides: dict[str, str] = {}
         self._location_overrides: dict[str, str] = {}
+        self._field_mapping_rules: dict[str, dict[str, list[str]]] = {}
         self._monitored_overrides: dict[str, bool] = {}
         self._last_seen_overrides: dict[str, str] = {}
         self._identity_pending: dict[str, tuple[datetime, Device]] = {}
+        self._ssdp_profile_cache_by_ip: dict[str, dict] = self._load_ssdp_profile_cache_by_ip()
         self._demo_mode = demo_mode
         self._location_prefs_need_reapply = False
         self._location_prefs_dirty_callback: Callable[[], None] | None = None
@@ -71,6 +199,9 @@ class DiscoveryManager:
 
     def start(self) -> None:
         self._logger.info("Starting discovery protocols: %s", [p.source for p in self._protocols])
+        if not self._protocols:
+            self._logger.warning("No discovery protocols enabled (check ~/.config/netneighbor/discovery.json)")
+            return
         for protocol in self._protocols:
             protocol.start()
 
@@ -125,6 +256,9 @@ class DiscoveryManager:
         if existing is None and device.source == "ssdp":
             existing_key, existing = self._find_existing_ssdp_by_endpoint(device)
 
+        self._hydrate_mdns_from_ssdp_profile_cache(device, existing)
+        self._schedule_anticipatory_descriptor_fetch(device)
+        self._apply_field_mapping_rules(device)
         self._apply_type_override(device)
         self._apply_name_override(device)
         self._apply_location_override(device)
@@ -201,6 +335,423 @@ class DiscoveryManager:
         )
         self._emit_presence_hooks_if_transition(device, prev_online, device.online)
         self._notify()
+
+    def _load_ssdp_profile_cache_by_ip(self) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        cache_blob = load_discovery_cache()
+        raw = cache_blob.get("ssdp_profile_cache")
+        if not isinstance(raw, dict):
+            return out
+        entries = raw.get("entries")
+        if not isinstance(entries, dict):
+            return out
+        for _key, row in entries.items():
+            if not isinstance(row, dict):
+                continue
+            candidate_urls: list[str] = []
+            ssdp_loc = row.get("ssdp_location")
+            if isinstance(ssdp_loc, str) and ssdp_loc.strip():
+                candidate_urls.append(ssdp_loc.strip())
+            for u in (row.get("url"), (row.get("xml_fields") or {}).get("presentationURL")):
+                if isinstance(u, str) and u.strip():
+                    candidate_urls.append(u.strip())
+            # Fallback from raw xml LOCATION URL if present in row.
+            if not candidate_urls:
+                raw_xml = row.get("raw_xml")
+                if isinstance(raw_xml, str) and "URLBase>" in raw_xml:
+                    start = raw_xml.find("URLBase>")
+                    end = raw_xml.find("</URLBase>")
+                    if start >= 0 and end > start:
+                        candidate_urls.append(raw_xml[start + 8 : end].strip())
+            host = ""
+            for u in candidate_urls:
+                try:
+                    p = urlparse(u)
+                except ValueError:
+                    continue
+                if p.hostname:
+                    host = str(p.hostname).strip()
+                    break
+            if not host:
+                continue
+            out[host] = dict(row)
+        return out
+
+    def _ssdp_profile_display_name(self, row: dict) -> str:
+        """Best-effort human label from persisted SSDP profile (disk cache)."""
+        n = row.get("name")
+        if isinstance(n, str) and n.strip():
+            return n.strip()
+        xf = row.get("xml_fields") if isinstance(row.get("xml_fields"), dict) else {}
+        for key in ("friendlyName", "displayName"):
+            value = xf.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    def _hydrate_mdns_from_ssdp_profile_cache(self, device: Device, prior_row: Device | None = None) -> None:
+        """Merge SSDP disk-cache hints onto an mDNS row.
+
+        Precedence among inputs (see ``merge.information_precedence`` in ``~/.config/netneighbor/discovery.json``):
+        user prefs override SSDP live; SSDP live overrides this disk cache; this cache overrides plain mDNS
+        naming/type inference.
+
+        **Rule 0** — user name / location prefs override everything (see
+        :meth:`_has_effective_name_override`, :meth:`_apply_name_override`).
+        **Rule 1** — persisted SSDP ``friendlyName`` / profile ``name`` overrides mDNS naming unless rule 0 applies.
+        """
+        if device.source != "mdns":
+            return
+        sip = str(device.ip).strip()
+        if not sip:
+            return
+        row = self._ssdp_profile_cache_by_ip.get(sip)
+        if not isinstance(row, dict):
+            return
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        xml_fields = row.get("xml_fields")
+        if isinstance(xml_fields, dict):
+            md_xml = device.metadata.get("xml_fields")
+            if not isinstance(md_xml, dict):
+                md_xml = {}
+            for key, value in xml_fields.items():
+                if key not in md_xml and value:
+                    md_xml[key] = value
+            if md_xml:
+                device.metadata["xml_fields"] = md_xml
+        cached_display = self._ssdp_profile_display_name(row)
+        if cached_display and not self._has_effective_name_override(device, prior_row):
+            # Rule 1 vs mDNS; skipped when rule 0 applies (see _has_effective_name_override).
+            device.name = cached_display
+        self._apply_ssdp_cache_type_to_mdns(device, row)
+
+    def _apply_ssdp_cache_type_to_mdns(self, device: Device, row: dict) -> None:
+        """Use SSDP profile-cache type hints after merging ``xml_fields`` (not only when mDNS type is unknown).
+
+        Samba ``_smb._tcp`` is inferred as ``computer`` before UUID/MAC may arrive; disk cache may already
+        hold ``modelType: NAS`` or a richer ``type`` from a prior SSDP observation.
+        """
+        md = device.metadata if isinstance(device.metadata, dict) else {}
+        xf = md.get("xml_fields") if isinstance(md.get("xml_fields"), dict) else {}
+        mt = (xf.get("modelType") or "").strip().lower()
+        if mt == "nas":
+            device.type = "nas"
+            device.category = self._category_for_type("nas")
+            return
+        cached = row.get("type")
+        if not isinstance(cached, str) or not cached.strip():
+            return
+        ct = cached.strip().lower()
+        cur = str(device.type or "").strip().lower()
+        if cur == "unknown":
+            device.type = ct
+            device.category = self._category_for_type(ct)
+            return
+        weak = {"unknown", "http", "https", "computer"}
+        if cur in weak and self._cross_protocol_type_rank(ct) > self._cross_protocol_type_rank(cur):
+            device.type = ct
+            device.category = self._category_for_type(ct)
+
+    def _mdns_web_endpoint(self, md: dict, device: Device) -> tuple[int, bool]:
+        """HTTP(S) port from merged mDNS ``_http._tcp`` / ``_https._tcp`` rows."""
+        services = md.get("services") if isinstance(md.get("services"), list) else []
+        https_p = 0
+        http_p = 0
+        for svc in services:
+            if not isinstance(svc, dict):
+                continue
+            name = str(svc.get("service", "")).lower()
+            port = int(svc.get("port", 0) or 0)
+            if port <= 0:
+                continue
+            if "_https._tcp" in name:
+                https_p = https_p or port
+            if "_http._tcp" in name:
+                http_p = http_p or port
+        if https_p:
+            return (https_p, True)
+        if http_p:
+            return (http_p, False)
+        dp = int(device.port or 0)
+        if dp > 0:
+            return (dp, False)
+        return (80, False)
+
+    def _collect_mdns_descriptor_candidates(self, md: dict, ip: str, fallback_port: int, fallback_https: bool) -> list[tuple[int, str]]:
+        scored: dict[str, int] = {}
+
+        def push(url: str) -> None:
+            u = (url or "").strip()
+            if not u:
+                return
+            q = self._ssdp_location_quality_score(u)
+            if q < 2:
+                return
+            prev = scored.get(u)
+            if prev is None or q > prev:
+                scored[u] = q
+
+        def push_relative(path_fragment: str, port: int, https: bool) -> None:
+            norm = _normalize_mdns_relative_descriptor_path(path_fragment)
+            if not norm:
+                return
+            if norm.startswith(("http://", "https://")):
+                push(norm)
+                return
+            base = _http_base_url_for_descriptor(ip, port, https=https)
+            if not base:
+                return
+            full = _join_descriptor_base_and_path(base, norm)
+            if full:
+                push(full)
+
+        agg_port, agg_https = int(fallback_port or 0), fallback_https
+        if agg_port <= 0:
+            agg_port = 80
+
+        combined = md.get("txt") if isinstance(md.get("txt"), dict) else {}
+        if isinstance(combined, dict):
+            for _key, val in combined.items():
+                if not isinstance(val, str):
+                    continue
+                v = val.strip()
+                if v.startswith(("http://", "https://")):
+                    push(v)
+            for pk in ("path", "rp", "description_path", "descriptor_path", "device_description"):
+                raw = combined.get(pk)
+                if isinstance(raw, str) and raw.strip():
+                    push_relative(raw, agg_port, agg_https)
+            for _key, val in combined.items():
+                if not isinstance(val, str):
+                    continue
+                v = val.strip()
+                if ".xml" not in v.lower():
+                    continue
+                if v.startswith(("http://", "https://")):
+                    continue
+                lk = str(_key).lower()
+                if lk in {"path", "rp", "description_path", "descriptor_path", "device_description"}:
+                    continue
+                push_relative(v, agg_port, agg_https)
+
+        services = md.get("services") if isinstance(md.get("services"), list) else []
+        for svc in services:
+            if not isinstance(svc, dict):
+                continue
+            stxt = svc.get("txt") if isinstance(svc.get("txt"), dict) else {}
+            if not stxt:
+                continue
+            sn = str(svc.get("service", "")).lower()
+            sport = int(svc.get("port", 0) or 0)
+            if sport <= 0:
+                sport = agg_port
+            if "_https._tcp" in sn:
+                svc_https = True
+            elif "_http._tcp" in sn:
+                svc_https = False
+            else:
+                svc_https = agg_https
+
+            for _key, val in stxt.items():
+                if not isinstance(val, str):
+                    continue
+                v = val.strip()
+                if v.startswith(("http://", "https://")):
+                    push(v)
+            for pk in ("path", "rp", "description_path", "descriptor_path", "device_description"):
+                raw = stxt.get(pk)
+                if isinstance(raw, str) and raw.strip():
+                    push_relative(raw, sport, svc_https)
+            for key, val in stxt.items():
+                if not isinstance(val, str):
+                    continue
+                v = val.strip()
+                if ".xml" not in v.lower():
+                    continue
+                if v.startswith(("http://", "https://")):
+                    continue
+                lk = str(key).lower()
+                if lk in {"path", "rp", "description_path", "descriptor_path", "device_description"}:
+                    continue
+                push_relative(v, sport, svc_https)
+
+        return sorted(((q, u) for u, q in scored.items()), key=lambda t: t[0], reverse=True)
+
+    def _best_mdns_descriptor_template(self, device: Device) -> str | None:
+        """Full descriptor URL if mDNS TXT advertises a UPnP XML path (often faster than waiting for SSDP)."""
+        if device.source != "mdns":
+            return None
+        md = device.metadata if isinstance(device.metadata, dict) else {}
+        sip = str(device.ip).strip()
+        if not sip:
+            return None
+        port, https = self._mdns_web_endpoint(md, device)
+        candidates = self._collect_mdns_descriptor_candidates(md, sip, port, https)
+        if not candidates:
+            return None
+        return candidates[0][1]
+
+    def _resolve_anticipatory_descriptor_for_mdns(
+        self, device: Device, sip: str
+    ) -> tuple[str, AnticipatoryDescriptorSource] | None:
+        """Choose descriptor GET URL for anticipatory fetch — **one precedence chain**.
+
+        The HTTP GET target is not ambiguous: we never blend SSDP cache with mDNS as competing URLs.
+
+        1. ``ssdp_profile_cache``: persisted SSDP ``LOCATION`` from disk profile cache (same path/query as
+           prior SSDP observation); host rewritten to ``sip``.
+        2. ``mdns_txt``: only when (1) has no usable ``ssdp_location`` — TXT may advertise the descriptor
+           before SSDP has run / populated cache.
+        """
+        self._ssdp_profile_cache_by_ip = self._load_ssdp_profile_cache_by_ip()
+        row = self._ssdp_profile_cache_by_ip.get(sip)
+        loc = row.get("ssdp_location") if isinstance(row, dict) else None
+        loc_s = loc.strip() if isinstance(loc, str) and loc.strip() else ""
+        if loc_s:
+            url_new = _descriptor_url_with_ip(loc_s, sip)
+            if url_new:
+                return (url_new, "ssdp_profile_cache")
+        mdns_tpl = self._best_mdns_descriptor_template(device)
+        if mdns_tpl:
+            url_new = _descriptor_url_with_ip(mdns_tpl, sip)
+            if url_new:
+                return (url_new, "mdns_txt")
+        return None
+
+    def _schedule_anticipatory_descriptor_fetch(self, device: Device) -> None:
+        """Prefetch UPnP descriptor XML for mDNS hosts when we can build the URL early.
+
+        Resolution uses :meth:`_resolve_anticipatory_descriptor_for_mdns` (single source-of-truth chain).
+        """
+        if device.source != "mdns" or not device.online:
+            return
+        ssdp = self._ssdp_discovery
+        if ssdp is None:
+            return
+        k = device.key
+        if k in self._anticipatory_fetch_attempted:
+            return
+        sip = str(device.ip).strip()
+        if not sip or sip in {"0.0.0.0", "::"}:
+            return
+
+        resolved = self._resolve_anticipatory_descriptor_for_mdns(device, sip)
+        if not resolved:
+            return
+        url_new, url_source = resolved
+
+        self._anticipatory_fetch_attempted.add(k)
+        self._logger.debug(
+            "Anticipatory descriptor fetch scheduled ip=%s source=%s url=%s",
+            sip,
+            url_source,
+            url_new,
+        )
+
+        def worker() -> None:
+            try:
+                xml_fields, raw_xml = ssdp.fetch_descriptor_xml(url_new)
+            except Exception:
+                self._mdns_logger.debug("Anticipatory descriptor fetch failed for %s", url_new, exc_info=True)
+                return
+            if not xml_fields and not raw_xml:
+                return
+
+            def apply_on_idle() -> bool:
+                self._apply_prefetched_descriptor(
+                    k,
+                    url_new,
+                    xml_fields or {},
+                    raw_xml,
+                    url_source=url_source,
+                )
+                return False
+
+            try:
+                from gi.repository import GLib
+
+                GLib.idle_add(apply_on_idle)
+            except Exception:
+                self._apply_prefetched_descriptor(
+                    k,
+                    url_new,
+                    xml_fields or {},
+                    raw_xml,
+                    url_source=url_source,
+                )
+
+        threading.Thread(target=worker, name="NetNeighbor-anticipatory-xml", daemon=True).start()
+
+    def _apply_prefetched_descriptor(
+        self,
+        device_key: str,
+        fetch_url: str,
+        xml_fields: dict,
+        raw_xml: str | None,
+        *,
+        url_source: AnticipatoryDescriptorSource,
+    ) -> None:
+        if device_key in self._anticipatory_reentrant:
+            return
+        existing = self._devices.get(device_key)
+        if existing is None or existing.source != "mdns":
+            return
+        self._anticipatory_reentrant.add(device_key)
+        try:
+            md = dict(existing.metadata) if isinstance(existing.metadata, dict) else {}
+            prev_xf = md.get("xml_fields") if isinstance(md.get("xml_fields"), dict) else {}
+            merged_xf = dict(prev_xf)
+            for fk, fv in xml_fields.items():
+                if fv is None:
+                    continue
+                if isinstance(fv, str) and not fv.strip():
+                    continue
+                merged_xf[fk] = fv.strip() if isinstance(fv, str) else fv
+            md["xml_fields"] = merged_xf
+            if raw_xml:
+                md["xml"] = raw_xml
+            md["anticipatory_descriptor_url"] = fetch_url
+            md["anticipatory_descriptor_source"] = url_source
+            name = existing.name
+            fn = merged_xf.get("friendlyName") or merged_xf.get("displayName")
+            if not self._has_effective_name_override(existing):
+                if isinstance(fn, str) and fn.strip() and self._is_generic_discovery_name(name):
+                    name = fn.strip()
+            url = existing.url
+            if not url:
+                pu = merged_xf.get("presentationURL")
+                if isinstance(pu, str) and pu.strip():
+                    url = pu.strip()
+            icon = existing.icon
+            if not icon:
+                iu = merged_xf.get("iconURL")
+                if isinstance(iu, str) and iu.strip():
+                    icon = iu.strip()
+            updated = Device(
+                name=name,
+                ip=existing.ip,
+                port=existing.port,
+                type=existing.type,
+                category=existing.category,
+                source=existing.source,
+                url=url,
+                metadata=md,
+                last_seen=existing.last_seen,
+                online=existing.online,
+                monitored=existing.monitored,
+                icon=icon,
+            )
+            self._apply_field_mapping_rules(updated)
+            self._apply_type_override(updated)
+            self._apply_name_override(updated)
+            self._apply_location_override(updated)
+            self._apply_monitored_override(updated)
+            self._devices[device_key] = updated
+            self._run_location_reapply_sweep()
+            self._notify()
+        finally:
+            self._anticipatory_reentrant.discard(device_key)
 
     def _stable_identity_available(self, device: Device) -> bool:
         metadata = device.metadata if isinstance(device.metadata, dict) else {}
@@ -320,6 +871,49 @@ class DiscoveryManager:
     def get_location_overrides(self) -> dict[str, str]:
         return dict(self._location_overrides)
 
+    def set_field_mapping_rules(self, rules: dict[str, dict[str, list[str]]]) -> None:
+        normalized: dict[str, dict[str, list[str]]] = {}
+        for key, value in rules.items():
+            if not isinstance(key, str) or not isinstance(value, dict):
+                continue
+            per_target: dict[str, list[str]] = {}
+            for target in ("name", "location", "information"):
+                raw = value.get(target)
+                if not isinstance(raw, list):
+                    continue
+                cleaned = [str(x).strip() for x in raw if isinstance(x, str) and str(x).strip()]
+                if cleaned:
+                    per_target[target] = list(dict.fromkeys(cleaned))
+            if per_target:
+                normalized[key] = per_target
+        self._field_mapping_rules = normalized
+        changed = False
+        for device in self._devices.values():
+            before_name = device.name
+            before_info = ""
+            before_loc = ""
+            md = device.metadata if isinstance(device.metadata, dict) else {}
+            if isinstance(md.get("information"), str):
+                before_info = md.get("information", "")
+            if isinstance(md.get("user_location"), str):
+                before_loc = md.get("user_location", "")
+            self._apply_field_mapping_rules(device)
+            self._apply_name_override(device)
+            self._apply_location_override(device)
+            md_after = device.metadata if isinstance(device.metadata, dict) else {}
+            after_info = md_after.get("information") if isinstance(md_after.get("information"), str) else ""
+            after_loc = md_after.get("user_location") if isinstance(md_after.get("user_location"), str) else ""
+            if device.name != before_name or after_info != before_info or after_loc != before_loc:
+                changed = True
+        if changed:
+            self._notify()
+
+    def get_field_mapping_rules(self) -> dict[str, dict[str, list[str]]]:
+        out: dict[str, dict[str, list[str]]] = {}
+        for key, value in self._field_mapping_rules.items():
+            out[key] = {target: list(paths) for target, paths in value.items()}
+        return out
+
     def set_monitored_overrides(self, overrides: dict[str, bool]) -> None:
         normalized: dict[str, bool] = {}
         for key, value in overrides.items():
@@ -396,16 +990,11 @@ class DiscoveryManager:
             if existing.source != source or existing.ip != ip or existing.port != port:
                 continue
             preferred_key = self._make_override_key_for_device(existing)
-            legacy_key = self._make_legacy_identity_key_for_device(existing)
             endpoint_key = self._make_override_key(source, ip, port)
             if device_type is None or not str(device_type).strip() or str(device_type).strip().lower() == "auto":
                 self._type_overrides.pop(preferred_key, None)
-                if legacy_key:
-                    self._type_overrides.pop(legacy_key, None)
                 self._type_overrides.pop(endpoint_key, None)
             else:
-                if legacy_key:
-                    self._type_overrides.pop(legacy_key, None)
                 self._type_overrides.pop(endpoint_key, None)
                 self._type_overrides[preferred_key] = str(device_type).strip().lower()
             self._apply_type_override(existing)
@@ -423,17 +1012,12 @@ class DiscoveryManager:
             if existing.source != source or existing.ip != ip or existing.port != port:
                 continue
             preferred_key = self._make_name_override_key_for_device(existing)
-            legacy_key = self._make_legacy_identity_key_for_device(existing)
             endpoint_key = self._make_override_key(source, ip, port)
             if device_name is None or not str(device_name).strip():
                 self._name_overrides.pop(preferred_key, None)
-                if legacy_key:
-                    self._name_overrides.pop(legacy_key, None)
                 self._name_overrides.pop(endpoint_key, None)
                 existing.name = self._default_name_for_device(existing)
             else:
-                if legacy_key:
-                    self._name_overrides.pop(legacy_key, None)
                 self._name_overrides.pop(endpoint_key, None)
                 self._name_overrides[preferred_key] = str(device_name).strip()
             self._apply_name_override(existing)
@@ -447,22 +1031,108 @@ class DiscoveryManager:
             if existing.source != source or existing.ip != ip or existing.port != port:
                 continue
             preferred_key = self._make_name_override_key_for_device(existing)
-            legacy_key = self._make_legacy_identity_key_for_device(existing)
             endpoint_key = self._make_override_key(source, ip, port)
             if location is None or not str(location).strip():
                 self._location_overrides.pop(preferred_key, None)
-                if legacy_key:
-                    self._location_overrides.pop(legacy_key, None)
                 self._location_overrides.pop(endpoint_key, None)
             else:
-                if legacy_key:
-                    self._location_overrides.pop(legacy_key, None)
                 self._location_overrides.pop(endpoint_key, None)
                 self._location_overrides[preferred_key] = str(location).strip()
             self._apply_location_override(existing)
             changed = True
         if changed:
             self._notify()
+
+    def set_device_field_mapping_rule(self, source: str, ip: str, port: int, target: str, field_path: str) -> None:
+        target_norm = str(target).strip().lower()
+        path_norm = str(field_path).strip()
+        if target_norm not in {"name", "location", "information"} or not path_norm:
+            return
+        changed = False
+        ip_norm = str(ip).strip()
+        for _old_key, existing in list(self._devices.items()):
+            if str(existing.ip).strip() != ip_norm:
+                continue
+            preferred_key = self._make_name_override_key_for_device(existing)
+            rules = self._field_mapping_rules.get(preferred_key)
+            if not isinstance(rules, dict):
+                rules = {}
+            bucket = rules.get(target_norm)
+            if not isinstance(bucket, list):
+                bucket = []
+            if path_norm in bucket:
+                continue
+            bucket.append(path_norm)
+            rules[target_norm] = bucket
+            self._field_mapping_rules[preferred_key] = rules
+            changed = True
+            self._apply_field_mapping_rules(existing)
+            self._apply_location_override(existing)
+            self._apply_name_override(existing)
+        if changed:
+            self._notify()
+
+    def remove_device_field_mapping_rule(
+        self, source: str, ip: str, port: int, target: str, field_path: str | None = None
+    ) -> None:
+        target_norm = str(target).strip().lower()
+        if target_norm not in {"name", "location", "information"}:
+            return
+        field_norm = str(field_path).strip() if isinstance(field_path, str) else ""
+        changed = False
+        ip_norm = str(ip).strip()
+        for _old_key, existing in list(self._devices.items()):
+            if str(existing.ip).strip() != ip_norm:
+                continue
+            preferred_key = self._make_name_override_key_for_device(existing)
+            rules = self._field_mapping_rules.get(preferred_key)
+            if not isinstance(rules, dict):
+                continue
+            bucket = rules.get(target_norm)
+            if not isinstance(bucket, list) or not bucket:
+                continue
+            if field_norm:
+                new_bucket = [x for x in bucket if x != field_norm]
+            else:
+                new_bucket = []
+            if new_bucket == bucket:
+                continue
+            if new_bucket:
+                rules[target_norm] = new_bucket
+            else:
+                rules.pop(target_norm, None)
+            if rules:
+                self._field_mapping_rules[preferred_key] = rules
+            else:
+                self._field_mapping_rules.pop(preferred_key, None)
+            changed = True
+            self._apply_field_mapping_rules(existing)
+            self._apply_location_override(existing)
+            self._apply_name_override(existing)
+        if changed:
+            self._notify()
+
+    def get_device_field_mapping_rules(self, device: Device) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        ip_norm = str(device.ip).strip()
+        for row in self._devices.values():
+            if str(row.ip).strip() != ip_norm:
+                continue
+            preferred_key = self._make_name_override_key_for_device(row)
+            value = self._field_mapping_rules.get(preferred_key)
+            if not isinstance(value, dict):
+                continue
+            for target, paths in value.items():
+                if not isinstance(paths, list):
+                    continue
+                bucket = out.get(target)
+                if not isinstance(bucket, list):
+                    bucket = []
+                for path in paths:
+                    if isinstance(path, str) and path.strip() and path not in bucket:
+                        bucket.append(path)
+                out[target] = bucket
+        return out
 
     def _merge_ssdp_metadata(self, old_meta: dict, new_meta: dict, old_name: str, new_name: str) -> dict:
         old_meta = old_meta if isinstance(old_meta, dict) else {}
@@ -540,7 +1210,125 @@ class DiscoveryManager:
             merged["xml"] = old_xml
             self._ssdp_logger.debug("SSDP raw XML preserved because new payload has no XML")
 
+        merged["location"] = self._pick_better_ssdp_location(
+            old_meta.get("location"),
+            new_meta.get("location"),
+            old_rank,
+            new_rank,
+        )
+
         return merged
+
+    def _ssdp_location_quality_score(self, value: str) -> int:
+        s = (value or "").strip()
+        if not s:
+            return -1
+        low = s.lower()
+        score = 0
+        if low.startswith(("http://", "https://")):
+            score += 1
+        if low.endswith(".xml"):
+            score += 1
+        if any(x in low for x in ("device-desc.xml", "description.xml", "/ssdp/")):
+            score += 4
+        if "/dd.xml" in low:
+            score -= 2
+        try:
+            parsed = urlparse(s)
+            if parsed.port in {80, 443, 8008, 1400, 5000}:
+                score += 1
+        except Exception:
+            pass
+        return score
+
+    def _pick_better_ssdp_location(self, old_loc, new_loc, old_rank: int, new_rank: int) -> str | None:
+        old_s = old_loc.strip() if isinstance(old_loc, str) and old_loc.strip() else ""
+        new_s = new_loc.strip() if isinstance(new_loc, str) and new_loc.strip() else ""
+        if not old_s:
+            self._ssdp_logger.debug(
+                "SSDP XML location selected(new-only) old=%r new=%r old_rank=%s new_rank=%s",
+                old_s,
+                new_s,
+                old_rank,
+                new_rank,
+            )
+            return new_s or None
+        if not new_s:
+            self._ssdp_logger.debug(
+                "SSDP XML location selected(old-only) old=%r new=%r old_rank=%s new_rank=%s",
+                old_s,
+                new_s,
+                old_rank,
+                new_rank,
+            )
+            return old_s
+        old_q = self._ssdp_location_quality_score(old_s)
+        new_q = self._ssdp_location_quality_score(new_s)
+        # If one LOCATION looks clearly better, prefer it even if XML profile rank differs.
+        # This avoids sticky picks like random-port /dd.xml overriding DIAL device-desc.xml.
+        quality_gap = 3
+        if new_q >= old_q + quality_gap:
+            self._ssdp_logger.debug(
+                "SSDP XML location selected(new-quality-gap) old=%r new=%r old_rank=%s new_rank=%s old_q=%s new_q=%s",
+                old_s,
+                new_s,
+                old_rank,
+                new_rank,
+                old_q,
+                new_q,
+            )
+            return new_s
+        if old_q >= new_q + quality_gap:
+            self._ssdp_logger.debug(
+                "SSDP XML location selected(old-quality-gap) old=%r new=%r old_rank=%s new_rank=%s old_q=%s new_q=%s",
+                old_s,
+                new_s,
+                old_rank,
+                new_rank,
+                old_q,
+                new_q,
+            )
+            return old_s
+        if new_rank > old_rank:
+            self._ssdp_logger.debug(
+                "SSDP XML location selected(new-better-rank) old=%r new=%r old_rank=%s new_rank=%s",
+                old_s,
+                new_s,
+                old_rank,
+                new_rank,
+            )
+            return new_s
+        if old_rank > new_rank:
+            self._ssdp_logger.debug(
+                "SSDP XML location selected(old-better-rank) old=%r new=%r old_rank=%s new_rank=%s",
+                old_s,
+                new_s,
+                old_rank,
+                new_rank,
+            )
+            return old_s
+        if new_q > old_q:
+            self._ssdp_logger.debug(
+                "SSDP XML location selected(new-better-quality) old=%r new=%r old_rank=%s new_rank=%s old_q=%s new_q=%s",
+                old_s,
+                new_s,
+                old_rank,
+                new_rank,
+                old_q,
+                new_q,
+            )
+            return new_s
+        # Keep previous location on tie for visual stability.
+        self._ssdp_logger.debug(
+            "SSDP XML location selected(old-stable) old=%r new=%r old_rank=%s new_rank=%s old_q=%s new_q=%s",
+            old_s,
+            new_s,
+            old_rank,
+            new_rank,
+            old_q,
+            new_q,
+        )
+        return old_s
 
     def _ssdp_profile_rank(self, xml_fields: dict) -> int:
         if not isinstance(xml_fields, dict):
@@ -615,6 +1403,140 @@ class DiscoveryManager:
             return key, item
         return None, None
 
+    def _find_existing_cross_protocol_by_identity(self, candidate: Device) -> tuple[str, Device] | tuple[None, None]:
+        """Find an existing row from another protocol for the same host identity."""
+        candidate_host_key = self._make_override_key_for_device(candidate)
+        if not isinstance(candidate_host_key, str) or not candidate_host_key.startswith("host:"):
+            return None, None
+        for key, item in self._devices.items():
+            if item.source == candidate.source:
+                continue
+            if self._make_override_key_for_device(item) != candidate_host_key:
+                continue
+            self._device_event_logger(candidate.source).debug(
+                "Cross-protocol dedup matched host=%s old=%s/%s:%s new=%s/%s:%s",
+                candidate_host_key,
+                item.source,
+                item.ip,
+                item.port,
+                candidate.source,
+                candidate.ip,
+                candidate.port,
+            )
+            return key, item
+        return None, None
+
+    def _cross_protocol_type_rank(self, device_type: str) -> int:
+        t = (device_type or "unknown").strip().lower()
+        return {
+            "unknown": 0,
+            "http": 12,
+            "https": 12,
+            "computer": 20,
+            "esp32": 22,
+            "router": 35,
+            "nas": 38,
+            "mediaserver": 34,
+            "smartspeaker": 40,
+            "networkprinter": 55,
+            "multifunction_printer": 56,
+            "printer": 55,
+            "scanner": 52,
+            "smarttv": 36,
+            "smartdevice": 28,
+            "camera": 30,
+            "homeappliance": 26,
+            "cnc": 30,
+            "3dprinter": 32,
+        }.get(t, 8)
+
+    def _is_generic_discovery_name(self, name: str) -> bool:
+        s = (name or "").strip().lower()
+        if not s:
+            return True
+        prefixes = ("ssdp device ", "mdns device ", "router ", "media server ", "printer ")
+        return any(s.startswith(prefix) for prefix in prefixes)
+
+    def _protocol_merge_rank(self, source: str) -> int:
+        """Lower rank = higher precedence (earlier in ``discovery.json`` ``merge.protocol_order``)."""
+        s = (source or "").strip().lower()
+        order = self._protocol_merge_order
+        try:
+            return order.index(s)
+        except ValueError:
+            return len(order)
+
+    def _choose_cross_protocol_display_name(self, existing: Device, incoming: Device) -> str:
+        """Prefer a non-generic name; if both are specific or both generic, prefer stronger protocol."""
+        eg = self._is_generic_discovery_name(existing.name)
+        ig = self._is_generic_discovery_name(incoming.name)
+        if not eg and ig:
+            return existing.name
+        if eg and not ig:
+            return incoming.name
+        ir = self._protocol_merge_rank(incoming.source)
+        er = self._protocol_merge_rank(existing.source)
+        if ir < er:
+            return incoming.name
+        if er < ir:
+            return existing.name
+        return existing.name
+
+    def _merge_cross_protocol_device(self, existing: Device, incoming: Device) -> Device:
+        """Merge SSDP/mDNS rows that represent the same host."""
+        old_meta = existing.metadata if isinstance(existing.metadata, dict) else {}
+        new_meta = incoming.metadata if isinstance(incoming.metadata, dict) else {}
+        merged_meta = dict(old_meta)
+        # Keep per-protocol metadata snapshots to avoid losing diagnostics/details payloads.
+        proto_meta = merged_meta.get("protocol_metadata") if isinstance(merged_meta.get("protocol_metadata"), dict) else {}
+        proto_meta = dict(proto_meta)
+        proto_meta[str(existing.source)] = dict(old_meta)
+        proto_meta[str(incoming.source)] = dict(new_meta)
+        merged_meta["protocol_metadata"] = proto_meta
+        seen_sources = merged_meta.get("seen_sources") if isinstance(merged_meta.get("seen_sources"), list) else []
+        merged_meta["seen_sources"] = sorted({str(x) for x in [*seen_sources, existing.source, incoming.source] if str(x).strip()})
+        if isinstance(new_meta.get("user_location"), str) and new_meta.get("user_location", "").strip():
+            merged_meta["user_location"] = new_meta.get("user_location").strip()
+
+        old_rank = self._cross_protocol_type_rank(existing.type)
+        new_rank = self._cross_protocol_type_rank(incoming.type)
+        chosen_type = incoming.type if new_rank > old_rank else existing.type
+        chosen_category = self._category_for_type(chosen_type)
+        chosen_name = self._choose_cross_protocol_display_name(existing, incoming)
+        chosen_icon = existing.icon
+        if (not chosen_icon and incoming.icon) or new_rank > old_rank:
+            chosen_icon = incoming.icon or chosen_icon
+        chosen_url = existing.url or incoming.url
+        chosen_last_seen = existing.last_seen if existing.last_seen >= incoming.last_seen else incoming.last_seen
+        chosen_online = bool(existing.online or incoming.online)
+
+        self._logger.debug(
+            "Cross-protocol merge kept=%s/%s:%s merged=%s/%s:%s type=%s->%s",
+            existing.source,
+            existing.ip,
+            existing.port,
+            incoming.source,
+            incoming.ip,
+            incoming.port,
+            existing.type,
+            chosen_type,
+        )
+
+        return Device(
+            name=chosen_name,
+            ip=existing.ip,
+            port=existing.port,
+            type=chosen_type,
+            category=chosen_category,
+            source=existing.source,
+            url=chosen_url,
+            metadata=merged_meta,
+            last_seen=chosen_last_seen,
+            online=chosen_online,
+            monitored=bool(existing.monitored),
+            icon=chosen_icon,
+        )
+
     def _extract_mac(self, metadata: dict) -> str:
         if not isinstance(metadata, dict):
             return ""
@@ -659,6 +1581,7 @@ class DiscoveryManager:
         device.category = self._category_for_type(override_type)
 
     def _apply_name_override(self, device: Device) -> None:
+        """Rule 0: apply saved name prefs last among the early pipeline (overrides rule 1 and mDNS)."""
         override_name = self._find_name_override_value(device)
         if not override_name:
             return
@@ -673,12 +1596,9 @@ class DiscoveryManager:
         if not loc or not is_plausible_room_location(loc):
             return False
         preferred_key = self._make_name_override_key_for_device(device)
-        legacy_key = self._make_legacy_identity_key_for_device(device)
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         if self._location_overrides.get(preferred_key) == loc:
             return False
-        if legacy_key:
-            self._location_overrides.pop(legacy_key, None)
         self._location_overrides.pop(endpoint_key, None)
         self._location_overrides[preferred_key] = loc
         self._location_prefs_need_reapply = True
@@ -757,6 +1677,65 @@ class DiscoveryManager:
         else:
             device.metadata.pop("user_location", None)
 
+    def _apply_field_mapping_rules(self, device: Device) -> None:
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        rules = self.get_device_field_mapping_rules(device)
+        if not rules:
+            return
+        for target, paths in rules.items():
+            chosen = ""
+            for raw in paths:
+                value = self._mapped_value_for_field_path(device, raw)
+                if isinstance(value, str) and value.strip():
+                    chosen = value.strip()
+                    break
+            if not chosen:
+                continue
+            if target == "name":
+                device.name = chosen
+            elif target == "location":
+                if is_plausible_room_location(chosen):
+                    device.metadata["user_location"] = chosen
+            elif target == "information":
+                device.metadata["information"] = chosen
+
+    def _mapped_value_for_field_path(self, device: Device, field_path: str) -> str:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        raw = str(field_path or "").strip()
+        if ":" not in raw:
+            return ""
+        prefix, rest = raw.split(":", 1)
+        key = rest.strip()
+        if not key:
+            return ""
+        if prefix == "txt":
+            txt = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
+            for rk, rv in txt.items():
+                if isinstance(rk, str) and str(rk).strip().lower() == key.lower() and isinstance(rv, str):
+                    return rv
+            services = metadata.get("services") if isinstance(metadata.get("services"), list) else []
+            for svc in services:
+                if not isinstance(svc, dict):
+                    continue
+                st = svc.get("txt") if isinstance(svc.get("txt"), dict) else {}
+                for rk, rv in st.items():
+                    if isinstance(rk, str) and str(rk).strip().lower() == key.lower() and isinstance(rv, str):
+                        return rv
+            return ""
+        if prefix == "xml":
+            xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
+            for rk, rv in xml_fields.items():
+                if isinstance(rk, str) and str(rk).strip().lower() == key.lower() and isinstance(rv, str):
+                    return rv
+            return ""
+        if prefix == "meta":
+            for rk, rv in metadata.items():
+                if isinstance(rk, str) and str(rk).strip().lower() == key.lower() and isinstance(rv, str):
+                    return rv
+            return ""
+        return ""
+
     def _apply_monitored_override(self, device: Device) -> None:
         override_value = self._find_override_value(self._monitored_overrides, device)
         if override_value is not None:
@@ -766,9 +1745,6 @@ class DiscoveryManager:
         preferred_key = self._make_override_key_for_device(device)
         if preferred_key in store:
             return store[preferred_key]
-        legacy_key = self._make_legacy_identity_key_for_device(device)
-        if legacy_key and legacy_key in store:
-            return store[legacy_key]
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         if endpoint_key in store:
             return store[endpoint_key]
@@ -782,11 +1758,6 @@ class DiscoveryManager:
         value = self._name_overrides.get(preferred_key)
         if isinstance(value, str) and value.strip():
             return value.strip()
-        legacy_key = self._make_legacy_identity_key_for_device(device)
-        if legacy_key and legacy_key in self._name_overrides:
-            value = self._name_overrides.get(legacy_key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         value = self._name_overrides.get(endpoint_key)
         if isinstance(value, str) and value.strip():
@@ -799,16 +1770,19 @@ class DiscoveryManager:
             return hit.strip()
         return None
 
+    def _has_effective_name_override(self, device: Device, prior_row: Device | None = None) -> bool:
+        """Rule 0: user-renamed devices (prefs) beat SSDP cache, mDNS, and descriptor-derived names."""
+        if self._find_name_override_value(device) is not None:
+            return True
+        if prior_row is not None and self._find_name_override_value(prior_row) is not None:
+            return True
+        return False
+
     def _find_location_override_value(self, device: Device) -> str | None:
         preferred_key = self._make_name_override_key_for_device(device)
         value = self._location_overrides.get(preferred_key)
         if isinstance(value, str) and value.strip():
             return value.strip()
-        legacy_key = self._make_legacy_identity_key_for_device(device)
-        if legacy_key and legacy_key in self._location_overrides:
-            value = self._location_overrides.get(legacy_key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
         endpoint_key = self._make_override_key(device.source, device.ip, device.port)
         value = self._location_overrides.get(endpoint_key)
         if isinstance(value, str) and value.strip():
@@ -948,15 +1922,6 @@ class DiscoveryManager:
     def _make_name_override_key_for_device(self, device: Device) -> str:
         return self._make_override_key_for_device(device)
 
-    def _make_legacy_identity_key_for_device(self, device: Device) -> str:
-        uid = self._extract_uid(device.metadata)
-        if uid:
-            return f"{device.source}:uid:{uid}"
-        mac = self._extract_mac(device.metadata)
-        if mac:
-            return f"{device.source}:mac:{mac}"
-        return ""
-
     def _extract_uid(self, metadata: dict) -> str:
         if not isinstance(metadata, dict):
             return ""
@@ -993,7 +1958,25 @@ class DiscoveryManager:
                 return value.strip()
 
         if device.source == "mdns":
-            for key in ("name", "friendlyname", "friendly_name", "device", "model"):
+            for key in ("name", "fn", "friendlyname", "friendly_name", "device"):
+                value = txt_fields.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            server_raw = metadata.get("server")
+            if isinstance(server_raw, str) and server_raw.strip():
+                normalized = server_raw.strip().removesuffix(".local.").removesuffix(".local").strip(".")
+                if normalized:
+                    base = normalized.replace("-", " ")
+                    prod = ""
+                    if isinstance(txt_fields, dict):
+                        for tk, tv in txt_fields.items():
+                            if isinstance(tk, str) and tk.lower() == "product" and isinstance(tv, str) and tv.strip():
+                                prod = tv.strip()
+                                break
+                    if prod:
+                        return f"{base} ({prod})"
+                    return base
+            for key in ("model", "mdl", "md", "product"):
                 value = txt_fields.get(key)
                 if isinstance(value, str) and value.strip():
                     return value.strip()
@@ -1075,6 +2058,7 @@ class DiscoveryManager:
             "mediaserver": "Media Servers",
             "printer": "Printers",
             "networkprinter": "Printers",
+            "multifunction_printer": "Printers",
             "smartspeaker": "Smart Speakers",
             "smarttv": "Smart TVs",
             "smartdevice": "Smart Devices",

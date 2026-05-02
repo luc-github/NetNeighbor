@@ -29,7 +29,7 @@ try:
 except Exception:  # pragma: no cover
     GLib = None
 
-_ENUMERATION_TIMEOUT_S = 8.0
+_ENUMERATION_TIMEOUT_S = 2.5
 _ENUMERATION_REFRESH_INTERVAL_S = 240
 
 
@@ -51,10 +51,31 @@ class _MDNSListener(ServiceListener):
 
 
 class MDNSDiscovery(BaseDiscovery):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        rules_enabled: bool = True,
+        *,
+        enumeration_timeout_seconds: float | None = None,
+        enumeration_interval_seconds: int | None = None,
+        service_info_timeout_ms: int | None = None,
+    ) -> None:
         super().__init__(source="mdns")
         self._logger = logging.getLogger(__name__)
-        self._mdns_rules = cached_mdns_rules()
+        self._rules_enabled = bool(rules_enabled)
+        self._enumeration_timeout_s = (
+            float(enumeration_timeout_seconds)
+            if enumeration_timeout_seconds is not None
+            else _ENUMERATION_TIMEOUT_S
+        )
+        self._enumeration_interval_s = (
+            int(enumeration_interval_seconds)
+            if enumeration_interval_seconds is not None
+            else _ENUMERATION_REFRESH_INTERVAL_S
+        )
+        self._service_info_timeout_ms = (
+            int(service_info_timeout_ms) if service_info_timeout_ms is not None else 2500
+        )
+        self._mdns_rules = cached_mdns_rules() if self._rules_enabled else {"type_rules": [], "summary_fields": []}
         self._running = False
         self._zeroconf = None
         self._browsers: list[ServiceBrowser] = []
@@ -169,7 +190,7 @@ class MDNSDiscovery(BaseDiscovery):
         def worker() -> None:
             try:
                 try:
-                    found = ZeroconfServiceTypes.find(zc=None, timeout=_ENUMERATION_TIMEOUT_S)
+                    found = ZeroconfServiceTypes.find(zc=None, timeout=self._enumeration_timeout_s)
                 except Exception:
                     self._logger.exception("mDNS service type enumeration failed")
                     return
@@ -208,7 +229,7 @@ class MDNSDiscovery(BaseDiscovery):
             return True
 
         if self._enumeration_timer_id is None:
-            self._enumeration_timer_id = GLib.timeout_add_seconds(_ENUMERATION_REFRESH_INTERVAL_S, on_timer)
+            self._enumeration_timer_id = GLib.timeout_add_seconds(self._enumeration_interval_s, on_timer)
 
     def _normalize_service_type(self, service: str) -> str:
         value = (service or "").strip().lower()
@@ -243,7 +264,7 @@ class MDNSDiscovery(BaseDiscovery):
         if not self._running:
             return
         try:
-            info = zc.get_service_info(service_type, name, timeout=1200)
+            info = zc.get_service_info(service_type, name, timeout=self._service_info_timeout_ms)
         except Exception:
             self._logger.debug("mDNS lookup failed for %s %s", service_type, name, exc_info=True)
             return
@@ -298,7 +319,7 @@ class MDNSDiscovery(BaseDiscovery):
         txt, txt_records = self._txt_from_service_info(info)
         instance_label = name.split("._", 1)[0].strip() if name else ""
 
-        display_name = self._infer_display_name(name, txt)
+        display_name = self._infer_display_name(name, txt, self._to_text(server))
         type_name = str(mapping.get("type", "unknown")).strip().lower() or "unknown"
         type_name = self._infer_type_from_context(type_name, service_key, display_name, txt)
         category = self._category_for_type(
@@ -401,7 +422,7 @@ class MDNSDiscovery(BaseDiscovery):
         merged_services_line: str = "",
     ) -> str:
         base = mapped_type if mapped_type and mapped_type != "unknown" else self._infer_type_from_service(service_key)
-        # Normalize legacy printer label to avoid duplicate "Printer" vs "Network Printer" classes in mDNS.
+        # Collapse printer variants into one device type class.
         if base == "printer":
             base = "networkprinter"
 
@@ -415,6 +436,8 @@ class MDNSDiscovery(BaseDiscovery):
             return "networkprinter"
         if "synology" in haystack or "qnap" in haystack or " nas " in f" {haystack} ":
             return "nas"
+        if not self._rules_enabled:
+            return base
         return evaluate_type_rules(haystack, base, self._mdns_rules)
 
     def _aggregate_type_rank(self, device_type: str) -> int:
@@ -430,6 +453,7 @@ class MDNSDiscovery(BaseDiscovery):
             "mediaserver": 34,
             "smartspeaker": 40,
             "networkprinter": 55,
+            "multifunction_printer": 56,
             "printer": 55,
             "scanner": 52,
         }.get(t, 8)
@@ -448,8 +472,67 @@ class MDNSDiscovery(BaseDiscovery):
                 best_r = cr
         return best
 
-    def _infer_display_name(self, service_instance: str, txt: dict[str, str]) -> str:
-        for key in ("name", "friendlyname", "friendly_name", "device", "model"):
+    def _merged_services_imply_multifunction_printer(self, merged_services: list) -> bool:
+        """Printer-class DNS-SD plus scanner / eSCL on the same host → multifunction."""
+        parts: list[str] = []
+        for svc in merged_services:
+            if not isinstance(svc, dict):
+                continue
+            parts.append(str(svc.get("service", "")).lower())
+        line = " ".join(parts)
+        printer = any(
+            x in line
+            for x in ("_ipp._tcp", "_ipps._tcp", "_printer._tcp", "_pdl-datastream._tcp")
+        )
+        scanner = any(
+            tok in line
+            for tok in (
+                "_uscan._tcp",
+                "_uscans._tcp",
+                "_scanner._tcp",
+                "_scan._tcp",
+                "_escl._tcp",
+            )
+        ) or ("scanner" in line and "._tcp" in line)
+        return bool(printer and scanner)
+
+    def _dns_target_label_from_server(self, server: str) -> str:
+        """SRV / PTR target host (often ``thing.local``) without ``.local`` — good NAS / printer labels."""
+        s = self._to_text(server).strip().strip(".")
+        if not s:
+            return ""
+        low = s.lower()
+        if low.endswith(".local"):
+            s = s[:-6].strip(".")
+        elif low.endswith(".local."):
+            s = s[:-7].strip(".")
+        return s.replace("-", " ").strip() if s else ""
+
+    def _txt_product_value(self, txt: dict[str, str]) -> str:
+        """Non-empty ``product`` TXT field if present (case-insensitive key)."""
+        if not isinstance(txt, dict):
+            return ""
+        for raw_k, raw_v in txt.items():
+            if not isinstance(raw_k, str) or raw_k.lower() != "product":
+                continue
+            if isinstance(raw_v, str) and raw_v.strip():
+                return raw_v.strip()
+        return ""
+
+    def _infer_display_name(self, service_instance: str, txt: dict[str, str], server: str = "") -> str:
+        # Order: friendly TXT first; Google Cast uses ``fn``. DNS target (without .local) before hardware
+        # ``model`` so NAS / printers show hostname when TXT advertises a bare model string.
+        for key in ("name", "fn", "friendlyname", "friendly_name", "device"):
+            value = txt.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        dns_label = self._dns_target_label_from_server(server)
+        if dns_label:
+            prod = self._txt_product_value(txt)
+            if prod:
+                return f"{dns_label} ({prod})"
+            return dns_label
+        for key in ("model", "mdl", "md", "product"):
             value = txt.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
@@ -663,6 +746,8 @@ class MDNSDiscovery(BaseDiscovery):
             services_line_for_infer,
         )
         agg_type = self._best_aggregate_mdns_type(agg_type, merged_services)
+        if self._merged_services_imply_multifunction_printer(merged_services):
+            agg_type = "multifunction_printer"
         icon_out = representative.get("icon")
         if not isinstance(icon_out, str) or not icon_out.strip():
             icon_out = self._icon_for_type(agg_type)
@@ -715,6 +800,7 @@ class MDNSDiscovery(BaseDiscovery):
             "scanner": "Printers",
             "printer": "Printers",
             "networkprinter": "Printers",
+            "multifunction_printer": "Printers",
             "smartspeaker": "Smart Speakers",
             "smarttv": "Smart TVs",
             "smartdevice": "Smart Devices",
@@ -736,6 +822,7 @@ class MDNSDiscovery(BaseDiscovery):
             "scanner": "printer.png",
             "printer": "printer.png",
             "networkprinter": "printer.png",
+            "multifunction_printer": "printer.png",
             "smartspeaker": "smartspeaker.png",
             "smarttv": "smarttv.png",
             "smartdevice": "smartdevice.png",

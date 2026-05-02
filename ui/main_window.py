@@ -12,16 +12,23 @@ from discovery.manager import DiscoveryManager
 from ui.device_list import DeviceList
 from model.device import Device
 from utils.app_version import get_app_version
-from utils.location_label import is_plausible_room_location
+from utils.location_label import is_plausible_room_location, normalize_location_options
+from utils.discovery_cache import load_discovery_cache, save_discovery_cache
+from utils.details_payload import format_device_type_for_details
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 from utils.notifications import send_notification
 
 _LOG = logging.getLogger(__name__)
-_DEFAULT_LOCATION_OPTIONS = ["Office", "Room", "Living room", "Kitchen", "Workshop", "Garage"]
 
 
 class MainWindow(Gtk.ApplicationWindow):
-    def __init__(self, application: Gtk.Application, discovery_manager: DiscoveryManager) -> None:
+    def __init__(
+        self,
+        application: Gtk.Application,
+        discovery_manager: DiscoveryManager,
+        startup_refresh_seconds: list[int] | None = None,
+        information_precedence: list[str] | None = None,
+    ) -> None:
         super().__init__(application=application, title="NetNeighbor")
         self.set_default_size(900, 560)
         self._manager = discovery_manager
@@ -33,9 +40,25 @@ class MainWindow(Gtk.ApplicationWindow):
         self._sidebar_signature: tuple | None = None
         self._initializing = True
         self._prefs = load_ui_preferences()
+        self._discovery_cache = load_discovery_cache()
         self._notification_history: list[dict[str, str]] = []
         self._location_options: list[str] = []
+        self._auto_add_discovered_locations: bool = True
         self._defer_persist_cleaned_location_prefs = False
+        self._startup_refresh_timer_ids: list[int] = []
+        self._startup_refresh_scheduled = False
+        raw_refresh = startup_refresh_seconds or [10, 30, 60]
+        seen_refresh: set[int] = set()
+        self._startup_refresh_seconds: list[int] = []
+        for value in raw_refresh:
+            try:
+                delay = int(value)
+            except (TypeError, ValueError):
+                continue
+            if delay <= 0 or delay in seen_refresh:
+                continue
+            seen_refresh.add(delay)
+            self._startup_refresh_seconds.append(delay)
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         root.set_border_width(8)
@@ -156,6 +179,10 @@ class MainWindow(Gtk.ApplicationWindow):
             on_set_type_override=self._on_set_type_override,
             on_set_name_override=self._on_set_name_override,
             on_set_location_override=self._on_set_location_override,
+            on_set_field_rule=self._on_set_field_rule,
+            on_remove_field_rule=self._on_remove_field_rule,
+            on_get_field_rules=self._on_get_field_rules,
+            information_precedence=information_precedence,
         )
         # DeviceList will call this when user chooses Monitor/Unfollow.
         self._content.add2(self._device_list)
@@ -175,6 +202,26 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _start_discovery_protocols(self) -> bool:
         self._manager.start()
+        self._schedule_startup_refreshes()
+        return False
+
+    def _schedule_startup_refreshes(self) -> None:
+        if self._startup_refresh_scheduled:
+            return
+        self._startup_refresh_scheduled = True
+        # Recover late/missed SSDP responses shortly after app startup.
+        for delay_seconds in self._startup_refresh_seconds:
+            timer_id = GLib.timeout_add_seconds(delay_seconds, self._run_startup_refresh_once, delay_seconds)
+            self._startup_refresh_timer_ids.append(timer_id)
+
+    def _run_startup_refresh_once(self, delay_seconds: int) -> bool:
+        if not self.get_visible():
+            return False
+        try:
+            _LOG.debug("Startup auto-refresh triggered at +%ss", delay_seconds)
+            self._manager.refresh()
+        except Exception:
+            _LOG.debug("Startup auto-refresh failed at +%ss", delay_seconds, exc_info=True)
         return False
 
     def _on_reload_activate(self, _menu_item: Gtk.MenuItem) -> None:
@@ -229,9 +276,36 @@ class MainWindow(Gtk.ApplicationWindow):
         self._manager.set_device_location_override(source, ip, port, location)
         self._persist_ui_preferences()
 
+    def _on_set_field_rule(self, source: str, ip: str, port: int, target: str, field_path: str) -> None:
+        self._manager.set_device_field_mapping_rule(source, ip, port, target, field_path)
+        self._persist_ui_preferences()
+
+    def _on_remove_field_rule(self, source: str, ip: str, port: int, target: str, field_path: str | None) -> None:
+        self._manager.remove_device_field_mapping_rule(source, ip, port, target, field_path)
+        self._persist_ui_preferences()
+
+    def _on_get_field_rules(self, source: str, ip: str, port: int) -> dict[str, list[str]]:
+        for device in self._manager.devices:
+            if device.source == source and device.ip == ip and int(device.port) == int(port):
+                return self._manager.get_device_field_mapping_rules(device)
+        return {}
+
+    def _default_location_preset_strings(self) -> list[str]:
+        """Translated starter presets when the saved list is still empty (lazy init)."""
+        return normalize_location_options(
+            [
+                _("Office"),
+                _("Room"),
+                _("Living room"),
+                _("Kitchen"),
+                _("Workshop"),
+                _("Garage"),
+            ]
+        )
+
     def _on_locations_presets_activate(self, _menu_item: Gtk.MenuItem) -> None:
         dialog = Gtk.Dialog(title=_("Location presets"), transient_for=self, modal=True)
-        dialog.set_default_size(460, 340)
+        dialog.set_default_size(460, 420)
         content = dialog.get_content_area()
         content.set_border_width(8)
         label = Gtk.Label(
@@ -241,8 +315,23 @@ class MainWindow(Gtk.ApplicationWindow):
         label.set_line_wrap(True)
         content.pack_start(label, False, False, 4)
 
+        auto_add_chk = Gtk.CheckButton(
+            label=_("Automatically add locations discovered on the network to this list"),
+        )
+        auto_add_chk.set_active(self._auto_add_discovered_locations)
+        auto_add_chk.set_tooltip_text(
+            _(
+                "When enabled, room names and similar strings from devices "
+                "(for example some speakers) can be added to the preset list as they are seen."
+            )
+        )
+        content.pack_start(auto_add_chk, False, False, 4)
+
         presets_store = Gtk.ListStore(str)
-        for value in self._location_options:
+        initial_presets = list(self._location_options)
+        if not initial_presets:
+            initial_presets = self._default_location_preset_strings()
+        for value in initial_presets:
             presets_store.append([value])
         presets_view = Gtk.TreeView(model=presets_store)
         presets_view.set_headers_visible(False)
@@ -344,8 +433,9 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.show_all()
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
+            self._auto_add_discovered_locations = auto_add_chk.get_active()
             previous_options = list(self._location_options)
-            self._location_options = _existing_values()
+            self._location_options = normalize_location_options(_existing_values())
             self._device_list.set_location_options(self._location_options)
             self._apply_location_preset_changes(previous_options, self._location_options, rename_map)
             self._persist_ui_preferences()
@@ -469,6 +559,8 @@ class MainWindow(Gtk.ApplicationWindow):
         return False
 
     def _merge_sonos_location_suggestions(self, devices: list[Device]) -> None:
+        if not self._auto_add_discovered_locations:
+            return
         discovered = self._extract_sonos_room_names(devices)
         if not discovered:
             return
@@ -607,8 +699,9 @@ class MainWindow(Gtk.ApplicationWindow):
                 counts[location] = counts.get(location, 0) + 1
                 bundle_filter_keys[location] = "location:__none__" if location == _("No location") else f"location:{location}"
             else:
-                counts[bundle.category] = counts.get(bundle.category, 0) + 1
-                bundle_filter_keys[bundle.category] = bundle.category
+                slug = (bundle.primary.type or "unknown").strip().lower()
+                counts[slug] = counts.get(slug, 0) + 1
+                bundle_filter_keys[slug] = slug
         signature = (sidebar_mode, len(bundles), tuple(sorted(counts.items())))
         if signature == self._sidebar_signature:
             return
@@ -620,13 +713,27 @@ class MainWindow(Gtk.ApplicationWindow):
             self._sidebar_list.remove(child)
         self._category_rows.clear()
 
+        type_slug_labels: dict[str, str] = {}
+        if sidebar_mode != "location":
+            for b in bundles:
+                slug = (b.primary.type or "unknown").strip().lower()
+                if slug not in type_slug_labels:
+                    type_slug_labels[slug] = format_device_type_for_details(b.primary)
+
         all_text = _("All Locations") if sidebar_mode == "location" else _("All Types")
         all_label = f"{all_text} ({len(bundles)})"
         self._add_sidebar_row(all_label, None)
-        for key in sorted(counts.keys(), key=str.lower):
+
+        for key in sorted(
+            counts.keys(),
+            key=lambda k: str(k).lower()
+            if sidebar_mode == "location"
+            else type_slug_labels.get(k, k).lower(),
+        ):
             if sidebar_mode == "location" and key == _("No location"):
                 continue
-            self._add_sidebar_row(f"{key} ({counts[key]})", bundle_filter_keys[key])
+            label = key if sidebar_mode == "location" else type_slug_labels.get(key, key)
+            self._add_sidebar_row(f"{label} ({counts[key]})", bundle_filter_keys[key])
         if sidebar_mode == "location" and _("No location") in counts:
             no_location = _("No location")
             self._add_sidebar_row(f"{no_location} ({counts[no_location]})", bundle_filter_keys[no_location])
@@ -670,11 +777,7 @@ class MainWindow(Gtk.ApplicationWindow):
         icon_source_overrides = self._prefs.get("icon_source_overrides")
         custom_icon_overrides = self._prefs.get("custom_icon_overrides")
         icon_sort_mode = str(self._prefs.get("icon_sort_mode", "sorted"))
-        # Backward compat: older versions saved a boolean.
-        if isinstance(self._prefs.get("use_notifications"), bool):
-            self._notification_mode = "monitored" if self._prefs.get("use_notifications") else "off"
-        else:
-            self._notification_mode = str(self._prefs.get("notification_mode", "off"))
+        self._notification_mode = str(self._prefs.get("notification_mode", "off"))
         selected_category = self._prefs.get("selected_category")
         if isinstance(selected_category, str):
             self._selected_category = selected_category
@@ -689,11 +792,16 @@ class MainWindow(Gtk.ApplicationWindow):
         location_options = self._prefs.get("location_options")
         if isinstance(location_options, list):
             raw_opts = [str(v).strip() for v in location_options if isinstance(v, str) and str(v).strip()]
-            self._location_options = [v for v in raw_opts if is_plausible_room_location(v)]
+            self._location_options = normalize_location_options(raw_opts)
             if raw_opts != self._location_options:
                 self._defer_persist_cleaned_location_prefs = True
-        if not self._location_options:
-            self._location_options = list(_DEFAULT_LOCATION_OPTIONS)
+        else:
+            self._location_options = []
+        aad = self._prefs.get("auto_add_discovered_locations")
+        if aad is True or aad is False:
+            self._auto_add_discovered_locations = aad
+        else:
+            self._auto_add_discovered_locations = True
         self._device_list.set_location_options(self._location_options)
         self._device_list.set_icon_sort_mode(icon_sort_mode)
         type_overrides = self._prefs.get("type_overrides")
@@ -720,13 +828,16 @@ class MainWindow(Gtk.ApplicationWindow):
                 and is_plausible_room_location(str(v).strip())
             }
             self._manager.set_location_overrides(cleaned_overrides)
+        field_mapping_rules = self._prefs.get("field_mapping_rules")
+        if isinstance(field_mapping_rules, dict):
+            self._manager.set_field_mapping_rules(field_mapping_rules)
         monitored_overrides = self._prefs.get("monitored_overrides")
         if isinstance(monitored_overrides, dict):
             self._manager.set_monitored_overrides(monitored_overrides)
-        last_seen_overrides = self._prefs.get("last_seen_overrides")
+        last_seen_overrides = self._discovery_cache.get("last_seen_overrides")
         if isinstance(last_seen_overrides, dict):
             self._manager.set_last_seen_overrides(last_seen_overrides)
-        monitored_snapshots = self._prefs.get("monitored_device_snapshots")
+        monitored_snapshots = self._discovery_cache.get("monitored_device_snapshots")
         if isinstance(monitored_snapshots, list):
             self._manager.restore_monitored_snapshots(monitored_snapshots)
         if view_mode == "list":
@@ -759,15 +870,20 @@ class MainWindow(Gtk.ApplicationWindow):
             "type_overrides": self._manager.get_type_overrides(),
             "name_overrides": self._manager.get_name_overrides(),
             "location_overrides": self._manager.get_location_overrides(),
-            "location_options": self._location_options,
+            "field_mapping_rules": self._manager.get_field_mapping_rules(),
+            "location_options": normalize_location_options(self._location_options),
+            "auto_add_discovered_locations": bool(self._auto_add_discovered_locations),
             "monitored_overrides": self._manager.get_monitored_overrides(),
-            "last_seen_overrides": self._manager.get_last_seen_overrides(),
-            "monitored_device_snapshots": self._build_monitored_snapshots(),
             "notification_mode": self._notification_mode,
             "selected_category": self._selected_category,
             "sidebar_position": self._content.get_position(),
         }
         save_ui_preferences(prefs)
+        self._discovery_cache = {
+            "last_seen_overrides": self._manager.get_last_seen_overrides(),
+            "monitored_device_snapshots": self._build_monitored_snapshots(),
+        }
+        save_discovery_cache(self._discovery_cache)
 
     def _build_monitored_snapshots(self) -> list[dict]:
         snapshots: list[dict] = []
@@ -799,6 +915,12 @@ class MainWindow(Gtk.ApplicationWindow):
     def _on_destroy(self, *_args) -> None:
         # UX: hide immediately, then complete shutdown work.
         self.hide()
+        for timer_id in self._startup_refresh_timer_ids:
+            try:
+                GLib.source_remove(timer_id)
+            except Exception:
+                pass
+        self._startup_refresh_timer_ids.clear()
         while Gtk.events_pending():
             Gtk.main_iteration_do(False)
         self._persist_ui_preferences()

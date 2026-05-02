@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
+from gettext import gettext as _
+
 from model.device import Device
 from utils.mdns_rules import cached_mdns_rules, summary_field_labels_norm, summary_rows_from_rules
 
@@ -82,7 +84,42 @@ def with_aggregate_ports_field(fields: list[tuple[str, str]], *devices: Device |
         if _nk(k) == "ip":
             insert_idx = i + 1
             break
+    # Order IP → Type → Ports when Type row exists immediately after IP.
+    if insert_idx < len(cleaned) and _nk(cleaned[insert_idx][0]) == "type":
+        insert_idx += 1
     return cleaned[:insert_idx] + [("Ports", aggregate_ports_display(*devices))] + cleaned[insert_idx:]
+
+
+def format_device_type_for_details(device: Device) -> str:
+    """Human-readable type line for the device details tab (slug → translated label)."""
+    raw = (getattr(device, "type", None) or "unknown")
+    t = str(raw).strip().lower()
+    known = {
+        "unknown": _("Unknown"),
+        "http": _("HTTP device"),
+        "https": _("HTTPS device"),
+        "router": _("Router"),
+        "mediaserver": _("Media server"),
+        "printer": _("Printer"),
+        "networkprinter": _("Printer"),
+        "multifunction_printer": _("Multifunction printer"),
+        "smartspeaker": _("Smart speaker"),
+        "smarttv": _("Smart TV"),
+        "smartdevice": _("Smart device"),
+        "camera": _("Camera"),
+        "homeappliance": _("Home appliance"),
+        "cnc": _("CNC"),
+        "3dprinter": _("3D printer"),
+        "nas": _("NAS"),
+        "computer": _("Computer"),
+        "esp32": _("ESP3D / firmware"),
+        "scanner": _("Scanner"),
+    }
+    if t in known:
+        return known[t]
+    if t:
+        return t.replace("_", " ")
+    return _("Unknown")
 
 
 def _value_or_unavailable(value) -> str:
@@ -141,6 +178,7 @@ def build_ssdp_payload(device: Device) -> tuple[
         last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
         ("IP", device.ip),
+        ("Type", format_device_type_for_details(device)),
         ("Ports", aggregate_ports_display(device)),
         ("Location", _value_or_unavailable(metadata.get("user_location"))),
         ("Last seen", last_seen_text),
@@ -233,10 +271,12 @@ def build_mdns_payload(device: Device) -> tuple[list[tuple[str, str]], list[dict
         last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
         ("IP", device.ip),
+        ("Type", format_device_type_for_details(device)),
         ("Ports", aggregate_ports_display(device)),
         ("Location", _value_or_unavailable(metadata.get("user_location"))),
         ("Last seen", last_seen_text),
         ("Hostname", _value_or_unavailable(hostname_raw)),
+        ("Information", _value_or_unavailable(metadata.get("information"))),
     ]
 
     for label, raw in summary_rows_from_rules(metadata):
@@ -327,6 +367,8 @@ def merge_ssdp_mdns_detail_fields(
     skip_port_keys = frozenset({"port", "ports"})
     ssdp_fields = [(k, v) for k, v in ssdp_fields if _norm_key(k) not in skip_port_keys]
     mdns_fields = [(k, v) for k, v in mdns_fields if _norm_key(k) not in skip_port_keys]
+    # Avoid duplicate Type row when merging SSDP + mDNS (SSDP row kept).
+    mdns_fields = [(k, v) for k, v in mdns_fields if _norm_key(k) != "type"]
 
     summary_norm_labels = summary_field_labels_norm(cached_mdns_rules())
 

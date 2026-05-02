@@ -24,10 +24,16 @@ from ui.device_details import DeviceDetailsDialog
 from ui.icons import resolve_icon_path
 from utils.browser import open_url
 from utils.location_label import is_plausible_room_location
+from utils.discovery_config import (
+    information_precedence_rank,
+    information_precedence_role_for_device_source,
+    normalize_information_precedence_list,
+)
 from utils.details_payload import (
     aggregate_ports_display,
     build_mdns_payload,
     build_ssdp_payload,
+    format_device_type_for_details,
     merge_ssdp_mdns_detail_fields,
     with_aggregate_ports_field,
 )
@@ -96,6 +102,10 @@ class DeviceList(Gtk.Box):
         on_set_type_override: Callable[[str, str, int, str | None], None] | None = None,
         on_set_name_override: Callable[[str, str, int, str | None], None] | None = None,
         on_set_location_override: Callable[[str, str, int, str | None], None] | None = None,
+        on_set_field_rule: Callable[[str, str, int, str, str], None] | None = None,
+        on_remove_field_rule: Callable[[str, str, int, str, str | None], None] | None = None,
+        on_get_field_rules: Callable[[str, str, int], dict[str, list[str]]] | None = None,
+        information_precedence: list[str] | None = None,
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._current_view = "icons"
@@ -109,6 +119,12 @@ class DeviceList(Gtk.Box):
         self._on_set_type_override = on_set_type_override
         self._on_set_name_override = on_set_name_override
         self._on_set_location_override = on_set_location_override
+        self._on_set_field_rule = on_set_field_rule
+        self._on_remove_field_rule = on_remove_field_rule
+        self._on_get_field_rules = on_get_field_rules
+        self._information_precedence: list[str] = (
+            list(information_precedence) if information_precedence else normalize_information_precedence_list(None)
+        )
         self._location_options: list[str] = []
         self._icon_source_overrides: dict[tuple[str, int], str] = {}
         self._custom_icon_overrides: dict[tuple[str, int], str] = {}
@@ -130,7 +146,7 @@ class DeviceList(Gtk.Box):
         self._add_column("Name", 1)
         self._add_column("IP", 2)
         self._add_column(_("Ports"), 3)
-        self._add_column("Category", 4)
+        self._add_column(_("Type"), 4)
         self._tree.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
         self._tree.connect("button-press-event", self._on_tree_button_press)
         self._tree.connect("row-activated", self._on_tree_row_activated)
@@ -173,7 +189,7 @@ class DeviceList(Gtk.Box):
                     bundle.name,
                     bundle.ip,
                     aggregate_ports_display(bundle.ssdp_device, bundle.mdns_device),
-                    bundle.category,
+                    format_device_type_for_details(bundle.primary),
                 ]
             )
         self._rebuild_icon_sections(self._filtered_devices)
@@ -266,9 +282,9 @@ class DeviceList(Gtk.Box):
 
         grouped_devices: dict[str, list[_DeviceBundle]] = defaultdict(list)
         for bundle in bundles:
-            grouped_devices[bundle.category].append(bundle)
+            grouped_devices[format_device_type_for_details(bundle.primary)].append(bundle)
 
-        for category in sorted(grouped_devices.keys()):
+        for category in sorted(grouped_devices.keys(), key=str.lower):
             frame = Gtk.Frame()
             frame.set_shadow_type(Gtk.ShadowType.IN)
             frame_label = Gtk.Label(label=category, xalign=0.0)
@@ -481,7 +497,8 @@ class DeviceList(Gtk.Box):
             (_("Router"), "router"),
             (_("Media server"), "mediaserver"),
             (_("Printer"), "printer"),
-            (_("Network Printer"), "networkprinter"),
+            (_("Multifunction printer"), "multifunction_printer"),
+            (_("Printer (network / IPP)"), "networkprinter"),
             (_("SmartSpeaker"), "smartspeaker"),
             (_("SmartTV"), "smarttv"),
             (_("SmartDevice"), "smartdevice"),
@@ -598,7 +615,7 @@ class DeviceList(Gtk.Box):
         self._open_combined_details(bundle)
 
     def _open_combined_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
-        ssdp = bundle.ssdp_device
+        ssdp = self._effective_ssdp_device(bundle)
         mdns = bundle.mdns_device
         if ssdp is None or mdns is None:
             return
@@ -621,10 +638,19 @@ class DeviceList(Gtk.Box):
             initial_tab=initial_tab,
             has_device_icon_source=self._bundle_has_remote_device_icon(bundle),
             provided_icon_display=self._bundle_provided_icon_display(bundle),
+            details_field_rule_map={
+                "Friendly name": "xml:friendlyName",
+                "Information": "meta:information",
+                "Hostname (mDNS)": "meta:hostname",
+                "Server (mDNS)": "meta:server",
+            },
+            endpoint_source=bundle.primary.source,
+            endpoint_ip=bundle.primary.ip,
+            endpoint_port=int(bundle.primary.port),
         )
 
     def _open_ssdp_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
-        device = bundle.ssdp_device
+        device = self._effective_ssdp_device(bundle)
         if device is None:
             return
         fields, raw_xml, services_list, troubleshooting_fields, xml_location = build_ssdp_payload(device)
@@ -644,19 +670,28 @@ class DeviceList(Gtk.Box):
             initial_tab=initial_tab,
             has_device_icon_source=self._bundle_has_remote_device_icon(bundle),
             provided_icon_display=self._bundle_provided_icon_display(bundle),
+            details_field_rule_map={
+                "Friendly name": "xml:friendlyName",
+                "Information": "meta:information",
+                "Model": "xml:modelName",
+                "Manufacturer": "xml:manufacturer",
+            },
+            endpoint_source=device.source,
+            endpoint_ip=device.ip,
+            endpoint_port=int(device.port),
         )
 
     def _on_show_mdns_txt_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_mdns_details(bundle)
 
     def _on_icon_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
-        if bundle.ssdp_device is not None and bundle.mdns_device is not None:
+        if self._has_ssdp_details(bundle) and self._has_mdns_details(bundle):
             self._open_combined_details(bundle, initial_tab="appearance")
             return
         if bundle.mdns_device is not None:
             self._open_mdns_details(bundle, initial_tab="appearance")
             return
-        if bundle.ssdp_device is not None:
+        if self._has_ssdp_details(bundle):
             self._open_ssdp_details(bundle, initial_tab="appearance")
 
     def _open_mdns_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
@@ -676,6 +711,14 @@ class DeviceList(Gtk.Box):
             initial_tab=initial_tab,
             has_device_icon_source=self._bundle_has_remote_device_icon(bundle),
             provided_icon_display=self._bundle_provided_icon_display(bundle),
+            details_field_rule_map={
+                "Hostname": "meta:hostname",
+                "Server": "meta:server",
+                "Information": "meta:information",
+            },
+            endpoint_source=device.source,
+            endpoint_ip=device.ip,
+            endpoint_port=int(device.port),
         )
 
     def _open_device(self, bundle: _DeviceBundle) -> None:
@@ -687,10 +730,10 @@ class DeviceList(Gtk.Box):
         if url:
             open_url(url)
             return
-        if bundle.ssdp_device is not None and bundle.mdns_device is not None:
+        if self._has_ssdp_details(bundle) and bundle.mdns_device is not None:
             self._open_combined_details(bundle)
             return
-        if bundle.ssdp_device is not None:
+        if self._has_ssdp_details(bundle):
             self._open_ssdp_details(bundle)
             return
         if bundle.mdns_device is not None:
@@ -715,6 +758,10 @@ class DeviceList(Gtk.Box):
         initial_tab: str | None = None,
         has_device_icon_source: bool = True,
         provided_icon_display: str | None = None,
+        details_field_rule_map: dict[str, str] | None = None,
+        endpoint_source: str | None = None,
+        endpoint_ip: str | None = None,
+        endpoint_port: int | None = None,
     ) -> None:
         parent = self._parent_window
         if parent is None:
@@ -723,6 +770,14 @@ class DeviceList(Gtk.Box):
                 parent = top_level
         if parent is None:
             return
+        active_rules = {}
+        if (
+            self._on_get_field_rules is not None
+            and isinstance(endpoint_source, str)
+            and isinstance(endpoint_ip, str)
+            and isinstance(endpoint_port, int)
+        ):
+            active_rules = self._on_get_field_rules(endpoint_source, endpoint_ip, endpoint_port) or {}
         dialog = DeviceDetailsDialog(
             parent=parent,
             title=title,
@@ -742,44 +797,119 @@ class DeviceList(Gtk.Box):
             initial_tab=initial_tab,
             has_device_icon_source=has_device_icon_source,
             provided_icon_display=provided_icon_display,
+            details_field_rule_map=details_field_rule_map or {},
+            active_field_rules=active_rules,
+            on_add_field_rule=(
+                (lambda target, path: self._on_set_field_rule(endpoint_source, endpoint_ip, endpoint_port, target, path))
+                if (
+                    self._on_set_field_rule is not None
+                    and isinstance(endpoint_source, str)
+                    and isinstance(endpoint_ip, str)
+                    and isinstance(endpoint_port, int)
+                )
+                else None
+            ),
+            on_remove_field_rule=(
+                (
+                    lambda target, path: self._on_remove_field_rule(
+                        endpoint_source,
+                        endpoint_ip,
+                        endpoint_port,
+                        target,
+                        path,
+                    )
+                )
+                if (
+                    self._on_remove_field_rule is not None
+                    and isinstance(endpoint_source, str)
+                    and isinstance(endpoint_ip, str)
+                    and isinstance(endpoint_port, int)
+                )
+                else None
+            ),
         )
         dialog.run()
         dialog.destroy()
 
     def _has_ssdp_details(self, bundle: _DeviceBundle) -> bool:
-        return bundle.ssdp_device is not None
+        return self._effective_ssdp_device(bundle) is not None
 
     def _has_mdns_details(self, bundle: _DeviceBundle) -> bool:
         return bundle.mdns_device is not None
 
+    def _effective_ssdp_device(self, bundle: _DeviceBundle) -> Device | None:
+        if bundle.ssdp_device is not None:
+            return bundle.ssdp_device
+        mdns = bundle.mdns_device
+        if mdns is None or not isinstance(mdns.metadata, dict):
+            return None
+        mdns_meta = mdns.metadata
+        xml_fields = mdns_meta.get("xml_fields")
+        if not isinstance(xml_fields, dict) or not xml_fields:
+            return None
+        if not any(
+            isinstance(xml_fields.get(k), str) and xml_fields.get(k).strip()
+            for k in ("friendlyName", "deviceType", "UDN", "modelName", "manufacturer", "services_description")
+        ):
+            return None
+        synth_meta = dict(mdns_meta)
+        synth_meta["xml_fields"] = dict(xml_fields)
+        return Device(
+            name=mdns.name,
+            ip=mdns.ip,
+            port=mdns.port,
+            type=mdns.type,
+            category=mdns.category,
+            source="ssdp",
+            url=mdns.url,
+            metadata=synth_meta,
+            last_seen=mdns.last_seen,
+            online=mdns.online,
+            monitored=mdns.monitored,
+            icon=mdns.icon,
+        )
+
     def _bundle_provided_icon_display(self, bundle: _DeviceBundle) -> str | None:
-        """URL or filesystem path for the device-provided icon (SSDP before mDNS), else bundled icon file."""
+        """Display source for a device-provided icon (URL/cached canonical URL), if available."""
         for dev in (bundle.ssdp_device, bundle.mdns_device):
             if dev is None:
                 continue
             url = self._resolved_remote_icon_url(dev)
             if url:
                 return url
-        primary = bundle.primary
-        if isinstance(primary.icon, str) and primary.icon.strip():
-            path = resolve_icon_path(primary.icon.strip())
-            try:
-                if path.exists():
-                    return str(path.resolve())
-            except Exception:
-                pass
-            return primary.icon.strip()
+            cached = self._cached_remote_icon_url_for_host(dev.ip)
+            if cached:
+                return cached
         return None
 
     def _bundle_has_remote_device_icon(self, bundle: _DeviceBundle) -> bool:
         for dev in (bundle.ssdp_device, bundle.mdns_device):
             if dev is None:
                 continue
-            if isinstance(dev.icon, str) and dev.icon.strip():
-                return True
             if self._remote_icon_url_for_device(dev):
                 return True
+            if self._cached_remote_icon_url_for_host(dev.ip):
+                return True
         return False
+
+    def _cached_remote_icon_url_for_host(self, ip: str) -> str | None:
+        sip = str(ip).strip()
+        if not sip or sip in {"0.0.0.0", "::"}:
+            return None
+        self._ensure_remote_icon_index()
+        row = self._remote_icon_index.get(sip)
+        if not isinstance(row, dict):
+            return None
+        canon = row.get("canonical_url")
+        if not isinstance(canon, str) or not canon.strip():
+            return None
+        payload_sha = row.get("payload_sha256")
+        if not isinstance(payload_sha, str) or not payload_sha.strip():
+            return None
+        payload_path = self._remote_icon_payload_path(payload_sha.strip())
+        if not payload_path.exists():
+            return None
+        return canon.strip()
 
     def _remote_icon_url_for_device(self, device: Device) -> str | None:
         metadata = device.metadata if isinstance(device.metadata, dict) else {}
@@ -909,7 +1039,7 @@ class DeviceList(Gtk.Box):
 
     @staticmethod
     def _expand_cached_remote_icon_aliases(canonical_key: str) -> list[str]:
-        """Try legacy / alternate filenames (e.g. http://host:80/... saved under old hashing rules)."""
+        """Alternate canonical URL forms for the same resource (e.g. default vs explicit port)."""
         out: list[str] = []
         seen: set[str] = set()
         ck = (canonical_key or "").strip()
@@ -978,44 +1108,24 @@ class DeviceList(Gtk.Box):
             return
         self._remote_icon_index_loaded = True
         index_path = self._remote_icon_index_path
-        legacy_bindings = index_path.parent / "remote_icon_bindings.json"
         try:
-            if index_path.is_file():
-                data = json.loads(index_path.read_text(encoding="utf-8"))
-                ver_raw = data.get("version", 0) if isinstance(data, dict) else 0
-                try:
-                    vern = int(ver_raw)
-                except (TypeError, ValueError):
-                    vern = 0
-                if isinstance(data, dict) and vern >= 2:
-                    hosts = data.get("hosts")
-                    if isinstance(hosts, dict):
-                        for sip, row in hosts.items():
-                            if not isinstance(sip, str) or not isinstance(row, dict):
-                                continue
-                            entry = self._normalize_host_icon_index_row(row)
-                            if entry is not None:
-                                self._remote_icon_index[sip.strip()] = entry
+            if not index_path.is_file():
                 return
-            if legacy_bindings.is_file():
-                old = json.loads(legacy_bindings.read_text(encoding="utf-8"))
-                bi = old.get("by_ip") if isinstance(old, dict) else None
-                if isinstance(bi, dict):
-                    for sip, canon in bi.items():
-                        if not isinstance(sip, str) or not isinstance(canon, str):
+            data = json.loads(index_path.read_text(encoding="utf-8"))
+            ver_raw = data.get("version", 0) if isinstance(data, dict) else 0
+            try:
+                vern = int(ver_raw)
+            except (TypeError, ValueError):
+                vern = 0
+            if isinstance(data, dict) and vern >= 2:
+                hosts = data.get("hosts")
+                if isinstance(hosts, dict):
+                    for sip, row in hosts.items():
+                        if not isinstance(sip, str) or not isinstance(row, dict):
                             continue
-                        if not sip.strip() or not canon.strip():
-                            continue
-                        entry = self._normalize_host_icon_index_row(
-                            {
-                                "canonical_url": canon.strip(),
-                                "updated_at": datetime.now(timezone.utc).isoformat(),
-                            }
-                        )
+                        entry = self._normalize_host_icon_index_row(row)
                         if entry is not None:
                             self._remote_icon_index[sip.strip()] = entry
-                if self._remote_icon_index:
-                    self._write_remote_icon_index_file()
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             return
 
@@ -1198,7 +1308,17 @@ class DeviceList(Gtk.Box):
             if location_value == "__none__":
                 return [bundle for bundle in bundles if self._bundle_location_label(bundle) == _("No location")]
             return [bundle for bundle in bundles if self._bundle_location_label(bundle) == location_value]
-        return [bundle for bundle in bundles if bundle.category == self._category_filter]
+        cf = self._category_filter
+        if not isinstance(cf, str):
+            return list(bundles)
+        out: list[_DeviceBundle] = []
+        for bundle in bundles:
+            slug = (bundle.primary.type or "unknown").strip().lower()
+            if slug == cf.strip().lower():
+                out.append(bundle)
+            elif bundle.category == cf:
+                out.append(bundle)
+        return out
 
     def _on_tree_row_activated(self, _tree: Gtk.TreeView, path: Gtk.TreePath, _column: Gtk.TreeViewColumn) -> None:
         model = self._tree.get_model()
@@ -1292,6 +1412,7 @@ class DeviceList(Gtk.Box):
             "mediaserver": ["multimedia-player", "folder-videos", "network-server"],
             "printer": ["printer-network", "printer", "network-server"],
             "networkprinter": ["printer-network", "printer", "network-server"],
+            "multifunction_printer": ["printer-network", "printer", "scanner"],
             "smartspeaker": ["audio-speakers", "multimedia-player", "network-server"],
             "smarttv": ["video-display", "multimedia-player", "network-server"],
             "smartdevice": ["applications-system", "network-server", "computer"],
@@ -1379,10 +1500,6 @@ class DeviceList(Gtk.Box):
                 return self._builtin_icons_dir / name
             if source == "custom":
                 return self._custom_icons_dir / name
-        # Backward compatibility with old prefs storing only filename.
-        custom_candidate = self._custom_icons_dir / icon_id
-        if custom_candidate.exists():
-            return custom_candidate
         return self._builtin_icons_dir / icon_id
 
     def _load_remote_icon(self, device: Device, size: int) -> GdkPixbuf.Pixbuf | None:
@@ -1464,11 +1581,13 @@ class DeviceList(Gtk.Box):
     def _remote_icon_digest(icon_url: str) -> str:
         return hashlib.sha256(icon_url.encode("utf-8")).hexdigest()
 
+    def _remote_icon_payload_path(self, payload_sha256: str) -> Path:
+        """Path helper for indexed payload SHA entries."""
+        sha = str(payload_sha256).strip().lower()
+        return self._remote_icon_disk_dir / f"{sha}.payload"
+
     def _remote_icon_disk_path_payload(self, icon_url: str) -> Path:
         return self._remote_icon_disk_dir / f"{self._remote_icon_digest(icon_url)}.payload"
-
-    def _remote_icon_disk_path_legacy_png(self, icon_url: str) -> Path:
-        return self._remote_icon_disk_dir / f"{self._remote_icon_digest(icon_url)}.png"
 
     @staticmethod
     def _pixbuf_from_image_bytes(data: bytes) -> GdkPixbuf.Pixbuf | None:
@@ -1490,18 +1609,7 @@ class DeviceList(Gtk.Box):
                 payload_path.unlink()
             except OSError:
                 pass
-        png_path = self._remote_icon_disk_path_legacy_png(icon_url)
-        if not png_path.is_file():
-            return None
-        try:
-            raw = GdkPixbuf.Pixbuf.new_from_file(str(png_path))
-        except Exception:
-            try:
-                png_path.unlink()
-            except OSError:
-                pass
-            return None
-        return self._normalize_icon_pixbuf(raw, size)
+        return None
 
     def _save_remote_icon_payload(self, icon_url: str, data: bytes) -> None:
         if not data:
@@ -1692,11 +1800,7 @@ class DeviceList(Gtk.Box):
                 bundle.mdns_device = device
             elif device.source == "ssdp":
                 bundle.ssdp_device = device
-            # Representative row: SSDP first (richer descriptor / URLs), then mDNS-only hosts.
-            if bundle.ssdp_device is not None:
-                bundle.primary = bundle.ssdp_device
-            elif bundle.mdns_device is not None:
-                bundle.primary = bundle.mdns_device
+            bundle.primary = self._choose_bundle_primary(bundle)
 
             for key in bundle_keys:
                 host_to_bundle_id[key] = bundle_id
@@ -1706,6 +1810,29 @@ class DeviceList(Gtk.Box):
             bundle.ip = bundle.primary.ip
             bundle.port = int(bundle.primary.port)
         return ordered
+
+    def _protocol_row_preference_rank(self, device: Device | None) -> int:
+        """Lower = stronger (see ``merge.information_precedence`` in ``discovery.json``)."""
+        if device is None:
+            return 99
+        role = information_precedence_role_for_device_source(device.source or "")
+        return information_precedence_rank(self._information_precedence, role)
+
+    def _choose_bundle_primary(self, bundle: _DeviceBundle) -> Device:
+        """Pick list/detail primary row using ``merge.information_precedence`` for live ``ssdp`` vs ``mdns``."""
+        if bundle.ssdp_device is not None and bundle.mdns_device is not None:
+            rs = self._protocol_row_preference_rank(bundle.ssdp_device)
+            rm = self._protocol_row_preference_rank(bundle.mdns_device)
+            if rs < rm:
+                return bundle.ssdp_device
+            if rm < rs:
+                return bundle.mdns_device
+            return bundle.ssdp_device
+        if bundle.ssdp_device is not None:
+            return bundle.ssdp_device
+        if bundle.mdns_device is not None:
+            return bundle.mdns_device
+        return bundle.primary
 
     def _device_host_bundle_keys(self, device: Device) -> list[str]:
         """Keys that may refer to the same physical host (cross-protocol merging).

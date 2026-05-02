@@ -24,6 +24,9 @@ documentation remains in the repository root [`README.md`](../README.md).
 
 - **Discovery**: `discovery/base.py` (contract), `discovery/manager.py` (cache + merges), `discovery/ssdp.py`, `discovery/mdns.py`.
 - **UI**: `app.py` (single instance, activation), `ui/main_window.py`, `ui/device_list.py`, `ui/device_details.py`.
-- **Config**: `~/.config/netneighbor/ui_prefs.json` (UI + overrides + monitored device snapshots for session-style restore).
+- **Config**:
+  - `~/.config/netneighbor/ui_prefs.json` (UI state + user choices/rules/overrides)
+  - `~/.config/netneighbor/discovery.json` (per-protocol `mdns`/`ssdp` blocks with `enabled`/`rules`, `merge.protocol_order`, `merge.information_precedence`, plus `startup_refresh_seconds`; see [`MAINTENANCE.md`](MAINTENANCE.md))
+  - `~/.cache/netneighbor/discovery-cache.json` (volatile discovery cache: `last_seen`, monitored snapshots, SSDP XML/profile cache)
 
 If you add a new protocol, start from `BaseDiscovery` and register the provider in `DiscoveryManager`.
