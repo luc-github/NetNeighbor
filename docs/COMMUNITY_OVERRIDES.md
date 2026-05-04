@@ -9,6 +9,24 @@ files here are optional).
 Even when NetNeighbor is installed in a **read-only** location (flatpak `/app`, distro package under
 `/usr`, etc.), you can still add or edit overlays: only your config directory needs to be writable, not the install prefix.
 
+## Application preferences (`ui_prefs.json`)
+
+This file is **not** part of the overlay merge system (`data/` / `config/`). NetNeighbor reads and
+writes it automatically. You may edit it manually **while the app is closed** if you need to
+bulk-reset or script defaults; invalid or missing keys fall back to built-in defaults on next start.
+
+| Key (examples) | Meaning |
+|----------------|---------|
+| `close_to_tray` | If true and a tray icon exists, closing the window hides the app instead of exiting (default true). |
+| `start_minimized_to_tray` | If true and tray works, start hidden to the panel after launch. |
+| `start_at_login` | If true, ensures `~/.config/autostart/io.esp3d.netneighbor.desktop` exists (see [`MAINTENANCE.md`](MAINTENANCE.md)). |
+| `autostart_onboarding_done` | Set after the first-run **session startup** dialog; prevents showing that prompt again. |
+
+Other keys store view mode, icon sort, overrides, sidebar width, notification mode, etc.; treat
+unknown keys as opaque unless you grep the codebase for `save_ui_preferences` / `ui_prefs`.
+
+## Rule and type overlay files
+
 | File | Merges with | Behaviour |
 |------|-------------|-----------|
 | `device_types.json` | `data/device_types.json` | Deep-merge per `mdns` / `ssdp` service key; shallow merge `fallback`. |

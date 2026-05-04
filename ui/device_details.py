@@ -10,6 +10,8 @@ from typing import Any
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 
+from utils.gtk_dialog import prepare_gtk_dialog
+
 _LOG = logging.getLogger(__name__)
 
 
@@ -38,8 +40,10 @@ class DeviceDetailsDialog(Gtk.Dialog):
         active_field_rules: dict[str, list[str]] | None = None,
         on_add_field_rule: Callable[[str, str], None] | None = None,
         on_remove_field_rule: Callable[[str, str | None], None] | None = None,
+        overview: dict[str, str | None] | None = None,
     ) -> None:
         super().__init__(title=title, transient_for=parent, modal=True)
+        prepare_gtk_dialog(self)
         fields = self._filter_unavailable_pairs(fields)
         troubleshooting_records = self._filter_unavailable_pairs(troubleshooting_records)
         txt_records = self._filter_unavailable_pairs(txt_records)
@@ -75,6 +79,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
         self._active_field_rules = active_field_rules if isinstance(active_field_rules, dict) else {}
         self._on_add_field_rule = on_add_field_rule
         self._on_remove_field_rule = on_remove_field_rule
+        self._overview = overview if isinstance(overview, dict) else None
 
         area = self.get_content_area()
         area.set_spacing(8)
@@ -98,25 +103,77 @@ class DeviceDetailsDialog(Gtk.Dialog):
         appearance_page_index: int | None = None
         rules_page_index: int | None = None
 
-        details_grid = Gtk.Grid(column_spacing=16, row_spacing=8)
-        details_grid.set_margin_start(12)
-        details_grid.set_margin_end(12)
-        details_grid.set_margin_top(10)
-        details_grid.set_margin_bottom(10)
-        row = 0
-        for key, value in fields:
-            key_label = Gtk.Label(label=f"{key}:", xalign=0.0)
-            key_label.get_style_context().add_class("dim-label")
-            key_label.set_halign(Gtk.Align.START)
-            details_grid.attach(key_label, 0, row, 1, 1)
-            details_grid.attach(self._create_value_widget(value, self._details_field_rule_map.get(key)), 1, row, 1, 1)
-            row += 1
-        details_scroll = Gtk.ScrolledWindow()
-        details_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        details_scroll.set_hexpand(True)
-        details_scroll.set_vexpand(True)
-        details_scroll.add(details_grid)
-        notebook.append_page(details_scroll, Gtk.Label(label=_("Device details")))
+        first_tab_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        first_tab_outer.set_margin_start(4)
+        first_tab_outer.set_margin_end(4)
+        first_tab_outer.set_margin_top(8)
+        first_tab_outer.set_margin_bottom(8)
+
+        if self._overview:
+            ov = self._overview
+            overview_grid = Gtk.Grid(column_spacing=16, row_spacing=10)
+            overview_grid.set_margin_start(12)
+            overview_grid.set_margin_end(12)
+            overview_grid.set_margin_top(4)
+            overview_grid.set_margin_bottom(8)
+            orow = 0
+            for label_key, raw_val in (
+                (_("Name"), ov.get("name")),
+                (_("IP address"), ov.get("ip")),
+                (_("Location"), ov.get("location")),
+                (_("Type"), ov.get("type")),
+            ):
+                val = (raw_val or "").strip() if isinstance(raw_val, str) else ""
+                if not val:
+                    continue
+                kl = Gtk.Label(label=f"{label_key}:", xalign=0.0)
+                kl.get_style_context().add_class("dim-label")
+                kl.set_halign(Gtk.Align.START)
+                overview_grid.attach(kl, 0, orow, 1, 1)
+                vl = Gtk.Label(label=val, xalign=0.0)
+                vl.set_selectable(True)
+                vl.set_line_wrap(True)
+                vl.set_halign(Gtk.Align.START)
+                overview_grid.attach(vl, 1, orow, 1, 1)
+                orow += 1
+            ip6 = ov.get("ipv6_link_local")
+            ip6_s = (ip6 or "").strip() if isinstance(ip6, str) else ""
+            if ip6_s:
+                i6l = Gtk.Label(label=f"{_('IPv6 (link-local)')}:", xalign=0.0)
+                i6l.get_style_context().add_class("dim-label")
+                i6l.set_halign(Gtk.Align.START)
+                overview_grid.attach(i6l, 0, orow, 1, 1)
+                i6v = Gtk.Label(label=ip6_s, xalign=0.0)
+                i6v.set_selectable(True)
+                i6v.get_style_context().add_class("dim-label")
+                i6v.set_halign(Gtk.Align.START)
+                overview_grid.attach(i6v, 1, orow, 1, 1)
+                orow += 1
+            first_tab_outer.pack_start(overview_grid, False, False, 0)
+
+        if fields:
+            details_grid = Gtk.Grid(column_spacing=16, row_spacing=8)
+            details_grid.set_margin_start(12)
+            details_grid.set_margin_end(12)
+            details_grid.set_margin_top(10)
+            details_grid.set_margin_bottom(10)
+            row = 0
+            for key, value in fields:
+                key_label = Gtk.Label(label=f"{key}:", xalign=0.0)
+                key_label.get_style_context().add_class("dim-label")
+                key_label.set_halign(Gtk.Align.START)
+                details_grid.attach(key_label, 0, row, 1, 1)
+                details_grid.attach(self._create_value_widget(value, self._details_field_rule_map.get(key)), 1, row, 1, 1)
+                row += 1
+            details_scroll = Gtk.ScrolledWindow()
+            details_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            details_scroll.set_hexpand(True)
+            details_scroll.set_vexpand(True)
+            details_scroll.add(details_grid)
+            first_tab_outer.pack_start(details_scroll, True, True, 0)
+
+        details_tab_label = Gtk.Label(label=_("Overview") if self._overview else _("Device details"))
+        notebook.append_page(first_tab_outer, details_tab_label)
 
         if self._on_remove_field_rule is not None or self._on_add_field_rule is not None:
             rules_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -290,10 +347,10 @@ class DeviceDetailsDialog(Gtk.Dialog):
             self._icon_mode_system_item.connect("toggled", self._on_icon_mode_toggled, "system")
             self._icon_mode_provided_item.connect("toggled", self._on_icon_mode_toggled, "provided")
             self._icon_mode_custom_item.connect("toggled", self._on_custom_mode_toggled)
-            appearance_page_index = notebook.append_page(appearance_box, Gtk.Label(label=_("Appearance")))
+            appearance_page_index = notebook.append_page(appearance_box, Gtk.Label(label=_("Icon")))
         self.connect("response", self._on_response)
         self.show_all()
-        if self._initial_tab == "appearance" and appearance_page_index is not None:
+        if self._initial_tab in ("appearance", "icon") and appearance_page_index is not None:
             notebook.set_current_page(appearance_page_index)
         if self._initial_tab == "rules" and rules_page_index is not None:
             notebook.set_current_page(rules_page_index)
@@ -395,6 +452,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
 
     def _open_icon_picker_dialog(self) -> str | None:
         dialog = Gtk.Dialog(title=_("Choose icon"), transient_for=self, modal=True)
+        prepare_gtk_dialog(dialog)
         dialog.set_default_size(520, 380)
         area = dialog.get_content_area()
         area.set_border_width(8)
@@ -483,7 +541,10 @@ class DeviceDetailsDialog(Gtk.Dialog):
                 return True
 
             popup_handler = _on_popup
-        if text.startswith("http://") or text.startswith("https://"):
+        if (
+            "\n" not in text
+            and (text.startswith("http://") or text.startswith("https://"))
+        ):
             link = Gtk.LinkButton.new_with_label(text, text)
             link.set_halign(Gtk.Align.START)
             if popup_handler is not None:
@@ -810,10 +871,15 @@ class DeviceDetailsDialog(Gtk.Dialog):
     def _filter_unavailable_pairs(self, records: list[tuple[str, str]] | None) -> list[tuple[str, str]]:
         if not records:
             return []
+        # Keep diagnostic rows visible even when discovery did not provide a value (explain absence).
+        always_show = frozenset({"mac address", "serial number", "unique identifier"})
         cleaned: list[tuple[str, str]] = []
         for key, value in records:
             text = value.strip() if isinstance(value, str) else str(value).strip()
+            lk = str(key).strip().lower()
             if not text or text.lower() == "unavailable":
+                if lk in always_show:
+                    cleaned.append((key, _("unavailable")))
                 continue
             cleaned.append((key, text))
         return cleaned

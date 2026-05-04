@@ -3,16 +3,25 @@
 NetNeighbor is a Linux desktop application that replicates and extends the Windows Network
 Neighborhood experience.
 
+**Current release:** **0.8.0** — highlights in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+
 ## Current state
 
-- GTK 3 application (single-instance lock, optional demo mode)
+- GTK 3 application (single-instance lock, optional demo mode; second launch raises the existing window)
 - **SSDP** discovery (multicast listen, M-SEARCH refresh, XML descriptors, offline / TTL handling)
 - **mDNS** discovery with `zeroconf` (service browse, host-level aggregation, TXT/services details)
-- Discovery manager with in-memory device cache, SSDP merge rules, user overrides
-- Main window: list + icon grid, categories, details dialogs, notifications (optional), preferences in `~/.config/netneighbor/ui_prefs.json`
+- **WSD** (WS-Discovery) via PyPI `WSDiscovery` — Windows-compatible hosts and printers on UDP 3702
+- **NetBIOS** browse via `nmblookup` (Samba **client** tools) and optional **wsdd** cache — see runtime notes below
+- Discovery manager with in-memory device cache, cross-protocol merge rules (**MAC** from neighbor cache assists bundle merge), user overrides; details can show **IPv4 from ARP/neigh** when discovery only listed IPv6 for the same MAC
+- Main window: list + icon grid, categories, details dialogs, notifications (optional), **View → Preferences** persisted in `~/.config/netneighbor/ui_prefs.json`
+- **System tray** (Ayatana/AppIndicator or Gtk.StatusIcon fallback): **Open** / **Minimize to tray** / **Quit**, keep running when closing the window, optional **start minimized**, optional **session autostart**. Autostart `Exec=` adds **`--start-minimized-to-tray`** only in `~/.config/autostart/` — not in the menu launcher — see [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
+- When tray is active: client-side title bar **Maximize + Close** (window minimization to tray is via tray menu or close-with-tray; **F11** toggles fullscreen)
+- Root app icon: **`assets/svg/netneighbor.svg`** (also wired into the hicolor theme path for tray/launcher names `io.esp3d.netneighbor` / `io.esp3d.netneighbor-tray`)
+- **`.deb`** packaging script: `packaging/build_deb.sh` (see [`docs/PACKAGING.md`](docs/PACKAGING.md))
 
 Developer documentation lives under [`docs/README.md`](docs/README.md).
 User documentation (MVP) lives in [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
+Release notes: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 ## Autodetection (limits) and corrections
 
@@ -47,6 +56,16 @@ Install GTK/PyGObject and Cairo from system packages:
 sudo apt update
 sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev pkg-config
 ```
+
+**Recommended on desktop** (NetBIOS names + system tray):
+
+```bash
+sudo apt install -y samba-common-bin
+sudo apt install -y gir1.2-ayatanaappindicator3-0.1   # typical on Mint/Ubuntu
+# or, on some setups: gir1.2-appindicator3-0.1
+```
+
+NetNeighbor does **not** require Samba server daemons (`smbd` / `nmbd`) — only the **`nmblookup`** client from `samba-common-bin`.
 
 Python dependencies installed in the virtual environment:
 - `zeroconf`
@@ -90,6 +109,6 @@ A second launch asks the first instance to bring its window to the foreground.
 
 ## Next implementation milestones
 
-1. Refine cross-protocol deduplication once SSDP + mDNS both emit live data
-2. Runtime mode decision (standalone app / service / tray / file manager integration)
-3. Packaging (AppImage / `.deb`) and release checklist — see [`docs/ROADMAP.md`](docs/ROADMAP.md)
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the living list (AppImage / service / file-manager integration, richer PC workflows, tests, etc.).
+
+Contribution and maintenance reminders: [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md), user overlays: [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md).

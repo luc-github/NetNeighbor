@@ -1,5 +1,6 @@
 """GTK application bootstrap for NetNeighbor."""
 
+import argparse
 import logging
 import os
 from pathlib import Path
@@ -144,19 +145,32 @@ def request_existing_instance_activation(app_id: str) -> bool:
 
 
 class NetNeighborApplication(Gtk.Application):
-    def __init__(self) -> None:
+    def __init__(self, *, start_minimized_to_tray: bool = False) -> None:
         self._app_id = "io.esp3d.netneighbor"
+        self._cli_start_minimized_to_tray = bool(start_minimized_to_tray)
         setup_i18n()
         super().__init__(application_id=self._app_id)
         proto_cfg = load_discovery_protocol_config()
         mdns_cfg = proto_cfg.get("mdns")
         ssdp_cfg = proto_cfg.get("ssdp")
+        wsd_cfg = proto_cfg.get("wsd")
+        nmb_cfg = proto_cfg.get("nmb")
+        wsdd_cfg = proto_cfg.get("wsdd")
         if not isinstance(mdns_cfg, dict):
             mdns_cfg = {}
         if not isinstance(ssdp_cfg, dict):
             ssdp_cfg = {}
+        if not isinstance(wsd_cfg, dict):
+            wsd_cfg = {}
+        if not isinstance(nmb_cfg, dict):
+            nmb_cfg = {}
+        if not isinstance(wsdd_cfg, dict):
+            wsdd_cfg = {}
         mdns_q = mdns_cfg.get("query") if isinstance(mdns_cfg.get("query"), dict) else {}
         ssdp_q = ssdp_cfg.get("query") if isinstance(ssdp_cfg.get("query"), dict) else {}
+        wsd_q = wsd_cfg.get("query") if isinstance(wsd_cfg.get("query"), dict) else {}
+        nmb_q = nmb_cfg.get("query") if isinstance(nmb_cfg.get("query"), dict) else {}
+        wx_q = wsdd_cfg.get("query") if isinstance(wsdd_cfg.get("query"), dict) else {}
         merge_cfg = proto_cfg.get("merge") if isinstance(proto_cfg.get("merge"), dict) else {}
         protocol_order = merge_cfg.get("protocol_order")
         order_list: list[str] | None = None
@@ -165,6 +179,10 @@ class NetNeighborApplication(Gtk.Application):
             order_list = list(dict.fromkeys(order_list))
         ipc = merge_cfg.get("information_precedence")
         information_precedence = normalize_information_precedence_list(ipc if isinstance(ipc, list) else None)
+        wsdd_listen = wx_q.get("listen") if isinstance(wx_q.get("listen"), str) else ""
+        wsdd_listen = str(wsdd_listen).strip()
+        enable_wsdd_socket = bool(wsdd_cfg.get("enabled", False)) and bool(wsdd_listen)
+        show_ip_in_device_list = bool(merge_cfg.get("show_ip_in_device_list", True))
         self._manager = DiscoveryManager(
             enable_ssdp=bool(ssdp_cfg.get("enabled", True)),
             enable_mdns=bool(mdns_cfg.get("enabled", True)),
@@ -176,27 +194,48 @@ class NetNeighborApplication(Gtk.Application):
             mdns_enumeration_timeout_seconds=mdns_q.get("enumeration_timeout_seconds"),
             mdns_enumeration_interval_seconds=mdns_q.get("enumeration_interval_seconds"),
             mdns_service_info_timeout_ms=mdns_q.get("service_info_timeout_ms"),
+            enable_wsd=bool(wsd_cfg.get("enabled", True)),
+            wsd_interval_seconds=wsd_q.get("interval_seconds"),
+            wsd_timeout_seconds=wsd_q.get("timeout_seconds"),
+            enable_wsdd_socket=enable_wsdd_socket,
+            wsdd_listen=wsdd_listen or None,
+            wsdd_interval_seconds=wx_q.get("interval_seconds"),
+            wsdd_socket_timeout_seconds=wx_q.get("socket_timeout_seconds"),
+            wsdd_probe_each_poll=bool(wx_q.get("probe_each_poll", True)),
+            enable_nmb=bool(nmb_cfg.get("enabled", True)),
+            nmb_interval_seconds=nmb_q.get("interval_seconds"),
+            nmb_timeout_seconds=nmb_q.get("timeout_seconds"),
+            nmb_argv=nmb_q.get("argv") if isinstance(nmb_q.get("argv"), list) else None,
+            nmb_directed_ips=nmb_q.get("directed_ips") if isinstance(nmb_q.get("directed_ips"), list) else None,
             protocol_merge_order=order_list,
             information_precedence=information_precedence,
         )
         startup_refresh_seconds = proto_cfg.get("startup_refresh_seconds")
         if not isinstance(startup_refresh_seconds, list) or not startup_refresh_seconds:
-            startup_refresh_seconds = [20, 45, 90]
+            startup_refresh_seconds = [15, 30, 60, 120, 300, 600]
         self._startup_refresh_seconds = [int(v) for v in startup_refresh_seconds]
         self._information_precedence = information_precedence
+        self._show_ip_in_device_list = show_ip_in_device_list
         self._window: MainWindow | None = None
         self._instance_lock = SingleInstanceLock(self._app_id)
         self._activation_server = InstanceActivationServer(self._app_id, self._present_window)
         self._set_default_app_icon()
 
     def do_activate(self) -> None:
+        created = False
         if self._window is None:
+            created = True
             self._window = MainWindow(
                 application=self,
                 discovery_manager=self._manager,
                 startup_refresh_seconds=self._startup_refresh_seconds,
                 information_precedence=self._information_precedence,
+                show_ip_in_device_list=self._show_ip_in_device_list,
+                cli_start_minimized_to_tray=self._cli_start_minimized_to_tray,
             )
+        # Do not steal focus before the tray/minimize idle runs (CLI/session autostart).
+        if created and self._cli_start_minimized_to_tray:
+            return
         self._present_window()
 
     def _present_window(self) -> bool:
@@ -231,9 +270,26 @@ class NetNeighborApplication(Gtk.Application):
             return
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    if argv is None:
+        argv = sys.argv
+
+    parser = argparse.ArgumentParser(
+        prog=Path(argv[0]).name if argv else "netneighbor",
+        description="NetNeighbor — LAN discovery (SSDP/mDNS, GTK)",
+    )
+    parser.add_argument(
+        "--start-minimized-to-tray",
+        action="store_true",
+        help="Start with the main window hidden in the tray (session autostart; same as prefs when tray exists).",
+    )
+    parsed, gtk_remainder = parser.parse_known_args(argv[1:])
+    gtk_argv = [argv[0], *gtk_remainder]
+
     _setup_logging()
-    app = NetNeighborApplication()
+    app = NetNeighborApplication(start_minimized_to_tray=parsed.start_minimized_to_tray)
     if not app._instance_lock.acquire():
         if request_existing_instance_activation(app._app_id):
             print("NetNeighbor is already running. Existing window activated.")
@@ -242,7 +298,7 @@ def main() -> int:
         return 1
     app._activation_server.start()
     try:
-        return app.run([])
+        return app.run(gtk_argv)
     finally:
         app._activation_server.stop()
         app._instance_lock.release()
@@ -297,8 +353,12 @@ def _load_logging_config() -> dict:
     default_config = {
         "default": "INFO",
         "app": "INFO",
+        "device_list": "INFO",
         "ssdp": "WARNING",
         "mdns": "DEBUG",
+        "wsd": "INFO",
+        "wsdd": "INFO",
+        "nmb": "INFO",
     }
     try:
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -319,11 +379,22 @@ def _apply_named_log_levels(config: dict) -> None:
     app_level = _to_level(str(config.get("app", config.get("default", "INFO"))), logging.INFO)
     ssdp_level = _to_level(str(config.get("ssdp", config.get("default", "INFO"))), logging.INFO)
     mdns_level = _to_level(str(config.get("mdns", config.get("default", "INFO"))), logging.INFO)
+    wsd_level = _to_level(str(config.get("wsd", config.get("default", "INFO"))), logging.INFO)
+    wsdd_level = _to_level(str(config.get("wsdd", config.get("default", "INFO"))), logging.INFO)
+    nmb_level = _to_level(str(config.get("nmb", config.get("default", "INFO"))), logging.INFO)
+    device_list_level = _to_level(str(config.get("device_list", config.get("default", "INFO"))), logging.INFO)
 
     for logger_name in ("app", "ui", "utils", "discovery.manager", "model"):
         logging.getLogger(logger_name).setLevel(app_level)
     logging.getLogger("discovery.ssdp").setLevel(ssdp_level)
     logging.getLogger("discovery.mdns").setLevel(mdns_level)
+    logging.getLogger("discovery.wsd").setLevel(wsd_level)
+    logging.getLogger("discovery.wsdd_client").setLevel(wsdd_level)
+    logging.getLogger("discovery.netbios").setLevel(nmb_level)
     # Manager-side messages tied to a protocol (device add/update, SSDP merge) use child loggers.
     logging.getLogger("discovery.manager.ssdp").setLevel(ssdp_level)
     logging.getLogger("discovery.manager.mdns").setLevel(mdns_level)
+    logging.getLogger("discovery.manager.wsd").setLevel(wsd_level)
+    logging.getLogger("discovery.manager.wsdd").setLevel(wsdd_level)
+    logging.getLogger("discovery.manager.nmb").setLevel(nmb_level)
+    logging.getLogger("ui.device_list").setLevel(device_list_level)

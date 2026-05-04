@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -9,7 +11,10 @@ from urllib.parse import urlparse
 from gettext import gettext as _
 
 from model.device import Device
+
+_FE80_QUICK_RE = re.compile(r"(?<![0-9a-fA-F:])(fe80:[0-9a-fA-F:]+(?:%[0-9]+)?)", re.IGNORECASE)
 from utils.mdns_rules import cached_mdns_rules, summary_field_labels_norm, summary_rows_from_rules
+from utils.neighbor_mac import lookup_ipv4_for_mac, lookup_mac_from_neighbor_cache
 
 
 def _parse_listen_port(value) -> int | None:
@@ -130,6 +135,89 @@ def _value_or_unavailable(value) -> str:
     return str(value)
 
 
+def collect_mac_from_device_metadata(metadata: dict) -> str | None:
+    """MAC from flat keys, SSDP ``xml_fields``, or mDNS TXT (root and per-service)."""
+    if not isinstance(metadata, dict):
+        return None
+    for k in ("mac", "mac_address", "MAC", "macAddress"):
+        v = metadata.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    xf = metadata.get("xml_fields")
+    if isinstance(xf, dict):
+        v = xf.get("mac")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+
+    def _from_txt(txt: dict) -> str | None:
+        if not isinstance(txt, dict):
+            return None
+        for raw_key, raw_val in txt.items():
+            nk = str(raw_key).strip().lower().replace("-", "_")
+            if nk in {"mac", "macaddress", "mac_address", "ether", "hardware_address"} or nk.endswith(
+                "macaddress"
+            ):
+                s = raw_val.strip() if isinstance(raw_val, str) else str(raw_val).strip()
+                if s:
+                    return s
+        return None
+
+    hit = _from_txt(metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {})
+    if hit:
+        return hit
+    services = metadata.get("services")
+    if isinstance(services, list):
+        for svc in services:
+            if isinstance(svc, dict) and isinstance(svc.get("txt"), dict):
+                hit = _from_txt(svc["txt"])
+                if hit:
+                    return hit
+    return None
+
+
+def resolve_mac_for_device(device: Device) -> str | None:
+    """MAC from discovery metadata, else kernel ARP / IPv6 neighbor cache if available."""
+    md = device.metadata if isinstance(device.metadata, dict) else {}
+    hit = collect_mac_from_device_metadata(md)
+    if hit:
+        return hit
+    return lookup_mac_from_neighbor_cache(getattr(device, "ip", None))
+
+
+def _format_ip_one_line(ip_str: str) -> str:
+    """Match list/overview IPv6 compaction (link-local tag)."""
+    s = (ip_str or "").strip()
+    if not s:
+        return ""
+    try:
+        a = ipaddress.ip_address(s.split("%", 1)[0])
+        c = a.compressed
+        if isinstance(a, ipaddress.IPv6Address) and a.is_link_local:
+            return f"{c} (LL)"
+        return c
+    except ValueError:
+        return s
+
+
+def format_device_ip_for_details(device: Device) -> str:
+    """IP from discovery, plus IPv4 from neighbor cache when only IPv6 is on the device row but ARP knows the MAC."""
+    base = (getattr(device, "ip", None) or "").strip()
+    if not base:
+        return base
+    try:
+        parsed = ipaddress.ip_address(base.split("%", 1)[0])
+    except ValueError:
+        return base
+    if isinstance(parsed, ipaddress.IPv4Address):
+        return base
+    mac = resolve_mac_for_device(device)
+    v4 = lookup_ipv4_for_mac(mac)
+    base_fmt = _format_ip_one_line(base)
+    if not v4:
+        return base_fmt
+    return f"{v4}  ·  {base_fmt}"
+
+
 def build_ssdp_payload(device: Device) -> tuple[
     list[tuple[str, str]],
     str | None,
@@ -177,7 +265,7 @@ def build_ssdp_payload(device: Device) -> tuple[
     else:
         last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
-        ("IP", device.ip),
+        ("IP", format_device_ip_for_details(device)),
         ("Type", format_device_type_for_details(device)),
         ("Ports", aggregate_ports_display(device)),
         ("Location", _value_or_unavailable(metadata.get("user_location"))),
@@ -188,22 +276,13 @@ def build_ssdp_payload(device: Device) -> tuple[
         ("Manufacturer URL", _value_or_unavailable(xml_fields.get("manufacturerURL"))),
         ("Model", _value_or_unavailable(xml_fields.get("modelName"))),
         ("Model URL", _value_or_unavailable(xml_fields.get("modelURL"))),
+        ("MAC address", _value_or_unavailable(resolve_mac_for_device(device))),
     ]
     xml_location = metadata.get("location")
     xml_location_norm = xml_location if isinstance(xml_location, str) else None
     raw_xml = xml_data if isinstance(xml_data, str) and xml_data.strip() else None
     troubleshooting_fields: list[tuple[str, str]] = [
         ("Serial number", _value_or_unavailable(xml_fields.get("serialNumber"))),
-        (
-            "MAC address",
-            _value_or_unavailable(
-                metadata.get("mac")
-                or metadata.get("mac_address")
-                or metadata.get("MAC")
-                or metadata.get("macAddress")
-                or xml_fields.get("mac")
-            ),
-        ),
         (
             "Unique identifier",
             _value_or_unavailable(
@@ -251,16 +330,7 @@ def build_mdns_payload(device: Device) -> tuple[list[tuple[str, str]], list[dict
     metadata = device.metadata if isinstance(device.metadata, dict) else {}
     hostname_raw = metadata.get("hostname")
     server_raw = metadata.get("server")
-
-    def _norm_name(value) -> str:
-        if value is None:
-            return ""
-        if not isinstance(value, str):
-            value = str(value)
-        return value.strip().rstrip(".").lower()
-
-    hostname_norm = _norm_name(hostname_raw)
-    server_norm = _norm_name(server_raw)
+    display_host = hostname_raw if _detail_field_usable(hostname_raw) else server_raw
 
     if isinstance(device.last_seen, datetime):
         try:
@@ -270,20 +340,18 @@ def build_mdns_payload(device: Device) -> tuple[list[tuple[str, str]], list[dict
     else:
         last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
-        ("IP", device.ip),
+        ("IP", format_device_ip_for_details(device)),
         ("Type", format_device_type_for_details(device)),
         ("Ports", aggregate_ports_display(device)),
         ("Location", _value_or_unavailable(metadata.get("user_location"))),
         ("Last seen", last_seen_text),
-        ("Hostname", _value_or_unavailable(hostname_raw)),
+        ("Hostname", _value_or_unavailable(display_host)),
+        ("MAC address", _value_or_unavailable(resolve_mac_for_device(device))),
         ("Information", _value_or_unavailable(metadata.get("information"))),
     ]
 
     for label, raw in summary_rows_from_rules(metadata):
         fields.append((label, _value_or_unavailable(raw)))
-
-    if server_norm and server_norm != hostname_norm:
-        fields.append(("Server", _value_or_unavailable(server_raw)))
 
     sections: list[dict[str, Any]] = []
 
@@ -355,6 +423,186 @@ def build_mdns_payload(device: Device) -> tuple[list[tuple[str, str]], list[dict
     return fields, sections
 
 
+def first_link_local_ipv6_from_xaddrs(xaddrs: list[object] | None) -> str | None:
+    """Pick first IPv6 link-local address embedded in WSD-style XAddrs / URLs."""
+    if not xaddrs:
+        return None
+    for raw in xaddrs:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        line = raw.strip()
+        try:
+            parsed = urlparse(line)
+        except ValueError:
+            parsed = None
+        if parsed and parsed.hostname:
+            host = str(parsed.hostname).strip("[]")
+            try:
+                a = ipaddress.ip_address(host.split("%", 1)[0])
+            except ValueError:
+                a = None
+            if isinstance(a, ipaddress.IPv6Address) and a.is_link_local:
+                return a.compressed
+        hit = _first_fe80_literal(line)
+        if hit:
+            return hit
+    return None
+
+
+def _first_fe80_literal(text: str) -> str | None:
+    for m in _FE80_QUICK_RE.finditer(text or ""):
+        cand = m.group(1).split("%", 1)[0]
+        try:
+            a = ipaddress.ip_address(cand)
+        except ValueError:
+            continue
+        if isinstance(a, ipaddress.IPv6Address) and a.is_link_local:
+            return a.compressed
+    return None
+
+
+def collect_link_local_ipv6(*devices: Device | None) -> str | None:
+    """Best-effort link-local IPv6 from any protocol row (WSD xaddrs, wsdd address blob, device IP)."""
+    for d in devices:
+        if d is None:
+            continue
+        sip = str(getattr(d, "ip", "") or "").strip()
+        if sip:
+            try:
+                a = ipaddress.ip_address(sip.split("%", 1)[0])
+            except ValueError:
+                a = None
+            if isinstance(a, ipaddress.IPv6Address) and a.is_link_local:
+                return a.compressed
+        md = d.metadata if isinstance(d.metadata, dict) else {}
+        xs = md.get("wsd_xaddrs")
+        if isinstance(xs, list):
+            hit = first_link_local_ipv6_from_xaddrs(xs)
+            if hit:
+                return hit
+        blob = md.get("wsdd_addresses")
+        if isinstance(blob, str) and blob.strip():
+            for part in re.split(r"[\s,;]+", blob.strip()):
+                if "fe80:" in part.lower():
+                    hit = _first_fe80_literal(part)
+                    if hit:
+                        return hit
+    return None
+
+
+def strip_detail_fields_covered_by_overview(
+    fields: list[tuple[str, str]],
+    overview: dict[str, str],
+) -> list[tuple[str, str]]:
+    """Drop protocol rows that duplicate the Overview tab (IP, type, location, display name)."""
+    ip_ov = (overview.get("ip") or "").strip()
+    type_ov = (overview.get("type") or "").strip()
+    loc_ov = (overview.get("location") or "").strip()
+    name_ov = (overview.get("name") or "").strip()
+    out: list[tuple[str, str]] = []
+    for k, v in fields:
+        nk = str(k).strip().lower()
+        vs = (v or "").strip() if isinstance(v, str) else str(v).strip()
+        if nk == "ip" and vs == ip_ov:
+            continue
+        if nk == "type" and vs == type_ov:
+            continue
+        if nk == "location" and vs == loc_ov:
+            continue
+        if nk in {"friendly name", "hostname"} and vs == name_ov:
+            continue
+        if nk == "server" and vs.rstrip(".").lower() == name_ov.rstrip(".").lower():
+            continue
+        out.append((k, v))
+    return out
+
+
+def _last_seen_text(device: Device) -> str:
+    metadata = device.metadata if isinstance(device.metadata, dict) else {}
+    if isinstance(device.last_seen, datetime):
+        try:
+            return device.last_seen.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return str(device.last_seen)
+    return _value_or_unavailable(metadata.get("last_seen"))
+
+
+def _last_seen_row_sort_key(text: object) -> tuple[float, str]:
+    """Numeric time for comparing detail rows; unknown formats sort oldest."""
+    s = "" if text is None else str(text).strip()
+    if not s or s.lower() == "unavailable":
+        return (float("-inf"), s)
+    try:
+        dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+        return (dt.timestamp(), s)
+    except Exception:
+        pass
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return (dt.timestamp(), s)
+    except Exception:
+        return (float("-inf"), s)
+
+
+def dedupe_last_seen_in_fields(fields: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Collapse multiple ``Last seen`` rows to the chronologically latest."""
+    rows_ls: list[tuple[str, str]] = []
+    rest: list[tuple[str, str]] = []
+    for k, v in fields:
+        if str(k).strip().lower() == "last seen":
+            rows_ls.append((k, v))
+        else:
+            rest.append((k, v))
+    if len(rows_ls) <= 1:
+        return fields
+    best = max(rows_ls, key=lambda kv: _last_seen_row_sort_key(kv[1])[0])
+    rest.append(best)
+    return rest
+
+
+def _best_last_seen_among_devices(devs: list[Device]) -> str:
+    """Pick newest ``Last seen`` text across merged protocol rows."""
+    scored: list[tuple[float, str]] = []
+    for d in devs:
+        if isinstance(d.last_seen, datetime):
+            try:
+                s = _last_seen_text(d)
+                scored.append((d.last_seen.timestamp(), s))
+                continue
+            except Exception:
+                pass
+        s = _last_seen_text(d)
+        scored.append((_last_seen_row_sort_key(s)[0], s))
+    if not scored:
+        return ""
+    return max(scored, key=lambda x: x[0])[1]
+
+
+def _truncate(s: str, max_len: int) -> str:
+    t = (s or "").strip()
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 1] + "…"
+
+
+def build_wsd_family_detail_fields(*devices: Device | None) -> list[tuple[str, str]]:
+    """Minimal rows for WSD / wsdd / NMB-only bundles (identity stays on Overview)."""
+    devs = [d for d in devices if d is not None]
+    if not devs:
+        return []
+    rows: list[tuple[str, str]] = []
+    for d in devs:
+        m = resolve_mac_for_device(d)
+        if m:
+            rows.append(("MAC address", _value_or_unavailable(m)))
+            break
+    txt = _best_last_seen_among_devices(devs)
+    if not txt or str(txt).strip().lower() == "unavailable":
+        return rows
+    rows.append(("Last seen", txt))
+    return rows
+
+
 def merge_ssdp_mdns_detail_fields(
     ssdp_fields: list[tuple[str, str]],
     mdns_fields: list[tuple[str, str]],
@@ -395,7 +643,7 @@ def merge_ssdp_mdns_detail_fields(
             out.append((key, value))
 
     if not mdns_fallbacks_norm:
-        return out
+        return dedupe_last_seen_in_fields(out)
     patched: list[tuple[str, str]] = []
     for ok, ov in out:
         nk = _norm_key(ok)
@@ -405,4 +653,4 @@ def merge_ssdp_mdns_detail_fields(
             continue
         _fk, fv = slot
         patched.append((ok, fv) if _detail_field_usable(fv) else (ok, ov))
-    return patched
+    return dedupe_last_seen_in_fields(patched)

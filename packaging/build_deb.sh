@@ -32,8 +32,6 @@ mkdir -p \
   "${PKG_ROOT}/DEBIAN" \
   "${PKG_ROOT}/usr/bin" \
   "${PKG_ROOT}/usr/share/applications" \
-  "${PKG_ROOT}/usr/share/icons/hicolor/64x64/apps" \
-  "${PKG_ROOT}/usr/share/icons/hicolor/256x256/apps" \
   "${APP_ROOT}" \
   "${STAGE_ROOT}"
 
@@ -78,9 +76,10 @@ fi
 install -m 0755 "${SCRIPT_DIR}/netneighbor" "${PKG_ROOT}/usr/bin/netneighbor"
 sed "s/@APP_VERSION@/${VERSION}/g" "${SCRIPT_DIR}/netneighbor.desktop" > "${PKG_ROOT}/usr/share/applications/netneighbor.desktop"
 chmod 0644 "${PKG_ROOT}/usr/share/applications/netneighbor.desktop"
-# hicolor dirs must match bitmap dimensions (see assets/icons/).
-install -m 0644 "${PROJECT_ROOT}/assets/icons/logo.png" "${PKG_ROOT}/usr/share/icons/hicolor/64x64/apps/io.esp3d.netneighbor.png"
-install -m 0644 "${PROJECT_ROOT}/assets/icons/logo-256.png" "${PKG_ROOT}/usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png"
+# App + tray: scalable SVG (source of truth: assets/svg/netneighbor.svg).
+mkdir -p "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps"
+install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg"
+install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg"
 
 find "${PKG_ROOT}" -type d -exec chmod 0755 {} \;
 find "${PKG_ROOT}" -type f -exec chmod 0644 {} \;
@@ -95,10 +94,13 @@ Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE_KB}
 Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, python3-zeroconf
+Recommends: samba-common-bin, gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1
 Maintainer: Luc LEBOSSE (luc@esp3d.io)
 Description: Linux network neighborhood for SSDP/mDNS discovery
  NetNeighbor is a GTK desktop application for local network discovery
  using SSDP and mDNS, with list/icon views and device details.
+ Optional NetBIOS names use nmblookup from samba-common-bin (Samba server daemons are
+ not required). System tray icons need Ayatana or GNOME AppIndicator GObject bindings.
 EOF
 
 OUTPUT_DEB="${PROJECT_ROOT}/dist/${PKG_NAME}_${VERSION}_${ARCH}.deb"

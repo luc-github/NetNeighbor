@@ -7,13 +7,14 @@ documentation remains in the repository root [`README.md`](../README.md).
 
 | Document | Purpose |
 |----------|---------|
+| [`CHANGELOG.md`](CHANGELOG.md) | Version highlights and release notes (from **0.8.0** onward). |
 | [`NetNeighbor_Brief_v1.4.md`](NetNeighbor_Brief_v1.4.md) | Product scope, architecture overview, constraints, acceptance criteria (updated for current codebase). |
 | [`ROADMAP.md`](ROADMAP.md) | Phases completed vs next, short-term priorities (especially mDNS). |
 | [`SSDP_INTEGRATION.md`](SSDP_INTEGRATION.md) | SSDP protocol basics and how this app listens, parses, times out, and maps to `Device`. |
 | [`MDNS_INTEGRATION.md`](MDNS_INTEGRATION.md) | mDNS browse/aggregation model, service mapping, URL rules, and lifecycle behavior. |
 | [`SSDP_RULES_JSON.md`](SSDP_RULES_JSON.md) | `config/ssdp_rules.json`: purpose, schema, how to extend classification and naming. |
 | [`MDNS_RULES_JSON.md`](MDNS_RULES_JSON.md) | `config/mdns_rules.json`: TXT→summary mappings and optional mDNS type rules. |
-| [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) | User overlays in `~/.config/netneighbor/` merging with bundled `device_types` and rules JSON. |
+| [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) | User overlays in `~/.config/netneighbor/` (rules + device types) plus notes on **`ui_prefs.json`** (tray, autostart, etc.). |
 | [`UI_ARCHITECTURE.md`](UI_ARCHITECTURE.md) | GTK layer: main window, device list, threading, preferences, notifications history. |
 | [`MAINTENANCE.md`](MAINTENANCE.md) | Ongoing care: logging, config paths, debugging discovery, suggested future docs. |
 | [`PACKAGING.md`](PACKAGING.md) | Build and validate release artifacts (`.deb` + `tar.gz`) with helper scripts. |
@@ -22,8 +23,8 @@ documentation remains in the repository root [`README.md`](../README.md).
 
 ## Quick orientation
 
-- **Discovery**: `discovery/base.py` (contract), `discovery/manager.py` (cache + merges), `discovery/ssdp.py`, `discovery/mdns.py`.
-- **UI**: `app.py` (single instance, activation), `ui/main_window.py`, `ui/device_list.py`, `ui/device_details.py`.
+- **Discovery**: `discovery/base.py` (contract), `discovery/manager.py` (cache + merges), `discovery/ssdp.py`, `discovery/mdns.py`, `discovery/wsd.py` (WS-Discovery; PyPI `WSDiscovery`).
+- **UI**: `app.py` (single instance, activation), `ui/main_window.py`, `ui/device_list.py`, `ui/device_details.py`, `ui/tray_indicator.py` (panel icon), `utils/session_autostart.py` (XDG login entry).
 - **Config**:
   - `~/.config/netneighbor/ui_prefs.json` (UI state + user choices/rules/overrides)
   - `~/.config/netneighbor/discovery.json` (per-protocol `mdns`/`ssdp` blocks with `enabled`/`rules`, `merge.protocol_order`, `merge.information_precedence`, plus `startup_refresh_seconds`; see [`MAINTENANCE.md`](MAINTENANCE.md))

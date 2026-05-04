@@ -3,8 +3,10 @@
 import gi
 import hashlib
 import ipaddress
+import math
 import json
 import logging
+import re
 import os
 from datetime import datetime, timezone
 import ssl
@@ -16,7 +18,7 @@ from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, GdkPixbuf, Gtk
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 from collections.abc import Callable
 
 from model.device import Device
@@ -29,16 +31,74 @@ from utils.discovery_config import (
     information_precedence_role_for_device_source,
     normalize_information_precedence_list,
 )
+from utils.discovery_identity import uuid_urn_if_present
+from utils.neighbor_mac import lookup_mac_from_neighbor_cache
+from utils.gtk_dialog import prepare_gtk_dialog
 from utils.details_payload import (
     aggregate_ports_display,
     build_mdns_payload,
     build_ssdp_payload,
+    build_wsd_family_detail_fields,
+    collect_link_local_ipv6,
+    dedupe_last_seen_in_fields,
+    format_device_ip_for_details,
     format_device_type_for_details,
     merge_ssdp_mdns_detail_fields,
+    strip_detail_fields_covered_by_overview,
     with_aggregate_ports_field,
 )
 
 _logger = logging.getLogger(__name__)
+
+
+# When ``information_precedence`` ties two protocol rows, prefer this order (lower first).
+_SOURCE_PRIMARY_TIEBREAK = {"ssdp": 0, "wsdd": 1, "wsd": 2, "nmb": 3, "mdns": 4}
+# Allow a slightly lower-precedence row if it carries a real hostname (NetBIOS / mDNS) vs generic WSD.
+_PRIMARY_RANK_SLACK_FOR_NAME = 2
+
+# Scope-style / UUID-tail labels: ``WSD-45982f41``, ``ws-45982f41``, ``WSD ·deadbeef`` (not hostnames).
+_WSD_SYNTHETIC_DISPLAY_RE = re.compile(
+    r"^ws[d]?[\s\-·∙]+[0-9a-f]{6,}$",
+    re.IGNORECASE,
+)
+
+
+def _weak_bundle_display_name(device: Device | None) -> bool:
+    """True if the row label is too generic to prefer over another protocol's hostname."""
+    if device is None:
+        return True
+    n = (getattr(device, "name", None) or "").strip()
+    if not n:
+        return True
+    low = n.lower()
+    if low == "wsd host":
+        return True
+    if low.startswith("wsd ·") or low.startswith("wsd \u00b7"):
+        return True
+    if _WSD_SYNTHETIC_DISPLAY_RE.match(n.strip()):
+        return True
+    if len(n) <= 1:
+        return True
+    try:
+        ipaddress.ip_address(n.strip("[]"))
+        return True
+    except ValueError:
+        pass
+    return False
+
+
+def _bundle_row_debug_line(
+    dev: Device,
+    *,
+    rank: int,
+    role: str,
+    tie: int,
+    weak: bool,
+) -> str:
+    return (
+        f"{dev.source}@{dev.ip}:{dev.port} name={dev.name!r} role={role} "
+        f"precedence_index={rank} tiebreak={tie} weak_name={weak}"
+    )
 
 
 @dataclass(slots=True)
@@ -48,6 +108,9 @@ class _DeviceBundle:
     primary: Device
     ssdp_device: Device | None = None
     mdns_device: Device | None = None
+    wsd_device: Device | None = None
+    wsdd_device: Device | None = None
+    nmb_device: Device | None = None
 
     @property
     def name(self) -> str:
@@ -79,7 +142,10 @@ class _DeviceBundle:
 
     @property
     def open_url(self) -> str | None:
-        for candidate in (self.mdns_device, self.ssdp_device, self.primary):
+        # WSD "computer" rows use a :5357/… metadata URL that is not a useful browser target yet.
+        if (self.primary.type or "").strip().lower() == "computer":
+            return None
+        for candidate in (self.mdns_device, self.ssdp_device, self.wsdd_device, self.wsd_device, self.nmb_device, self.primary):
             if candidate is not None and candidate.url:
                 return candidate.url
         return None
@@ -87,10 +153,24 @@ class _DeviceBundle:
     @property
     def devices(self) -> list[Device]:
         unique: dict[str, Device] = {}
-        for device in (self.mdns_device, self.ssdp_device, self.primary):
+        for device in (self.mdns_device, self.ssdp_device, self.wsdd_device, self.wsd_device, self.nmb_device, self.primary):
             if device is not None:
                 unique[device.key] = device
         return list(unique.values())
+
+
+def _bundle_identity_provisional(bundle: _DeviceBundle) -> bool:
+    """True when the list row still uses a WSD scope-style name on IPv6 (identity not final)."""
+    if not _weak_bundle_display_name(bundle.primary):
+        return False
+    raw = (bundle.ip or "").strip().split("%", 1)[0]
+    if not raw:
+        return False
+    try:
+        addr = ipaddress.ip_address(raw)
+    except ValueError:
+        return False
+    return isinstance(addr, ipaddress.IPv6Address)
 
 
 class DeviceList(Gtk.Box):
@@ -106,6 +186,7 @@ class DeviceList(Gtk.Box):
         on_remove_field_rule: Callable[[str, str, int, str, str | None], None] | None = None,
         on_get_field_rules: Callable[[str, str, int], dict[str, list[str]]] | None = None,
         information_precedence: list[str] | None = None,
+        show_ip_in_device_list: bool = True,
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._current_view = "icons"
@@ -125,6 +206,7 @@ class DeviceList(Gtk.Box):
         self._information_precedence: list[str] = (
             list(information_precedence) if information_precedence else normalize_information_precedence_list(None)
         )
+        self._show_ip_in_device_list = bool(show_ip_in_device_list)
         self._location_options: list[str] = []
         self._icon_source_overrides: dict[tuple[str, int], str] = {}
         self._custom_icon_overrides: dict[tuple[str, int], str] = {}
@@ -143,6 +225,8 @@ class DeviceList(Gtk.Box):
         self._list_store = Gtk.ListStore(object, str, str, str, str)
         self._tree = Gtk.TreeView(model=self._list_store)
         self._offline_fg = Gdk.RGBA(0.45, 0.45, 0.45, 1.0)
+        self._provisional_fg = Gdk.RGBA(0.5, 0.5, 0.48, 1.0)
+        self._provisional_pulse_phase = 0.0
         self._add_column("Name", 1)
         self._add_column("IP", 2)
         self._add_column(_("Ports"), 3)
@@ -169,6 +253,7 @@ class DeviceList(Gtk.Box):
 
         self.pack_start(self._stack, True, True, 0)
         self.show_all()
+        GLib.timeout_add(420, self._list_pulse_provisional_identity_tick)
 
     def build_bundles(self, devices: list[Device]) -> list[_DeviceBundle]:
         """Merge SSDP/mDNS rows by host keys; same logic as the icon/list view."""
@@ -183,12 +268,21 @@ class DeviceList(Gtk.Box):
         self._filtered_devices = self._apply_category_filter(bundles)
         self._list_store.clear()
         for bundle in self._filtered_devices:
+            ip_col = (
+                format_device_ip_for_details(bundle.primary) if self._show_ip_in_device_list else ""
+            )
             self._list_store.append(
                 [
                     bundle,
                     bundle.name,
-                    bundle.ip,
-                    aggregate_ports_display(bundle.ssdp_device, bundle.mdns_device),
+                    ip_col,
+                    aggregate_ports_display(
+                        bundle.ssdp_device,
+                        bundle.wsdd_device,
+                        bundle.wsd_device,
+                        bundle.nmb_device,
+                        bundle.mdns_device,
+                    ),
                     format_device_type_for_details(bundle.primary),
                 ]
             )
@@ -409,9 +503,24 @@ class DeviceList(Gtk.Box):
         container = Gtk.EventBox()
         container.add(tile)
         container.set_visible_window(False)
+        prov = _bundle_identity_provisional(bundle)
+        icon_loading = self._bundle_has_remote_icon_fetch_pending(bundle)
+        pulse_tile = prov or icon_loading
         if (not bundle.online) and bundle.monitored:
             container.get_style_context().add_class("offline-device-monitored")
-        container.set_tooltip_text(f"IP: {bundle.ip}")
+        elif pulse_tile:
+            tile.get_style_context().add_class("nn-identity-provisional")
+            if prov:
+                name_label.get_style_context().add_class("dim-label")
+        tip = f"IP: {format_device_ip_for_details(bundle.primary)}"
+        offline_mon = (not bundle.online) and bundle.monitored
+        if prov and not offline_mon:
+            tip += "\n" + (
+                _("Provisional IPv6 identity — highlighted row pulses while discovery matches hostname / IPv4.")
+            )
+        if icon_loading and not offline_mon:
+            tip += "\n" + _("Fetching device icon in the background — tile pulses until it arrives.")
+        container.set_tooltip_text(tip)
         container.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
         container.connect("button-press-event", self._on_icon_tile_button_press, bundle)
         return container
@@ -433,18 +542,11 @@ class DeviceList(Gtk.Box):
         open_item.set_sensitive(bool(bundle.open_url))
         menu.append(open_item)
 
-        if self._has_ssdp_details(bundle) or self._has_mdns_details(bundle):
-            details_item = Gtk.MenuItem.new_with_label(_("Details"))
-            if self._has_ssdp_details(bundle) and self._has_mdns_details(bundle):
-                details_item.connect("activate", self._on_show_combined_details_activate, bundle)
-            elif self._has_ssdp_details(bundle):
-                details_item.connect("activate", self._on_show_ssdp_xml_activate, bundle)
-            else:
-                details_item.connect("activate", self._on_show_mdns_txt_activate, bundle)
-            menu.append(details_item)
+        details_item = Gtk.MenuItem.new_with_label(_("Details"))
+        details_item.connect("activate", self._on_show_details_activate, bundle)
+        menu.append(details_item)
         icon_item = Gtk.MenuItem.new_with_label(_("Icon"))
         icon_item.connect("activate", self._on_icon_item_activate, bundle)
-        icon_item.set_sensitive(self._has_ssdp_details(bundle) or self._has_mdns_details(bundle))
         menu.append(icon_item)
 
         if bundle.monitored:
@@ -567,6 +669,7 @@ class DeviceList(Gtk.Box):
         if parent is None:
             return
         dialog = Gtk.Dialog(title=_("Rename device"), transient_for=parent, modal=True)
+        prepare_gtk_dialog(dialog)
         dialog.set_default_size(360, -1)
         content = dialog.get_content_area()
         content.set_border_width(8)
@@ -608,58 +711,73 @@ class DeviceList(Gtk.Box):
     def _on_open_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_device(bundle)
 
-    def _on_show_ssdp_xml_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
-        self._open_ssdp_details(bundle)
+    def _on_show_details_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
+        self._open_any_details(bundle)
 
-    def _on_show_combined_details_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
-        self._open_combined_details(bundle)
-
-    def _open_combined_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
+    def _open_any_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
+        ipv6 = collect_link_local_ipv6(
+            bundle.wsdd_device,
+            bundle.wsd_device,
+            bundle.mdns_device,
+            self._effective_ssdp_device(bundle),
+            bundle.nmb_device,
+        )
+        overview = {
+            "name": bundle.name or "",
+            "ip": format_device_ip_for_details(bundle.primary),
+            "location": self._bundle_location_label(bundle),
+            "type": format_device_type_for_details(bundle.primary),
+            "ipv6_link_local": ipv6 or "",
+        }
         ssdp = self._effective_ssdp_device(bundle)
         mdns = bundle.mdns_device
-        if ssdp is None or mdns is None:
-            return
-        f_ssdp, raw_xml, _services_list, troubleshooting_fields, xml_location = build_ssdp_payload(ssdp)
-        f_mdns, mdns_sections = build_mdns_payload(mdns)
-        fields = with_aggregate_ports_field(merge_ssdp_mdns_detail_fields(f_ssdp, f_mdns), ssdp, mdns)
-        self._show_details_dialog(
-            title=f"{_('Device details')} - {bundle.name}",
-            fields=fields,
-            raw_content=raw_xml,
-            raw_button_label=_("Show raw XML"),
-            mdns_service_sections=mdns_sections,
-            troubleshooting_records=troubleshooting_fields,
-            raw_xml_location=xml_location,
-            icon_mode=self._normalized_icon_mode(bundle),
-            selected_icon_id=self._custom_icon_overrides.get((bundle.ip, bundle.port)),
-            icon_choices=self._load_icon_choices(bundle.primary.type),
-            on_apply_icon_settings=lambda mode, custom: self._apply_bundle_icon_settings(bundle, mode, custom),
-            custom_icons_dir=str(self._custom_icons_dir),
-            initial_tab=initial_tab,
-            has_device_icon_source=self._bundle_has_remote_device_icon(bundle),
-            provided_icon_display=self._bundle_provided_icon_display(bundle),
-            details_field_rule_map={
+        raw_xml: str | None = None
+        xml_location: str | None = None
+        services_list: list[tuple[str, str, str]] | None = None
+        troubleshooting_fields: list[tuple[str, str]] | None = None
+        mdns_sections: list[dict] | None = None
+        if ssdp is not None and mdns is not None:
+            f_ssdp, raw_xml, services_list, troubleshooting_fields, xml_location = build_ssdp_payload(ssdp)
+            f_mdns, mdns_sections = build_mdns_payload(mdns)
+            fields = with_aggregate_ports_field(merge_ssdp_mdns_detail_fields(f_ssdp, f_mdns), ssdp, mdns)
+            details_field_rule_map = {
                 "Friendly name": "xml:friendlyName",
                 "Information": "meta:information",
                 "Hostname (mDNS)": "meta:hostname",
                 "Server (mDNS)": "meta:server",
-            },
-            endpoint_source=bundle.primary.source,
-            endpoint_ip=bundle.primary.ip,
-            endpoint_port=int(bundle.primary.port),
-        )
-
-    def _open_ssdp_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
-        device = self._effective_ssdp_device(bundle)
-        if device is None:
-            return
-        fields, raw_xml, services_list, troubleshooting_fields, xml_location = build_ssdp_payload(device)
+            }
+        elif ssdp is not None:
+            fields, raw_xml, services_list, troubleshooting_fields, xml_location = build_ssdp_payload(ssdp)
+            fields = with_aggregate_ports_field(fields, ssdp)
+            details_field_rule_map = {
+                "Friendly name": "xml:friendlyName",
+                "Information": "meta:information",
+                "Model": "xml:modelName",
+                "Manufacturer": "xml:manufacturer",
+            }
+        elif mdns is not None:
+            fields, mdns_sections = build_mdns_payload(mdns)
+            fields = with_aggregate_ports_field(fields, mdns)
+            details_field_rule_map = {
+                "Hostname": "meta:hostname",
+                "Server": "meta:server",
+                "Information": "meta:information",
+            }
+        else:
+            fields = build_wsd_family_detail_fields(
+                bundle.wsdd_device,
+                bundle.wsd_device,
+                bundle.nmb_device,
+            )
+            details_field_rule_map = {}
+        fields = dedupe_last_seen_in_fields(strip_detail_fields_covered_by_overview(fields, overview))
         self._show_details_dialog(
             title=f"{_('Device details')} - {bundle.name}",
             fields=fields,
             raw_content=raw_xml,
-            raw_button_label=_("Show raw XML"),
-            services_list=None,
+            raw_button_label=_("Show raw XML") if raw_xml else None,
+            services_list=services_list,
+            mdns_service_sections=mdns_sections,
             troubleshooting_records=troubleshooting_fields,
             raw_xml_location=xml_location,
             icon_mode=self._normalized_icon_mode(bundle),
@@ -670,74 +788,23 @@ class DeviceList(Gtk.Box):
             initial_tab=initial_tab,
             has_device_icon_source=self._bundle_has_remote_device_icon(bundle),
             provided_icon_display=self._bundle_provided_icon_display(bundle),
-            details_field_rule_map={
-                "Friendly name": "xml:friendlyName",
-                "Information": "meta:information",
-                "Model": "xml:modelName",
-                "Manufacturer": "xml:manufacturer",
-            },
-            endpoint_source=device.source,
-            endpoint_ip=device.ip,
-            endpoint_port=int(device.port),
+            details_field_rule_map=details_field_rule_map,
+            endpoint_source=bundle.primary.source,
+            endpoint_ip=bundle.primary.ip,
+            endpoint_port=int(bundle.primary.port),
+            overview=overview,
         )
-
-    def _on_show_mdns_txt_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
-        self._open_mdns_details(bundle)
 
     def _on_icon_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
-        if self._has_ssdp_details(bundle) and self._has_mdns_details(bundle):
-            self._open_combined_details(bundle, initial_tab="appearance")
-            return
-        if bundle.mdns_device is not None:
-            self._open_mdns_details(bundle, initial_tab="appearance")
-            return
-        if self._has_ssdp_details(bundle):
-            self._open_ssdp_details(bundle, initial_tab="appearance")
-
-    def _open_mdns_details(self, bundle: _DeviceBundle, initial_tab: str | None = None) -> None:
-        device = bundle.mdns_device
-        if device is None:
-            return
-        fields, mdns_sections = build_mdns_payload(device)
-        self._show_details_dialog(
-            title=f"{_('Device details')} - {bundle.name}",
-            fields=fields,
-            mdns_service_sections=mdns_sections,
-            icon_mode=self._normalized_icon_mode(bundle),
-            selected_icon_id=self._custom_icon_overrides.get((bundle.ip, bundle.port)),
-            icon_choices=self._load_icon_choices(bundle.primary.type),
-            on_apply_icon_settings=lambda mode, custom: self._apply_bundle_icon_settings(bundle, mode, custom),
-            custom_icons_dir=str(self._custom_icons_dir),
-            initial_tab=initial_tab,
-            has_device_icon_source=self._bundle_has_remote_device_icon(bundle),
-            provided_icon_display=self._bundle_provided_icon_display(bundle),
-            details_field_rule_map={
-                "Hostname": "meta:hostname",
-                "Server": "meta:server",
-                "Information": "meta:information",
-            },
-            endpoint_source=device.source,
-            endpoint_ip=device.ip,
-            endpoint_port=int(device.port),
-        )
+        self._open_any_details(bundle, initial_tab="icon")
 
     def _open_device(self, bundle: _DeviceBundle) -> None:
-        # Double-click behavior priority:
-        # 1) presentation URL (open browser)
-        # 2) combined SSDP + mDNS when both exist, else single-protocol details
-        # 4) no action
+        # Double-click: open URL, else details (all bundles).
         url = bundle.open_url
         if url:
             open_url(url)
             return
-        if self._has_ssdp_details(bundle) and bundle.mdns_device is not None:
-            self._open_combined_details(bundle)
-            return
-        if self._has_ssdp_details(bundle):
-            self._open_ssdp_details(bundle)
-            return
-        if bundle.mdns_device is not None:
-            self._open_mdns_details(bundle)
+        self._open_any_details(bundle)
 
     def _show_details_dialog(
         self,
@@ -762,6 +829,7 @@ class DeviceList(Gtk.Box):
         endpoint_source: str | None = None,
         endpoint_ip: str | None = None,
         endpoint_port: int | None = None,
+        overview: dict[str, str | None] | None = None,
     ) -> None:
         parent = self._parent_window
         if parent is None:
@@ -798,6 +866,7 @@ class DeviceList(Gtk.Box):
             has_device_icon_source=has_device_icon_source,
             provided_icon_display=provided_icon_display,
             details_field_rule_map=details_field_rule_map or {},
+            overview=overview,
             active_field_rules=active_rules,
             on_add_field_rule=(
                 (lambda target, path: self._on_set_field_rule(endpoint_source, endpoint_ip, endpoint_port, target, path))
@@ -871,7 +940,7 @@ class DeviceList(Gtk.Box):
 
     def _bundle_provided_icon_display(self, bundle: _DeviceBundle) -> str | None:
         """Display source for a device-provided icon (URL/cached canonical URL), if available."""
-        for dev in (bundle.ssdp_device, bundle.mdns_device):
+        for dev in (bundle.ssdp_device, bundle.wsdd_device, bundle.wsd_device, bundle.nmb_device, bundle.mdns_device):
             if dev is None:
                 continue
             url = self._resolved_remote_icon_url(dev)
@@ -883,7 +952,7 @@ class DeviceList(Gtk.Box):
         return None
 
     def _bundle_has_remote_device_icon(self, bundle: _DeviceBundle) -> bool:
-        for dev in (bundle.ssdp_device, bundle.mdns_device):
+        for dev in (bundle.ssdp_device, bundle.wsdd_device, bundle.wsd_device, bundle.nmb_device, bundle.mdns_device):
             if dev is None:
                 continue
             if self._remote_icon_url_for_device(dev):
@@ -1369,13 +1438,13 @@ class DeviceList(Gtk.Box):
             # If custom icon is missing, fallback to provided behavior.
             use_provided = True
         if use_provided:
-            for cand in (bundle.ssdp_device, bundle.mdns_device):
+            for cand in (bundle.ssdp_device, bundle.wsdd_device, bundle.wsd_device, bundle.nmb_device, bundle.mdns_device):
                 if cand is None:
                     continue
                 remote_icon = self._load_remote_icon(cand, 64)
                 if remote_icon is not None:
                     return remote_icon
-            for cand in (bundle.ssdp_device, bundle.mdns_device):
+            for cand in (bundle.ssdp_device, bundle.wsdd_device, bundle.wsd_device, bundle.nmb_device, bundle.mdns_device):
                 if cand is None:
                     continue
                 if self._remote_icon_fetch_pending(cand):
@@ -1577,6 +1646,13 @@ class DeviceList(Gtk.Box):
         _fetch_url, cache_key = pair
         return cache_key in self._remote_icon_fetching
 
+    def _bundle_has_remote_icon_fetch_pending(self, bundle: _DeviceBundle) -> bool:
+        """True while a background HTTP fetch is loading a sharper icon for any row in the bundle."""
+        for d in bundle.devices:
+            if self._remote_icon_fetch_pending(d):
+                return True
+        return False
+
     @staticmethod
     def _remote_icon_digest(icon_url: str) -> str:
         return hashlib.sha256(icon_url.encode("utf-8")).hexdigest()
@@ -1744,6 +1820,16 @@ class DeviceList(Gtk.Box):
             .nn-mdns-service-body {
                 padding-bottom: 6px;
             }
+            @keyframes nn-provisional-pulse {
+                0% { background-color: rgba(46, 110, 210, 0.11); }
+                50% { background-color: rgba(46, 110, 210, 0.26); }
+                100% { background-color: rgba(46, 110, 210, 0.11); }
+            }
+            .nn-identity-provisional {
+                border-radius: 10px;
+                padding: 6px 6px 4px 6px;
+                animation: nn-provisional-pulse 2.1s ease-in-out infinite;
+            }
             """
         )
         screen = Gdk.Screen.get_default()
@@ -1761,6 +1847,25 @@ class DeviceList(Gtk.Box):
         column.set_cell_data_func(renderer, self._cell_data_func, model_index)
         self._tree.append_column(column)
 
+    def _list_pulse_provisional_identity_tick(self) -> bool:
+        """Drive a soft background pulse on list rows with resolving identity and/or loading icons."""
+        self._provisional_pulse_phase += 0.38
+        devs = getattr(self, "_filtered_devices", None)
+        if not devs or not any(
+            _bundle_identity_provisional(b) or self._bundle_has_remote_icon_fetch_pending(b) for b in devs
+        ):
+            return True
+        it = self._list_store.get_iter_first()
+        while it is not None:
+            bundle = self._list_store.get_value(it, 0)
+            if isinstance(bundle, _DeviceBundle) and (
+                _bundle_identity_provisional(bundle)
+                or self._bundle_has_remote_icon_fetch_pending(bundle)
+            ):
+                self._list_store.row_changed(self._list_store.get_path(it), it)
+            it = self._list_store.iter_next(it)
+        return True
+
     def _cell_data_func(self, column: Gtk.TreeViewColumn, cell: Gtk.CellRendererText, model, iter_, data) -> None:
         model_index = int(data)
         bundle = model.get_value(iter_, 0)
@@ -1768,14 +1873,36 @@ class DeviceList(Gtk.Box):
         cell.set_property("text", str(value) if value is not None else "")
         monitored = bool(getattr(bundle, "monitored", False))
         online = bool(getattr(bundle, "online", True))
+        prov = isinstance(bundle, _DeviceBundle) and _bundle_identity_provisional(bundle)
+        icon_ld = isinstance(bundle, _DeviceBundle) and self._bundle_has_remote_icon_fetch_pending(bundle)
+        pulse_row = prov or icon_ld
         if (not online) and monitored:
             cell.set_property("foreground-set", True)
             cell.set_property("foreground-rgba", self._offline_fg)
+            cell.set_property("style-set", False)
+            cell.set_property("cell-background-set", False)
+        elif pulse_row:
+            alpha = 0.06 + 0.12 * (0.5 + 0.5 * math.sin(self._provisional_pulse_phase))
+            cell.set_property("cell-background-rgba", Gdk.RGBA(0.22, 0.48, 0.92, alpha))
+            cell.set_property("cell-background-set", True)
+            if prov:
+                cell.set_property("foreground-set", True)
+                cell.set_property("foreground-rgba", self._provisional_fg)
+                cell.set_property("style-set", True)
+                cell.set_property("style", Pango.Style.ITALIC)
+            else:
+                try:
+                    cell.set_property("foreground-set", False)
+                except Exception:
+                    pass
+                cell.set_property("style-set", False)
         else:
             try:
                 cell.set_property("foreground-set", False)
             except Exception:
                 pass
+            cell.set_property("style-set", False)
+            cell.set_property("cell-background-set", False)
 
     def _build_device_bundles(self, devices: list[Device]) -> list[_DeviceBundle]:
         bundles_by_id: dict[str, _DeviceBundle] = {}
@@ -1800,7 +1927,28 @@ class DeviceList(Gtk.Box):
                 bundle.mdns_device = device
             elif device.source == "ssdp":
                 bundle.ssdp_device = device
+            elif device.source == "wsd":
+                bundle.wsd_device = device
+            elif device.source == "wsdd":
+                bundle.wsdd_device = device
+            elif device.source == "nmb":
+                bundle.nmb_device = device
             bundle.primary = self._choose_bundle_primary(bundle)
+
+            _logger.debug(
+                "bundle_merge attach source=%s endpoint=%s:%s merge_keys=%s name=%r slots="
+                "mdns=%s ssdp=%s wsdd=%s wsd=%s nmb=%s",
+                device.source,
+                device.ip,
+                device.port,
+                bundle_keys,
+                device.name,
+                bundle.mdns_device is not None,
+                bundle.ssdp_device is not None,
+                bundle.wsdd_device is not None,
+                bundle.wsd_device is not None,
+                bundle.nmb_device is not None,
+            )
 
             for key in bundle_keys:
                 host_to_bundle_id[key] = bundle_id
@@ -1819,20 +1967,107 @@ class DeviceList(Gtk.Box):
         return information_precedence_rank(self._information_precedence, role)
 
     def _choose_bundle_primary(self, bundle: _DeviceBundle) -> Device:
-        """Pick list/detail primary row using ``merge.information_precedence`` for live ``ssdp`` vs ``mdns``."""
-        if bundle.ssdp_device is not None and bundle.mdns_device is not None:
-            rs = self._protocol_row_preference_rank(bundle.ssdp_device)
-            rm = self._protocol_row_preference_rank(bundle.mdns_device)
-            if rs < rm:
-                return bundle.ssdp_device
-            if rm < rs:
-                return bundle.mdns_device
-            return bundle.ssdp_device
-        if bundle.ssdp_device is not None:
-            return bundle.ssdp_device
-        if bundle.mdns_device is not None:
-            return bundle.mdns_device
-        return bundle.primary
+        """Pick list/detail primary row using ``merge.information_precedence`` across live protocol rows."""
+        candidates: list[Device] = []
+        for d in (bundle.ssdp_device, bundle.wsdd_device, bundle.wsd_device, bundle.nmb_device, bundle.mdns_device):
+            if d is not None:
+                candidates.append(d)
+        if not candidates:
+            return bundle.primary
+        if len(candidates) == 1:
+            _logger.debug(
+                "bundle_primary single_candidate source=%s ip=%s name=%r",
+                candidates[0].source,
+                candidates[0].ip,
+                candidates[0].name,
+            )
+            return candidates[0]
+
+        def _sort_key(d: Device) -> tuple[int, int]:
+            src = (d.source or "").strip().lower()
+            return (
+                self._protocol_row_preference_rank(d),
+                _SOURCE_PRIMARY_TIEBREAK.get(src, 9),
+            )
+
+        ip_hint = bundle.primary.ip if bundle.primary else ""
+        _logger.debug(
+            "bundle_primary start ip=%r merge.information_precedence=%s slack=%s",
+            ip_hint,
+            self._information_precedence,
+            _PRIMARY_RANK_SLACK_FOR_NAME,
+        )
+
+        ordered = sorted(candidates, key=_sort_key)
+        for i, d in enumerate(ordered):
+            src = (d.source or "").strip().lower()
+            rk = self._protocol_row_preference_rank(d)
+            role = information_precedence_role_for_device_source(d.source or "")
+            tie = _SOURCE_PRIMARY_TIEBREAK.get(src, 9)
+            wk = _weak_bundle_display_name(d)
+            _logger.debug(
+                "bundle_primary sorted[%d] %s",
+                i,
+                _bundle_row_debug_line(d, rank=rk, role=role, tie=tie, weak=wk),
+            )
+
+        top = ordered[0]
+        # NetBIOS machine name wins over anonymous WSD/wsdd scopes even when merge ranks WSD higher.
+        if bundle.nmb_device is not None and not _weak_bundle_display_name(bundle.nmb_device):
+            if top.source in {"wsd", "wsdd"} and _weak_bundle_display_name(top):
+                _logger.debug(
+                    "bundle_primary choice=nmb_override (NetBIOS hostname over weak %s) "
+                    "nmb_name=%r top_was=%s top_weak=%s",
+                    top.source,
+                    bundle.nmb_device.name,
+                    top.name,
+                    _weak_bundle_display_name(top),
+                )
+                return bundle.nmb_device
+            _logger.debug(
+                "bundle_primary nmb_override skipped nmb_weak=%s top_source=%s top_weak=%s",
+                _weak_bundle_display_name(bundle.nmb_device),
+                top.source,
+                _weak_bundle_display_name(top),
+            )
+        elif bundle.nmb_device is None:
+            _logger.debug(
+                "bundle_primary no nmb_device in bundle (WSD/mDNS alone?) ip_hint=%r — "
+                "check discovery nmb + directed_ips",
+                ip_hint,
+            )
+
+        best_rank = self._protocol_row_preference_rank(ordered[0])
+        slack = _PRIMARY_RANK_SLACK_FOR_NAME
+        _logger.debug(
+            "bundle_primary slack_scan best_rank_index=%s max_rank=%s",
+            best_rank,
+            best_rank + slack,
+        )
+        for d in ordered:
+            dr = self._protocol_row_preference_rank(d)
+            if dr > best_rank + slack:
+                _logger.debug(
+                    "bundle_primary slack_scan stop past_slack candidate=%s dr=%s",
+                    d.source,
+                    dr,
+                )
+                break
+            if not _weak_bundle_display_name(d):
+                _logger.debug(
+                    "bundle_primary choice=slack_first_strong_name source=%s name=%r",
+                    d.source,
+                    d.name,
+                )
+                return d
+        chosen = ordered[0]
+        _logger.debug(
+            "bundle_primary choice=fallback_sorted_first source=%s name=%r weak=%s",
+            chosen.source,
+            chosen.name,
+            _weak_bundle_display_name(chosen),
+        )
+        return chosen
 
     def _device_host_bundle_keys(self, device: Device) -> list[str]:
         """Keys that may refer to the same physical host (cross-protocol merging).
@@ -1840,11 +2075,11 @@ class DeviceList(Gtk.Box):
         A Synology SSDP row often exposes a UUID (UDN/USN); `_ftp._tcp` on the same box may only align
         on MAC or LAN IP. Register every available key so the same bundle aggregates both sources.
         """
-        if device.source not in {"mdns", "ssdp"}:
+        if device.source not in {"mdns", "ssdp", "wsd", "wsdd", "nmb"}:
             return []
         metadata = device.metadata if isinstance(device.metadata, dict) else {}
         ordered: list[str] = []
-        mac = self._extract_mac(metadata)
+        mac = self._mac_for_bundle_merge(device, metadata)
         if mac:
             ordered.append(f"mac:{mac}")
         uid = self._extract_uid(metadata)
@@ -1869,7 +2104,27 @@ class DeviceList(Gtk.Box):
 
         usn = metadata.get("usn")
         if isinstance(usn, str) and usn.strip():
+            u = uuid_urn_if_present(usn)
+            if u:
+                return u
             return usn.strip().lower().split("::", 1)[0]
+
+        wsd_epr = metadata.get("wsd_epr")
+        if isinstance(wsd_epr, str) and wsd_epr.strip():
+            u = uuid_urn_if_present(wsd_epr)
+            if u:
+                return u
+        wsdd_uri = metadata.get("wsdd_uri")
+        if isinstance(wsdd_uri, str) and wsdd_uri.strip():
+            u = uuid_urn_if_present(wsdd_uri)
+            if u:
+                return u
+
+        udn_raw = xml_fields.get("UDN")
+        if isinstance(udn_raw, str) and udn_raw.strip():
+            u = uuid_urn_if_present(udn_raw)
+            if u:
+                return u
 
         candidates = [
             xml_fields.get("UDN"),
@@ -1906,3 +2161,23 @@ class DeviceList(Gtk.Box):
             if isinstance(value, str) and value.strip():
                 return value.strip().lower()
         return ""
+
+    @staticmethod
+    def _normalize_mac_for_bundle_merge(raw: str) -> str:
+        """Six-octet lowercase MAC with colons; invalid tokens yield ''."""
+        t = (raw or "").strip().lower().replace("-", ":")
+        parts = t.split(":")
+        if len(parts) != 6:
+            return ""
+        if not all(len(p) == 2 and all(c in "0123456789abcdef" for c in p) for p in parts):
+            return ""
+        return ":".join(parts)
+
+    def _mac_for_bundle_merge(self, device: Device, metadata: dict) -> str:
+        """MAC from metadata, else kernel ARP/IPv6 neighbor cache — aligns IPv4 vs IPv6 rows for the same host."""
+        m = self._extract_mac(metadata)
+        n = self._normalize_mac_for_bundle_merge(m) if m else ""
+        if n:
+            return n
+        hit = lookup_mac_from_neighbor_cache(str(getattr(device, "ip", "") or "").strip())
+        return self._normalize_mac_for_bundle_merge(hit) if hit else ""

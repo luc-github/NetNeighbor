@@ -7,7 +7,8 @@ keeping the project healthy between releases.
 
 | Path | Content |
 |------|---------|
-| `~/.config/netneighbor/ui_prefs.json` | UI state + user choices/rules/overrides (not a full device DB). |
+| `~/.config/netneighbor/ui_prefs.json` | UI state + per-device overrides + rules (not a full device DB). Tray-related booleans include **`close_to_tray`** (default true), **`start_minimized_to_tray`**, **`start_at_login`** (writes XDG autostart when enabled). |
+| `~/.config/autostart/io.esp3d.netneighbor.desktop` | Present when **Start NetNeighbor when logging in** is checked in View → Preferences; standard XDG autostart entry. **`Exec=`** appends **`--start-minimized-to-tray`** (tray-only login start) while the **menu** `.desktop` from packaging stays without that flag. Implemented in `utils/session_autostart.py`. |
 | `~/.cache/netneighbor/discovery-cache.json` | Volatile discovery cache (`last_seen_overrides`, monitored snapshots metadata, SSDP XML/profile cache). Safe to delete; app rebuilds it. |
 | `~/.config/netneighbor/logging.json` | Per-area log levels (`default`, `app`, `ssdp`, `mdns`). Created with defaults on first run if missing. |
 | `~/.cache/netneighbor/netneighbor.log` | Log file when file logging is enabled (see `app.py`). |
@@ -22,6 +23,14 @@ keeping the project healthy between releases.
 - Special levels **`NONE`**, **`OFF`**, **`DISABLED`**, **`SILENT`** turn off that area (no INFO/DEBUG/WARNING from those loggers).
 - **`NETNEIGHBOR_LOG_LEVEL`** still overrides the root/default level when set.
 - Other useful loggers: `discovery.manager` (start/stop, publishing at DEBUG), `ui`.
+
+## Systray, window chrome, fullscreen
+
+- **Tray**: `ui/tray_indicator.py` — prefers Ayatana **AppIndicator** (`gir1.2-ayatanaappindicator3-0.1`) or legacy **AppIndicator3** (`gir1.2-appindicator3-0.1`), else **Gtk.StatusIcon**. Tray menu: **Open** / **Minimize to tray** (sensitive while the window is visible) / **Quit**. Without any of these backends, **close-to-tray** cannot hide to the panel; the window still closes normally.
+- **Icons**: canonical vector logo — **`assets/svg/netneighbor.svg`**. Theme resolution uses **`assets/icons/`** as an extra icon search path; **`hicolor/scalable/apps/`** contains symlinks **`io.esp3d.netneighbor.svg`** and **`io.esp3d.netneighbor-tray.svg`** pointing at that file (so GTK finds app + tray names). Installed `.deb` copies the SVG into `/usr/share/icons/hicolor/scalable/apps/` under both names.
+- **Close-to-tray + tray available**: main window uses a **Gtk.HeaderBar** with **Maximize** and **Close** only (explicit minimize lives on the tray menu). **CLI** **`--start-minimized-to-tray`** and first-run flow can skip stealing focus until the user opens from the tray (`app.py` → `MainWindow`). **F11** toggles fullscreen (useful for the icon grid); implemented via a window **Gtk.AccelGroup** in `ui/main_window.py`.
+- **`utils/gtk_dialog.py`**: **`prepare_gtk_dialog`** disables CSD/header-bar dialogs that lose WM title bars on some compositors/window managers (used by main window, details, list, and related dialogs).
+- **Open on PCs**: context-menu / double-click **Open** is suppressed for merged rows whose primary **type** is **`computer`** (WSD metadata URL on port 5357 is not a useful browser target yet); double-click opens **Details** instead (`ui/device_list.py`).
 
 ## Common tasks
 
@@ -41,6 +50,11 @@ keeping the project healthy between releases.
 4. Compare logs for “XML fetched” vs failures (timeouts, parse errors).
 5. **Location looks like a URL / `description.xml`**: should no longer happen; if prefs were polluted earlier, open **Location presets** or edit **`ui_prefs.json`** — invalid URL-like presets are stripped on load. **`utils/location_label.py`** documents the rejection rules.
 6. **Wrong or delayed device icon**: confirm **`remote_icons/*.payload`** and **`remote_icon_index.json`** together; bump **`mdns`** / **`app`** to **DEBUG** to trace aggregate + icon load path.
+7. **Device details (first tab)**: duplicate **Last seen** rows are collapsed to the latest timestamp; bundled WSD/wsdd/NMB-only rows omit legacy **Discovery** / **WSD XAddrs** / **NetBIOS registration** lines (overview + protocol fields stay minimal). **IPv6 (link-local)** in the overview only appears when a `fe80::` address is inferred from device IP or WSD/wsdd payloads — many Windows PCs only advertise IPv4 in WSD URLs, so an empty IPv6 line there is expected.
+
+## Changelog / release notes
+
+- [`CHANGELOG.md`](CHANGELOG.md) tracks versioned highlights (since **0.8.0**).
 
 ## Suggested additional docs (optional)
 
@@ -49,7 +63,6 @@ keeping the project healthy between releases.
 | `TESTING.md` | Once you have automated tests or a repeatable manual checklist per release. |
 | `PACKAGING.md` | When AppImage / `.deb` pipeline is scripted (commands, deps, smoke test). |
 | `TROUBLESHOOTING.md` | User-facing FAQ distilled from GitHub issues (short). |
-| `CHANGELOG.md` | Keep a human-readable history if releases become frequent. |
 
 Architecture Decision Records (ADR): optional short files under `docs/adr/` for major choices
 (why GTK3, why in-memory store first, etc.) if the team grows.
@@ -57,5 +70,8 @@ Architecture Decision Records (ADR): optional short files under `docs/adr/` for 
 ## Release checklist (minimal)
 
 - [ ] `README.md` and brief aligned with behavior.
+- [ ] **`VERSION`** bumped; **`docs/CHANGELOG.md`** entry for the release.
+- [ ] `docs/MAINTENANCE.md`, `docs/PACKAGING.md`, and `docs/COMMUNITY_OVERRIDES.md` aligned if behavior or deps changed.
 - [ ] `docs/ROADMAP.md` updated.
-- [ ] Smoke run: start app, discovery, open details, restart with monitored device.
+- [ ] Smoke run: start app, discovery, details, tray hide/show, **CLI** `--start-minimized-to-tray`, optional autostart toggle, monitored device restart.
+- [ ] Packaging smoke: `./packaging/build_deb.sh`, install in VM, verify icons + `Recommends` (tray + `nmblookup`).

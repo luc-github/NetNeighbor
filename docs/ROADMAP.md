@@ -5,12 +5,17 @@ This file tracks **implementation** progress. Product vision and constraints liv
 
 ## Done (current baseline)
 
+- **0.8.0 (2026-05)** — **[`CHANGELOG`](CHANGELOG.md)**: kernel **neighbor MAC** assist for merge + **IPv4** when discovery showed **IPv6** only; **IPv6 synthetic WSD/wsdd** **`nmblookup -A`** queue; provisional row **pulse** + icon-load affordance; **`prepare_gtk_dialog`**; **first-run hide to tray**; **`--start-minimized-to-tray`** + autostart **`Exec`** vs menu launcher; tray **Minimize to tray**; **`app.py`** known-args parsing + forwarding remainder to **`Gtk.Application.run`**.
 - GTK application shell, single-instance lock, locale activation socket (second launch raises existing window).
 - **`DiscoveryManager`**: in-memory device cache, listener callbacks, SSDP merge rules, user overrides (type/name/location/monitored/last seen), cross-protocol host identity keys (`UID`/`MAC`/IP fallback) for overrides.
 - **`Device` model**: stable SSDP identity (`UDN` / `USN` / MAC / endpoint fallback).
 - **SSDP**: UDP multicast, M-SEARCH refresh, NOTIFY parsing, XML descriptor fetch, offline via NOTIFY byebye and TTL-based expiry (`2 × max-age` from `CACHE-CONTROL`, bounded), periodic refresh thread.
 - **SSDP rules file** (`config/ssdp_rules.json`): name, information, and type heuristics without recompiling.
-- **UI**: list and icon grid, sidebar grouped by type or location (matching arrange mode), details dialogs (SSDP / mDNS payload builders), browser open, user type/name/location overrides, icon appearance management (system/provided/custom + picker), monitored devices, greyed offline when monitored, session notification history (in-memory) available from `Tools`.
+- **Additional discovery stacks**: **WSD** (`discovery/wsd.py`, PyPI `WSDiscovery`), **`wsdd`** local daemon cache (`discovery/wsdd_client.py`), **NetBIOS name browse** via **`nmblookup`** (`discovery/netbios.py`); enabled/query knobs under **`discovery.json`** (see [`MAINTENANCE.md`](MAINTENANCE.md)).
+- **UI**: list and icon grid, sidebar grouped by type or location (matching arrange mode), details dialogs (**Overview** + protocol fields / raw XML / mDNS **Services** / icon tab), **`utils/details_payload`**: merged **Last seen** deduped; WSD/wsdd/NMB-only detail rows minimized (no noisy Discovery/XAddrs/NetBIOS registration lines).
+- **Browser open**: context-menu / double-click **Open** suppressed for **`computer`** bundles (WSD stub URL); opens **Details** instead until a dedicated PC workflow exists.
+- **Tray & session GTK**: **`ui/tray_indicator.py`** (AppIndicator / StatusIcon fallback; tray **Minimize to tray**), **`utils/session_autostart.py`** (XDG autostart `.desktop` with **`--start-minimized-to-tray`**). **View → Preferences**: close-to-tray (default), start minimized to tray, start at login.
+- **Window chrome**: with tray active, **`Gtk.HeaderBar`** **Maximize + Close** (minimize via tray menu); **F11** fullscreen for icon-heavy use.
 - **Persistence** (per user): `~/.config/netneighbor/ui_prefs.json` (view, filters, overrides, monitored snapshots for restore on next launch — not a full device database file).
 - **mDNS (zeroconf)**: real browser/listener, TXT decode, type/category heuristics, host-level service aggregation (single device can expose multiple services), and conditional presentation URL (only when `_http._tcp` is actually present). Aggregation scoring prefers **playback / printer** services (e.g. `_airplay._tcp`, `_raop._tcp`, Sonos/Cast/Spotify Connect, `_ipp._tcp`, `_printer._tcp`) over bare **`_http._tcp`** so representative TXT, type, and icon metadata stabilize sooner on multi-service hosts.
 - **`data/device_types.json`**: explicit mDNS keys for common smart-speaker / casting services map to **Smart Speakers** and bundled **`smartspeaker.png`** (user overlay still merges from `~/.config/netneighbor/device_types.json`).
@@ -21,7 +26,7 @@ This file tracks **implementation** progress. Product vision and constraints liv
 - **Location stability hardening**: location cache is now preferred and persisted automatically; discovery updates can promote a new plausible room value and trigger cache reapply/persist, reducing `No location` flicker during metadata races.
 - **Identity gating (early discovery)**: first-seen SSDP/mDNS rows without stable identity (`UID`/MAC) are briefly held (~3s) before UI publication; immediate release occurs once identity resolves.
 - **Release/version unification**: single root `VERSION` file is now consumed by About dialog, build scripts, and desktop entry templating; release artifacts embed `VERSION` explicitly.
-- **Packaging quality updates**: `.deb` now sets `Installed-Size`; launcher icon install matches hicolor size buckets (64 + 256); manual user-data cleanup helper script added for optional full local wipe.
+- **Packaging quality updates**: `.deb` sets `Installed-Size`; launcher + tray icons ship as **`hicolor/scalable/apps`** **SVG** (see `assets/svg/netneighbor.svg`); **`control`** declares **`Recommends`**: `samba-common-bin` (**`nmblookup`**), **`gir1.2-ayatanaappindicator3-0.1` | `gir1.2-appindicator3-0.1`** (tray GObject bindings — not Samba servers). Manual user-data cleanup helper script retained for optional full local wipe (see [`PACKAGING.md`](PACKAGING.md)).
 - **Discovery cache split**: volatile data moved to `~/.cache/netneighbor/discovery-cache.json` (`last_seen`, monitored snapshots metadata, SSDP XML/profile cache), while `ui_prefs.json` keeps UI/user choices.
 - **SSDP startup enrichment**: persistent SSDP XML/profile cache reused at startup to improve immediate name/type/details rendering before fresh XML fetches complete.
 - **Startup recovery refreshes**: configurable one-shot refreshes after discovery startup via root **`startup_refresh_seconds`** in `discovery.json` (string or array; default `[20, 45, 90]`).
@@ -32,15 +37,16 @@ This file tracks **implementation** progress. Product vision and constraints liv
    - Host identity-based override keys are in place (`UID`/`MAC`/IP fallback).  
    - Recent work improved **same-host mDNS** stability (aggregate representative scoring, host icon index); continue validation on real networks for edge cases (sleep/wake, endpoint shifts, mixed protocol timing, SSDP+mDNS bundle races).
 
-2. **Runtime mode (baseline chosen)**  
-   - **Primary mode:** standalone GTK window (single instance); matches current implementation and MVP packaging path.  
-   - **Deferred variants:** optional tray/minimize-to-background later; heavier split (system service + UI) or file-manager integration only if needs clearly justify the maintenance cost.
+2. **Runtime mode extensions**  
+   - **Delivered:** single-instance GTK app + optional **systray** + **session autostart** (no standalone systemd daemon).  
+   - **Still deferred:** headless discovery **service** with separate UI attachment, deeper **file-manager** integration — only if cost/benefit is clear.
 
 3. **Packaging and release**  
-   - AppImage track + optional lint/signing/checksum automation around current `.deb`/`tar.gz` flow (see brief).
+   - **Done for Debian family:** scripted `.deb` + `tar.gz` + `release.sh`, SVG icons, **`Recommends`** for tray + NetBIOS client.  
+   - **Still open:** AppImage (or Flatpak), optional lint/signing/checksum hardening beyond current `SHA256SUMS`.
 
-4. **Optional UX**  
-   - Search / filter bar, copy IP, IPv6 (out of current MVP per brief but listed as future).
+4. **Optional UX / data**  
+   - Search / filter bar, quick **copy IP** action, richer **IPv6** surfaces when protocols expose more than link-local inference (today: overview **IPv6 (link-local)** when `fe80::` appears in payloads or device IP).
 
 ## Future — plugins / automation / monitoring (planned, after current next items)
 

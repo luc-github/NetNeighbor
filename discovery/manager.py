@@ -11,9 +11,13 @@ from typing import Literal
 from discovery.base import BaseDiscovery
 from discovery.mdns import MDNSDiscovery
 from discovery.ssdp import SSDPDiscovery
+from discovery.netbios import NetbiosDiscovery
+from discovery.wsdd_client import WsddSocketDiscovery
+from discovery.wsd import WSDiscovery, is_synthetic_wsd_display_name
 from model.device import Device
 from utils.discovery_cache import load_discovery_cache
 from utils.discovery_config import normalize_information_precedence_list
+from utils.discovery_identity import uuid_urn_if_present
 from utils.location_label import is_plausible_room_location
 
 AnticipatoryDescriptorSource = Literal["ssdp_profile_cache", "mdns_txt"]
@@ -105,16 +109,32 @@ class DiscoveryManager:
         mdns_enumeration_timeout_seconds: float | None = None,
         mdns_enumeration_interval_seconds: int | None = None,
         mdns_service_info_timeout_ms: int | None = None,
+        enable_wsd: bool = True,
+        wsd_interval_seconds: float | None = None,
+        wsd_timeout_seconds: float | None = None,
+        enable_wsdd_socket: bool = False,
+        wsdd_listen: str | None = None,
+        wsdd_interval_seconds: float | None = None,
+        wsdd_socket_timeout_seconds: float | None = None,
+        wsdd_probe_each_poll: bool = True,
+        enable_nmb: bool = True,
+        nmb_interval_seconds: float | None = None,
+        nmb_timeout_seconds: float | None = None,
+        nmb_argv: list[str] | None = None,
+        nmb_directed_ips: list[str] | None = None,
         protocol_merge_order: list[str] | None = None,
         information_precedence: list[str] | None = None,
     ) -> None:
         self._logger = logging.getLogger(__name__)
         self._ssdp_logger = logging.getLogger(f"{__name__}.ssdp")
         self._mdns_logger = logging.getLogger(f"{__name__}.mdns")
+        self._wsd_logger = logging.getLogger(f"{__name__}.wsd")
+        self._wsdd_logger = logging.getLogger(f"{__name__}.wsdd")
+        self._nmb_logger = logging.getLogger(f"{__name__}.nmb")
         self._protocol_merge_order: list[str] = (
             list(protocol_merge_order)
             if protocol_merge_order
-            else ["ssdp", "mdns"]
+            else ["ssdp", "wsd", "wsdd", "nmb", "mdns"]
         )
         self._information_precedence: list[str] = (
             list(information_precedence)
@@ -141,12 +161,39 @@ class DiscoveryManager:
                     service_info_timeout_ms=mdns_service_info_timeout_ms,
                 )
             )
+        if enable_wsd:
+            protocols.append(
+                WSDiscovery(
+                    interval_seconds=wsd_interval_seconds,
+                    timeout_seconds=wsd_timeout_seconds,
+                )
+            )
+        if enable_wsdd_socket and (wsdd_listen or "").strip():
+            protocols.append(
+                WsddSocketDiscovery(
+                    listen=(wsdd_listen or "").strip(),
+                    interval_seconds=wsdd_interval_seconds,
+                    socket_timeout_seconds=wsdd_socket_timeout_seconds,
+                    probe_each_poll=wsdd_probe_each_poll,
+                )
+            )
+        if enable_nmb:
+            protocols.append(
+                NetbiosDiscovery(
+                    interval_seconds=nmb_interval_seconds,
+                    timeout_seconds=nmb_timeout_seconds,
+                    argv=nmb_argv,
+                    directed_ips=nmb_directed_ips,
+                )
+            )
         self._protocols = protocols
         self._ssdp_discovery: SSDPDiscovery | None = None
+        self._nmb_discovery: NetbiosDiscovery | None = None
         for _p in protocols:
             if isinstance(_p, SSDPDiscovery):
                 self._ssdp_discovery = _p
-                break
+            if isinstance(_p, NetbiosDiscovery):
+                self._nmb_discovery = _p
         self._anticipatory_fetch_attempted: set[str] = set()
         self._anticipatory_reentrant: set[str] = set()
         self._devices: dict[str, Device] = {}
@@ -221,6 +268,12 @@ class DiscoveryManager:
             return self._ssdp_logger
         if source == "mdns":
             return self._mdns_logger
+        if source == "wsd":
+            return self._wsd_logger
+        if source == "wsdd":
+            return self._wsdd_logger
+        if source == "nmb":
+            return self._nmb_logger
         return self._logger
 
     def add_or_update_device(self, device: Device) -> None:
@@ -234,6 +287,15 @@ class DiscoveryManager:
                 device.online,
             )
             return
+        if self._should_skip_loopback_shadow_duplicate(device):
+            self._device_event_logger(device.source).debug(
+                "Skipping loopback row (same device already seen on LAN IP): source=%s uid_sample=%s",
+                device.source,
+                (self._extract_uid(device.metadata) or "")[:48],
+            )
+            return
+        if sip not in {"127.0.0.1", "::1"}:
+            self._prune_loopback_shadow_rows_for_identity(device)
         if self._should_hold_for_stable_identity(device):
             return
 
@@ -301,6 +363,7 @@ class DiscoveryManager:
         device.metadata["_arrival_index"] = existing_arrival
         self._supplement_missing_user_location(device, existing)
         self._devices[existing_key] = device
+        self._maybe_queue_nmb_probe_for_synthetic_wsd(device)
         self._run_location_reapply_sweep()
         device_log = self._device_event_logger(device.source)
         device_log.info(
@@ -335,6 +398,92 @@ class DiscoveryManager:
         )
         self._emit_presence_hooks_if_transition(device, prev_online, device.online)
         self._notify()
+
+    def _maybe_queue_nmb_probe_for_synthetic_wsd(self, device: Device) -> None:
+        """Queue ``nmblookup -A`` on the LAN IPv4 for synthetic WSD/wsdd labels.
+
+        Broadcast browse often misses PCs; directed ``-A`` matches what you'd run manually.
+        If discovery only has IPv6 (e.g. link-local), resolve IPv4 from kernel neighbor/MAC
+        tables—same source as ``ip neigh``—then probe that address for the NetBIOS name.
+        """
+        nmb = self._nmb_discovery
+        if nmb is None:
+            return
+        if (device.source or "").strip().lower() not in {"wsd", "wsdd"}:
+            return
+        if not device.online:
+            return
+        if (device.type or "").strip().lower() != "computer":
+            return
+        if not is_synthetic_wsd_display_name(device.name):
+            return
+        sip = str(device.ip).strip()
+        base = sip.split("%", 1)[0].strip()
+        if not base:
+            return
+        try:
+            a = ipaddress.ip_address(base)
+        except ValueError:
+            return
+        target_v4: str | None = None
+        if isinstance(a, ipaddress.IPv4Address):
+            if a.is_loopback or not a.is_private:
+                return
+            target_v4 = base
+        elif isinstance(a, ipaddress.IPv6Address):
+            from utils.details_payload import resolve_mac_for_device
+            from utils.neighbor_mac import lookup_ipv4_for_mac
+
+            mac = resolve_mac_for_device(device)
+            if not mac:
+                return
+            target_v4 = lookup_ipv4_for_mac(mac)
+            if not target_v4:
+                return
+        else:
+            return
+        nmb.suggest_directed_ip(target_v4)
+
+    def _should_skip_loopback_shadow_duplicate(self, device: Device) -> bool:
+        """Drop SSDP/mDNS rows bound to loopback when the same identity already exists on a LAN address."""
+        sip = str(device.ip).strip()
+        if sip not in {"127.0.0.1", "::1"}:
+            return False
+        uid = self._extract_uid(device.metadata)
+        if not uid:
+            return False
+        for other in self._devices.values():
+            oip = str(other.ip).strip()
+            if oip in {"", "127.0.0.1", "::1"}:
+                continue
+            try:
+                addr = ipaddress.ip_address(oip)
+            except ValueError:
+                continue
+            if addr.is_loopback:
+                continue
+            if self._extract_uid(other.metadata) == uid:
+                return True
+        return False
+
+    def _prune_loopback_shadow_rows_for_identity(self, device: Device) -> None:
+        """Remove older loopback duplicate rows when the real LAN endpoint arrives."""
+        sip = str(device.ip).strip()
+        if sip in {"", "127.0.0.1", "::1"}:
+            return
+        uid = self._extract_uid(device.metadata)
+        if not uid:
+            return
+        remove_keys: list[str] = []
+        for key, other in self._devices.items():
+            oip = str(other.ip).strip()
+            if oip not in {"127.0.0.1", "::1"}:
+                continue
+            if self._extract_uid(other.metadata) == uid:
+                remove_keys.append(key)
+        for key in remove_keys:
+            self._logger.debug("Removing loopback shadow duplicate key=%s", key[:80])
+            del self._devices[key]
 
     def _load_ssdp_profile_cache_by_ip(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
@@ -1929,7 +2078,25 @@ class DiscoveryManager:
         txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
         usn = metadata.get("usn")
         if isinstance(usn, str) and usn.strip():
+            u = uuid_urn_if_present(usn)
+            if u:
+                return u
             return usn.strip().lower().split("::", 1)[0]
+        wsd_epr = metadata.get("wsd_epr")
+        if isinstance(wsd_epr, str) and wsd_epr.strip():
+            u = uuid_urn_if_present(wsd_epr)
+            if u:
+                return u
+        wsdd_uri = metadata.get("wsdd_uri")
+        if isinstance(wsdd_uri, str) and wsdd_uri.strip():
+            u = uuid_urn_if_present(wsdd_uri)
+            if u:
+                return u
+        udn_raw = xml_fields.get("UDN")
+        if isinstance(udn_raw, str) and udn_raw.strip():
+            u = uuid_urn_if_present(udn_raw)
+            if u:
+                return u
         candidates = [
             xml_fields.get("UDN"),
             metadata.get("udn"),

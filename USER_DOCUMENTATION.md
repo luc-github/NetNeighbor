@@ -5,8 +5,18 @@ This document is intentionally short and focused on the current usable scope:
 - general presentation
 - SSDP usage
 
-Future topics (mDNS, packaging mode, tray mode, file manager integration, service mode) will be
-added when decisions are finalized.
+**Tray & session:** from **View → Preferences** you can keep the app in the **system tray** when
+closing the window, start **minimized to the tray**, and optionally add a **login autostart** entry.
+Login autostart uses `--start-minimized-to-tray` on the command line; the Applications menu launcher
+does **not** pass this flag — only the session autostart file does.
+The tray icon menu adds **Minimize to tray** when the window is visible (same hide-to-tray behavior as closing with **close-to-tray** enabled).
+On the **first run**, a short dialog proposes **starting NetNeighbor at login** (checkbox **on** by
+default; you can turn it off or click **Not now** — change anytime in Preferences).
+**F11** toggles **fullscreen** (handy in icon view). See root [`README.md`](README.md) and
+[`docs/MAINTENANCE.md`](docs/MAINTENANCE.md) for dependencies (AppIndicator, `nmblookup`).
+
+**Open:** for device type **computer** (typical Windows WSD row), **Open** in the menu is disabled
+for now; use **Details** instead — the old default URL was a non-browser metadata endpoint.
 
 ## General presentation
 
@@ -18,7 +28,7 @@ Current behavior:
 - device list and icon view
 - categories in the sidebar
 - optional desktop notifications for status changes
-- right-click actions on devices (open, details, monitor, type override, rename, location, icon appearance)
+- right-click actions on devices (open when relevant, details, monitor, type override, rename, location, icon appearance)
 
 Important scope note:
 

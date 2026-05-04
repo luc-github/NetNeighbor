@@ -41,4 +41,13 @@ class Device:
             )
             if isinstance(mac, str) and mac.strip():
                 return f"ssdp:mac:{mac.strip().lower()}"
+        if self.source == "wsd":
+            epr = metadata.get("wsd_epr")
+            if isinstance(epr, str) and epr.strip():
+                return f"wsd:epr:{epr.strip().lower()}"
+        if self.source == "wsdd":
+            uri = metadata.get("wsdd_uri")
+            if isinstance(uri, str) and uri.strip():
+                return f"wsdd:uri:{uri.strip().lower()}"
+        # NetBIOS names are not guaranteed unique on the LAN (multi-boot, misconfig). Key by endpoint.
         return f"{self.source}:{self.ip}:{self.port}"

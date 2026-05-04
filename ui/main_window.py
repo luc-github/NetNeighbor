@@ -10,13 +10,16 @@ from gi.repository import Gdk, GLib, Gtk
 
 from discovery.manager import DiscoveryManager
 from ui.device_list import DeviceList
+from ui.tray_indicator import TrayIndicator
 from model.device import Device
 from utils.app_version import get_app_version
 from utils.location_label import is_plausible_room_location, normalize_location_options
 from utils.discovery_cache import load_discovery_cache, save_discovery_cache
 from utils.details_payload import format_device_type_for_details
+from utils.session_autostart import apply_autostart_pref, autostart_enabled_on_disk
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 from utils.notifications import send_notification
+from utils.gtk_dialog import prepare_gtk_dialog
 
 _LOG = logging.getLogger(__name__)
 
@@ -28,8 +31,11 @@ class MainWindow(Gtk.ApplicationWindow):
         discovery_manager: DiscoveryManager,
         startup_refresh_seconds: list[int] | None = None,
         information_precedence: list[str] | None = None,
+        show_ip_in_device_list: bool = True,
+        cli_start_minimized_to_tray: bool = False,
     ) -> None:
         super().__init__(application=application, title="NetNeighbor")
+        self._cli_start_minimized_to_tray = bool(cli_start_minimized_to_tray)
         self.set_default_size(900, 560)
         self._manager = discovery_manager
         self._device_state: dict[str, dict[str, object]] = {}
@@ -47,6 +53,13 @@ class MainWindow(Gtk.ApplicationWindow):
         self._defer_persist_cleaned_location_prefs = False
         self._startup_refresh_timer_ids: list[int] = []
         self._startup_refresh_scheduled = False
+        self._close_to_tray = bool(self._prefs.get("close_to_tray", True))
+        self._start_minimized_to_tray = bool(self._prefs.get("start_minimized_to_tray", False))
+        self._start_at_login = bool(self._prefs.get("start_at_login", autostart_enabled_on_disk()))
+        self._autostart_onboarding_done = bool(self._prefs.get("autostart_onboarding_done", False))
+        self._tray: TrayIndicator | None = None
+        self._tray_csd_header: Gtk.HeaderBar | None = None
+        self._show_ip_in_device_list = bool(show_ip_in_device_list)
         raw_refresh = startup_refresh_seconds or [10, 30, 60]
         seen_refresh: set[int] = set()
         self._startup_refresh_seconds: list[int] = []
@@ -141,6 +154,38 @@ class MainWindow(Gtk.ApplicationWindow):
         locations_item = Gtk.MenuItem.new_with_label(_("Location presets"))
         locations_item.connect("activate", self._on_locations_presets_activate)
         preferences_menu.append(locations_item)
+        preferences_menu.append(Gtk.SeparatorMenuItem())
+
+        self._close_tray_prefs_item = Gtk.CheckMenuItem.new_with_label(
+            _("Keep running in tray when closing window"),
+        )
+        self._close_tray_prefs_item.set_active(self._close_to_tray)
+        self._close_tray_prefs_item.connect("toggled", self._on_close_tray_pref_toggled)
+        preferences_menu.append(self._close_tray_prefs_item)
+
+        self._start_minimized_prefs_item = Gtk.CheckMenuItem.new_with_label(_("Start minimized to tray"))
+        self._start_minimized_prefs_item.set_active(self._start_minimized_to_tray)
+        self._start_minimized_prefs_item.connect("toggled", self._on_start_minimized_pref_toggled)
+        preferences_menu.append(self._start_minimized_prefs_item)
+
+        self._start_at_login_prefs_item = Gtk.CheckMenuItem.new_with_label(_("Start NetNeighbor when logging in"))
+        self._start_at_login_prefs_item.set_active(self._start_at_login)
+        self._start_at_login_prefs_item.connect("toggled", self._on_start_at_login_pref_toggled)
+        preferences_menu.append(self._start_at_login_prefs_item)
+
+        view_menu.append(Gtk.SeparatorMenuItem())
+        quit_item = Gtk.ImageMenuItem.new_with_label(_("Quit"))
+        quit_item.set_image(Gtk.Image.new_from_icon_name("application-exit-symbolic", Gtk.IconSize.MENU))
+        quit_item.set_always_show_image(True)
+        quit_item.connect("activate", self._on_quit_activate)
+        quit_item.add_accelerator(
+            "activate",
+            self._build_accelerators(),
+            Gdk.KEY_q,
+            Gdk.ModifierType.CONTROL_MASK,
+            Gtk.AccelFlags.VISIBLE,
+        )
+        view_menu.append(quit_item)
 
         self._notifications_item = Gtk.MenuItem.new_with_label(_("Tools"))
         menubar.append(self._notifications_item)
@@ -183,6 +228,7 @@ class MainWindow(Gtk.ApplicationWindow):
             on_remove_field_rule=self._on_remove_field_rule,
             on_get_field_rules=self._on_get_field_rules,
             information_precedence=information_precedence,
+            show_ip_in_device_list=self._show_ip_in_device_list,
         )
         # DeviceList will call this when user chooses Monitor/Unfollow.
         self._content.add2(self._device_list)
@@ -197,11 +243,220 @@ class MainWindow(Gtk.ApplicationWindow):
         if self._defer_persist_cleaned_location_prefs:
             self._defer_persist_cleaned_location_prefs = False
             self._persist_ui_preferences()
+        self.connect("delete-event", self._on_delete_event)
         self.connect("destroy", self._on_destroy)
+        self._install_fullscreen_accel()
         self.show_all()
+        GLib.idle_add(self._idle_init_tray_and_minimize)
+
+    def _idle_init_tray_and_minimize(self) -> bool:
+        self._ensure_tray()
+        self._apply_tray_window_decorations()
+        GLib.idle_add(self._run_autostart_onboarding_then_maybe_minimize)
+        return False
+
+    def _run_autostart_onboarding_then_maybe_minimize(self) -> bool:
+        ran_first_run_dialog = self._maybe_show_autostart_onboarding()
+        if self._tray is not None and self._tray.available:
+            # First launch: hide so the user opens from the tray (fixes broken WM chrome until then).
+            # Session autostart passes --start-minimized-to-tray; otherwise honor saved preference.
+            if (
+                ran_first_run_dialog
+                or self._start_minimized_to_tray
+                or self._cli_start_minimized_to_tray
+            ):
+                self.hide()
+        return False
+
+    def _maybe_show_autostart_onboarding(self) -> bool:
+        """First-run prompt: offer login autostart (checkbox on by default); always mark onboarding done.
+
+        Returns True if the dialog was shown (first run); False if onboarding was already completed.
+        """
+        if self._autostart_onboarding_done:
+            return False
+
+        dlg = Gtk.Dialog(
+            title=_("Session startup"),
+            transient_for=self,
+            modal=True,
+            destroy_with_parent=True,
+        )
+        prepare_gtk_dialog(dlg)
+        dlg.add_button(_("Not now"), Gtk.ResponseType.CANCEL)
+        dlg.add_button(_("Save"), Gtk.ResponseType.OK)
+        dlg.set_default_response(Gtk.ResponseType.OK)
+
+        area = dlg.get_content_area()
+        area.set_spacing(10)
+        area.set_border_width(12)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+
+        head = Gtk.Label(label=_("Run NetNeighbor in the background?"))
+        head.set_halign(Gtk.Align.START)
+        body = Gtk.Label(
+            label=_(
+                "You can keep NetNeighbor in the system tray when you close the window. "
+                "Starting it with your session keeps LAN discovery running in the background. "
+                "You can change this anytime under View → Preferences."
+            ),
+        )
+        body.set_line_wrap(True)
+        body.set_max_width_chars(52)
+        body.set_halign(Gtk.Align.START)
+
+        cb = Gtk.CheckButton(label=_("Launch NetNeighbor when I log in"))
+        cb.set_active(True)
+
+        vbox.pack_start(head, False, False, 0)
+        vbox.pack_start(body, False, False, 0)
+        if self._tray is not None and self._tray.available:
+            tray_hint = Gtk.Label(
+                label=_(
+                    "After you close this dialog, the main window hides to the system tray — "
+                    "click the NetNeighbor tray icon to open it (recommended after install)."
+                ),
+            )
+            tray_hint.set_line_wrap(True)
+            tray_hint.set_max_width_chars(52)
+            tray_hint.set_halign(Gtk.Align.START)
+            tray_hint.get_style_context().add_class("dim-label")
+            vbox.pack_start(tray_hint, False, False, 0)
+        vbox.pack_start(cb, False, False, 0)
+        area.add(vbox)
+
+        dlg.show_all()
+        response = dlg.run()
+        dlg.destroy()
+
+        self._autostart_onboarding_done = True
+        if response == Gtk.ResponseType.OK:
+            self._start_at_login = bool(cb.get_active())
+            apply_autostart_pref(self._start_at_login)
+            if hasattr(self, "_start_at_login_prefs_item"):
+                self._start_at_login_prefs_item.handler_block_by_func(self._on_start_at_login_pref_toggled)
+                self._start_at_login_prefs_item.set_active(self._start_at_login)
+                self._start_at_login_prefs_item.handler_unblock_by_func(self._on_start_at_login_pref_toggled)
+        self._persist_ui_preferences()
+        return True
+
+    def _apply_tray_window_decorations(self) -> None:
+        """With tray + close-to-tray: header bar = maximize + close (no minimize; F11 = fullscreen)."""
+        want = self._close_to_tray
+        if want:
+            self._ensure_tray()
+            want = self._tray is not None and self._tray.available
+        if want:
+            if self._tray_csd_header is None:
+                hb = Gtk.HeaderBar()
+                hb.set_show_close_button(True)
+                hb.set_decoration_layout(":maximize,close")
+                hb.set_title(self.get_title())
+                self.set_titlebar(hb)
+                self._tray_csd_header = hb
+            else:
+                self._tray_csd_header.set_title(self.get_title())
+        else:
+            if self._tray_csd_header is not None:
+                self.set_titlebar(None)
+                self._tray_csd_header = None
+
+    def _ensure_tray(self) -> None:
+        if self._tray is not None:
+            return
+        icon_name = "io.esp3d.netneighbor-tray"
+        self._tray = TrayIndicator(
+            app_id="io.esp3d.netneighbor",
+            icon_name=icon_name,
+            tooltip=_("NetNeighbor — LAN discovery"),
+            menu_open_label=_("Open NetNeighbor"),
+            menu_quit_label=_("Quit"),
+            menu_minimize_label=_("Minimize to tray"),
+            on_minimize_to_tray=self._hide_main_window_to_tray,
+            on_open=self._present_main_window,
+            on_quit=self._quit_application,
+        )
+        if not self._tray.available:
+            self._tray = None
+            _LOG.warning(
+                "No system tray available (install gir1.2-ayatanaappindicator3-0.1 or gir1.2-appindicator3-0.1)"
+            )
+        else:
+            self._connect_tray_minimize_menu_state()
+
+    def _connect_tray_minimize_menu_state(self) -> None:
+        """Enable \"Minimize to tray\" only while the window is mapped (visible)."""
+        if getattr(self, "_tray_minimize_visibility_connected", False):
+            return
+        self._tray_minimize_visibility_connected = True
+
+        def _sync(_obj=None, *_args) -> None:
+            if self._tray is not None:
+                self._tray.set_minimize_sensitive(self.get_visible())
+
+        self.connect("notify::visible", _sync)
+        _sync()
+
+    def _hide_main_window_to_tray(self) -> None:
+        self.hide()
+
+    def _present_main_window(self) -> None:
+        self.show_all()
+        self.deiconify()
+        self.present()
+        try:
+            event_time = Gtk.get_current_event_time()
+            if event_time == 0:
+                event_time = int(__import__("time").monotonic() * 1000) & 0xFFFFFFFF
+            self.present_with_time(event_time)
+        except Exception:
+            pass
+        self.grab_focus()
+
+    def _quit_application(self, *_args) -> None:
+        app = self.get_application()
+        if app is not None:
+            app.quit()
+        else:
+            self.destroy()
+
+    def _on_quit_activate(self, *_args) -> None:
+        self._quit_application()
+
+    def _on_close_tray_pref_toggled(self, item: Gtk.CheckMenuItem) -> None:
+        if self._initializing:
+            return
+        self._close_to_tray = bool(item.get_active())
+        self._persist_ui_preferences()
+        self._apply_tray_window_decorations()
+
+    def _on_start_minimized_pref_toggled(self, item: Gtk.CheckMenuItem) -> None:
+        if self._initializing:
+            return
+        self._start_minimized_to_tray = bool(item.get_active())
+        self._persist_ui_preferences()
+
+    def _on_start_at_login_pref_toggled(self, item: Gtk.CheckMenuItem) -> None:
+        if self._initializing:
+            return
+        self._start_at_login = bool(item.get_active())
+        apply_autostart_pref(self._start_at_login)
+        self._persist_ui_preferences()
+
+    def _on_delete_event(self, _widget: Gtk.Widget, _event: Gdk.Event) -> bool:
+        self._ensure_tray()
+        if self._close_to_tray and self._tray is not None and self._tray.available:
+            self.hide()
+            return True
+        return False
 
     def _start_discovery_protocols(self) -> bool:
         self._manager.start()
+        # Wake slow probes (WSD/nmb) once startup threads are running — feels closer to OS network browsers.
+        try:
+            self._manager.refresh()
+        except Exception:
+            _LOG.debug("Post-start discovery refresh failed", exc_info=True)
         self._schedule_startup_refreshes()
         return False
 
@@ -215,8 +470,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self._startup_refresh_timer_ids.append(timer_id)
 
     def _run_startup_refresh_once(self, delay_seconds: int) -> bool:
-        if not self.get_visible():
-            return False
+        # Always wake discovery protocols — visibility must not skip probes (background discovery).
         try:
             _LOG.debug("Startup auto-refresh triggered at +%ss", delay_seconds)
             self._manager.refresh()
@@ -305,6 +559,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _on_locations_presets_activate(self, _menu_item: Gtk.MenuItem) -> None:
         dialog = Gtk.Dialog(title=_("Location presets"), transient_for=self, modal=True)
+        prepare_gtk_dialog(dialog)
         dialog.set_default_size(460, 420)
         content = dialog.get_content_area()
         content.set_border_width(8)
@@ -359,6 +614,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         def _prompt_text(title: str, initial: str = "") -> str | None:
             prompt = Gtk.Dialog(title=title, transient_for=dialog, modal=True)
+            prepare_gtk_dialog(prompt)
             prompt.set_default_size(320, -1)
             area = prompt.get_content_area()
             area.set_border_width(8)
@@ -509,6 +765,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _show_notifications_history_dialog(self) -> None:
         dialog = Gtk.Dialog(title=_("Notification history"), transient_for=self, modal=True)
+        prepare_gtk_dialog(dialog)
         dialog.set_default_size(620, 340)
         content = dialog.get_content_area()
         content.set_border_width(8)
@@ -542,6 +799,25 @@ class MainWindow(Gtk.ApplicationWindow):
                 continue
             break
         dialog.destroy()
+
+    def _install_fullscreen_accel(self) -> None:
+        """F11 toggles fullscreen — useful for the icon grid."""
+
+        def _on_accel(_group: Gtk.AccelGroup, _acc: object, *_rest: object) -> bool:
+            if self.is_fullscreen():
+                self.unfullscreen()
+            else:
+                self.fullscreen()
+            return True
+
+        ag = Gtk.AccelGroup()
+        self.add_accel_group(ag)
+        ag.connect(
+            Gdk.KEY_F11,
+            Gdk.ModifierType(0),
+            Gtk.AccelFlags.VISIBLE,
+            _on_accel,
+        )
 
     def _build_accelerators(self) -> Gtk.AccelGroup:
         accel_group = Gtk.AccelGroup()
@@ -859,6 +1135,25 @@ class MainWindow(Gtk.ApplicationWindow):
             self._notif_all_item.set_active(self._notification_mode == "all")
         self._refresh_notifications_menu_state()
 
+        self._close_to_tray = bool(self._prefs.get("close_to_tray", True))
+        self._start_minimized_to_tray = bool(self._prefs.get("start_minimized_to_tray", False))
+        self._start_at_login = bool(self._prefs.get("start_at_login", autostart_enabled_on_disk()))
+        self._autostart_onboarding_done = bool(self._prefs.get("autostart_onboarding_done", False))
+        if hasattr(self, "_close_tray_prefs_item") and hasattr(self, "_start_minimized_prefs_item"):
+            self._close_tray_prefs_item.handler_block_by_func(self._on_close_tray_pref_toggled)
+            self._start_minimized_prefs_item.handler_block_by_func(self._on_start_minimized_pref_toggled)
+            self._close_tray_prefs_item.set_active(self._close_to_tray)
+            self._start_minimized_prefs_item.set_active(self._start_minimized_to_tray)
+            self._close_tray_prefs_item.handler_unblock_by_func(self._on_close_tray_pref_toggled)
+            self._start_minimized_prefs_item.handler_unblock_by_func(self._on_start_minimized_pref_toggled)
+        if hasattr(self, "_start_at_login_prefs_item"):
+            self._start_at_login_prefs_item.handler_block_by_func(self._on_start_at_login_pref_toggled)
+            self._start_at_login_prefs_item.set_active(self._start_at_login)
+            self._start_at_login_prefs_item.handler_unblock_by_func(self._on_start_at_login_pref_toggled)
+        apply_autostart_pref(self._start_at_login)
+        if not self._initializing:
+            self._apply_tray_window_decorations()
+
     def _persist_ui_preferences(self) -> None:
         if self._initializing:
             return
@@ -877,6 +1172,10 @@ class MainWindow(Gtk.ApplicationWindow):
             "notification_mode": self._notification_mode,
             "selected_category": self._selected_category,
             "sidebar_position": self._content.get_position(),
+            "close_to_tray": bool(self._close_to_tray),
+            "start_minimized_to_tray": bool(self._start_minimized_to_tray),
+            "start_at_login": bool(self._start_at_login),
+            "autostart_onboarding_done": bool(self._autostart_onboarding_done),
         }
         save_ui_preferences(prefs)
         self._discovery_cache = {

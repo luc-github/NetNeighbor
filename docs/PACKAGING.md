@@ -63,9 +63,10 @@ Outputs:
 - App files: `/usr/share/netneighbor/`
 - Launcher: `/usr/bin/netneighbor`
 - Desktop entry: `/usr/share/applications/netneighbor.desktop`
-- Icons:
-  - `/usr/share/icons/hicolor/64x64/apps/io.esp3d.netneighbor.png`
-  - `/usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png`
+- Icons (**SVG scalable**, shared source [`assets/svg/netneighbor.svg`](../assets/svg/netneighbor.svg)):
+  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg`
+  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg`  
+    (same artwork; launcher vs tray icon name.)
 
 The `.deb` embeds runtime-relevant tracked paths only (`discovery/`, `ui/`, `utils/`, `model/`, `data/`, `config/`, `assets/`, `locale/`, plus entrypoint/docs files listed in `packaging/build_deb.sh`).
 
@@ -77,13 +78,14 @@ Categories=Network;Utility;GTK;
 
 ## Runtime dependencies in `.deb`
 
-`control` currently declares:
+**Depends** (hard):
 
-- `python3`
-- `python3-gi`
-- `python3-gi-cairo`
-- `gir1.2-gtk-3.0`
-- `python3-zeroconf`
+- `python3`, `python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`, `python3-zeroconf`
+
+**Recommends** (installed by default with `apt install ./…deb` unless `--no-install-recommends`):
+
+- `samba-common-bin` — provides **`nmblookup`** for NetBIOS discovery (**not** the Samba server).
+- `gir1.2-ayatanaappindicator3-0.1` **|** `gir1.2-appindicator3-0.1` — GObject bindings so the panel tray icon works on typical desktops.
 
 ## Install / uninstall (`.deb`)
 
