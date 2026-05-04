@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" height="200" width="200">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 220 220" height="200" width="200">
   <title>Logo NetNeightbor</title>
   
   
-  <rect fill="#000000" rx="20" x="0" y="20" height="160" width="200"></rect>
+
 
   
   <g stroke-linejoin="round" stroke-linecap="round"  stroke="#ffffff">
@@ -24,18 +24,18 @@
   
   <g>
     
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000" r="10" cy="38" cx="18"></circle>
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000"  r="10" cy="38" cx="72"></circle>
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000"  r="10" cy="38" cx="128"></circle>
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000"  r="10" cy="38" cx="182"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none" r="10" cy="38" cx="18"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none"  r="10" cy="38" cx="72"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none"  r="10" cy="38" cx="128"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none"  r="10" cy="38" cx="182"></circle>
     
     
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000" r="10"  cy="162" cx="18"></circle>
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000" r="10"  cy="162" cx="72"></circle>
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000" r="10"  cy="162" cx="128"></circle>
-    <circle stroke-width="8" stroke="#ffffff" fill="#000000" r="10"  cy="162" cx="182"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none" r="10"  cy="162" cx="18"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none" r="10"  cy="162" cx="72"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none" r="10"  cy="162" cx="128"></circle>
+    <circle stroke-width="8" stroke="#ffffff" fill="none" r="10"  cy="162" cx="182"></circle>
     
     
-    <circle stroke-width="5" stroke="#ffffff" fill="#000000" r="5" cy="100" cx="100"></circle>
+    <circle stroke-width="5" stroke="#ffffff" fill="none" r="5" cy="100" cx="100"></circle>
   </g>
 </svg>
