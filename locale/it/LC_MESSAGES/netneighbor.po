@@ -1,46 +1,49 @@
+# Italian translations for NetNeighbor package.
+# Copyright (C) 2026 THE NetNeighbor'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the NetNeighbor package.
+# Automatically generated, 2026.
+#
 msgid ""
 msgstr ""
-"Project-Id-Version: NetNeighbor 0.1.0-dev\n"
+"Project-Id-Version: NetNeighbor 0.8.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-05-05 11:49+0800\n"
-"PO-Revision-Date: 2026-04-29 13:30+0800\n"
-"Last-Translator: Luc\n"
-"Language-Team: French\n"
-"Language: fr\n"
+"PO-Revision-Date: 2026-05-05 11:49+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: Italian\n"
+"Language: it\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ui/device_details.py:63 ui/main_window.py:930
 msgid "Close"
-msgstr "Fermer"
+msgstr ""
 
 #: ui/device_details.py:132 ui/device_details.py:270 ui/device_details.py:1045
 msgid "Name"
-msgstr "Nom"
+msgstr ""
 
 #: ui/device_details.py:133 ui/device_details.py:364
 msgid "IP address"
-msgstr "Adresse IP"
+msgstr ""
 
 #: ui/device_details.py:134 ui/device_details.py:795 ui/device_list.py:584
-#, fuzzy
 msgid "Location"
-msgstr "Emplacement XML"
+msgstr ""
 
 #: ui/device_details.py:135 ui/device_list.py:233
 msgid "Type"
 msgstr ""
 
 #: ui/device_details.py:186
-#, fuzzy
 msgid "Overview"
-msgstr "Service"
+msgstr ""
 
 #: ui/device_details.py:186
 msgid "Device details"
-msgstr "Details appareil"
+msgstr ""
 
 #: ui/device_details.py:196
 msgid "Per-device field mapping rules. Select rows and remove if needed."
@@ -52,7 +55,7 @@ msgstr ""
 
 #: ui/device_details.py:207 ui/device_details.py:242
 msgid "Target"
-msgstr "Cible"
+msgstr ""
 
 #: ui/device_details.py:208
 msgid "Source field"
@@ -72,43 +75,43 @@ msgstr ""
 
 #: ui/device_details.py:234 ui/device_details.py:249
 msgid "Services"
-msgstr "Services"
+msgstr ""
 
 #: ui/device_details.py:241 ui/device_details.py:969
 msgid "Service"
-msgstr "Service"
+msgstr ""
 
 #: ui/device_details.py:243
 msgid "Port"
-msgstr "Port"
+msgstr ""
 
 #: ui/device_details.py:256
 msgid "Field"
-msgstr "Champ"
+msgstr ""
 
 #: ui/device_details.py:257 ui/device_details.py:1046
 msgid "Value"
-msgstr "Valeur"
+msgstr ""
 
 #: ui/device_details.py:263
 msgid "Troubleshooting Information"
-msgstr "Informations de dépannage"
+msgstr ""
 
 #: ui/device_details.py:271
 msgid "Record"
-msgstr "Enregistrement"
+msgstr ""
 
 #: ui/device_details.py:277
 msgid "TXT records"
-msgstr "Enregistrements TXT"
+msgstr ""
 
 #: ui/device_details.py:292
 msgid "Copy to clipboard"
-msgstr "Copier dans le presse-papiers"
+msgstr ""
 
 #: ui/device_details.py:311
 msgid "Device data"
-msgstr "Donnees appareil"
+msgstr ""
 
 #: ui/device_details.py:335
 msgid "Custom connections"
@@ -119,9 +122,8 @@ msgid "IP:"
 msgstr ""
 
 #: ui/device_details.py:367
-#, fuzzy
 msgid "Port:"
-msgstr "Port"
+msgstr ""
 
 #: ui/device_details.py:443 ui/main_window.py:775
 msgid "HTTP"
@@ -170,9 +172,8 @@ msgid "System"
 msgstr ""
 
 #: ui/device_details.py:533
-#, fuzzy
 msgid "From device"
-msgstr "Tous les appareils"
+msgstr ""
 
 #: ui/device_details.py:536
 msgid "Custom"
@@ -211,7 +212,7 @@ msgstr ""
 
 #: ui/device_details.py:796
 msgid "Information"
-msgstr "Informations"
+msgstr ""
 
 #: ui/device_details.py:801
 #, python-brace-format
@@ -240,25 +241,22 @@ msgid "All rules removed"
 msgstr ""
 
 #: ui/device_details.py:1037
-#, fuzzy
 msgid "No TXT records"
-msgstr "Enregistrements TXT"
+msgstr ""
 
 #: ui/device_list.py:232
-#, fuzzy
 msgid "Ports"
-msgstr "Port"
+msgstr ""
 
 #: ui/device_list.py:416 ui/main_window.py:144
 msgid "All devices"
-msgstr "Tous les appareils"
+msgstr ""
 
 #: ui/device_list.py:440 ui/device_list.py:442 ui/device_list.py:443
 #: ui/device_list.py:474 ui/device_list.py:1565 ui/main_window.py:1115
 #: ui/main_window.py:1148 ui/main_window.py:1152 ui/main_window.py:1153
-#, fuzzy
 msgid "No location"
-msgstr "Emplacement XML"
+msgstr ""
 
 #: ui/device_list.py:525
 msgid ""
@@ -286,15 +284,15 @@ msgstr ""
 
 #: ui/device_list.py:563
 msgid "Details"
-msgstr "Details"
+msgstr ""
 
 #: ui/device_list.py:571
 msgid "Unfollow"
-msgstr "Ne plus surveiller"
+msgstr ""
 
 #: ui/device_list.py:575
 msgid "Monitor"
-msgstr "Surveiller"
+msgstr ""
 
 #: ui/device_list.py:579 ui/main_window.py:626
 msgid "Rename"
@@ -302,32 +300,32 @@ msgstr ""
 
 #: ui/device_list.py:595 ui/device_list.py:614
 msgid "Auto"
-msgstr "Auto"
+msgstr ""
 
 #: ui/device_list.py:608
 msgid "Device type"
-msgstr "Type d'appareil"
+msgstr ""
 
 #: ui/device_list.py:615 utils/details_payload.py:118
 msgid "NAS"
-msgstr "NAS"
+msgstr ""
 
 #: ui/device_list.py:616 utils/details_payload.py:119
 msgid "Computer"
-msgstr "Ordinateur"
+msgstr ""
 
 #: ui/device_list.py:617 utils/details_payload.py:106
 msgid "Router"
-msgstr "Routeur"
+msgstr ""
 
 #: ui/device_list.py:618 utils/details_payload.py:107
 msgid "Media server"
-msgstr "Serveur multimedia"
+msgstr ""
 
 #: ui/device_list.py:619 utils/details_payload.py:108
 #: utils/details_payload.py:109
 msgid "Printer"
-msgstr "Imprimante"
+msgstr ""
 
 #: ui/device_list.py:620 utils/details_payload.py:110
 msgid "Multifunction printer"
@@ -339,31 +337,31 @@ msgstr ""
 
 #: ui/device_list.py:622
 msgid "SmartSpeaker"
-msgstr "Enceinte intelligente"
+msgstr ""
 
 #: ui/device_list.py:623
 msgid "SmartTV"
-msgstr "SmartTV"
+msgstr ""
 
 #: ui/device_list.py:624
 msgid "SmartDevice"
-msgstr "SmartDevice"
+msgstr ""
 
 #: ui/device_list.py:625 utils/details_payload.py:114
 msgid "Camera"
-msgstr "Camera"
+msgstr ""
 
 #: ui/device_list.py:626
 msgid "HomeAppliance"
-msgstr "HomeAppliance"
+msgstr ""
 
 #: ui/device_list.py:627 utils/details_payload.py:116
 msgid "CNC"
-msgstr "CNC"
+msgstr ""
 
 #: ui/device_list.py:628 utils/details_payload.py:117
 msgid "3D printer"
-msgstr "Imprimante 3D"
+msgstr ""
 
 #: ui/device_list.py:689
 msgid "Rename device"
@@ -393,15 +391,15 @@ msgstr ""
 
 #: ui/device_list.py:903
 msgid "Show raw XML"
-msgstr "Afficher le XML brut"
+msgstr ""
 
 #: ui/main_window.py:87
 msgid "View"
-msgstr "Affichage"
+msgstr ""
 
 #: ui/main_window.py:92
 msgid "Reload"
-msgstr "Recharger"
+msgstr ""
 
 #: ui/main_window.py:107
 msgid "Display:"
@@ -409,11 +407,11 @@ msgstr ""
 
 #: ui/main_window.py:111 ui/main_window.py:882
 msgid "Icons"
-msgstr "Icônes"
+msgstr ""
 
 #: ui/main_window.py:112
 msgid "List"
-msgstr "Liste"
+msgstr ""
 
 #: ui/main_window.py:119
 msgid "Arrange:"
@@ -428,21 +426,20 @@ msgid "by Type"
 msgstr ""
 
 #: ui/main_window.py:127
-#, fuzzy
 msgid "by Location"
-msgstr "Emplacement XML"
+msgstr ""
 
 #: ui/main_window.py:137
 msgid "Preferences"
-msgstr "Preferences"
+msgstr ""
 
 #: ui/main_window.py:142
 msgid "Notifications off"
-msgstr "Notifications désactivées"
+msgstr ""
 
 #: ui/main_window.py:143
 msgid "Monitored devices only"
-msgstr "Appareils surveillés uniquement"
+msgstr ""
 
 #: ui/main_window.py:158 ui/main_window.py:583
 msgid "Location presets"
@@ -473,17 +470,16 @@ msgid "External applications…"
 msgstr ""
 
 #: ui/main_window.py:201
-#, fuzzy
 msgid "Notifications history"
-msgstr "Notifications désactivées"
+msgstr ""
 
 #: ui/main_window.py:205
 msgid "Help"
-msgstr "Aide"
+msgstr ""
 
 #: ui/main_window.py:210
 msgid "About"
-msgstr "A propos"
+msgstr ""
 
 #: ui/main_window.py:290
 msgid "Session startup"
@@ -638,7 +634,7 @@ msgstr ""
 
 #: ui/main_window.py:872
 msgid "Linux network neighborhood for SSDP/mDNS discovery."
-msgstr "Voisinage reseau Linux pour la decouverte SSDP/mDNS."
+msgstr ""
 
 #: ui/main_window.py:874
 msgid "Python libraries"
@@ -646,35 +642,31 @@ msgstr ""
 
 #: ui/main_window.py:889
 msgid "GitHub Project"
-msgstr "Projet GitHub"
+msgstr ""
 
 #: ui/main_window.py:906
-#, fuzzy
 msgid "Notification history"
-msgstr "Notifications désactivées"
+msgstr ""
 
 #: ui/main_window.py:917
 msgid "Date/Time"
 msgstr ""
 
 #: ui/main_window.py:917
-#, fuzzy
 msgid "Device"
-msgstr "Service"
+msgstr ""
 
 #: ui/main_window.py:917
 msgid "Status"
 msgstr ""
 
 #: ui/main_window.py:1138
-#, fuzzy
 msgid "All Locations"
-msgstr "Emplacement XML"
+msgstr ""
 
 #: ui/main_window.py:1138
-#, fuzzy
 msgid "All Types"
-msgstr "Tous les appareils"
+msgstr ""
 
 #: utils/connect_launcher.py:112
 msgid "Invalid command template for this protocol."
@@ -682,37 +674,31 @@ msgstr ""
 
 #: utils/details_payload.py:103 utils/details_payload.py:127
 msgid "Unknown"
-msgstr "Inconnu"
+msgstr ""
 
 #: utils/details_payload.py:104
-#, fuzzy
 msgid "HTTP device"
-msgstr "Tous les appareils"
+msgstr ""
 
 #: utils/details_payload.py:105
-#, fuzzy
 msgid "HTTPS device"
-msgstr "Service"
+msgstr ""
 
 #: utils/details_payload.py:111
-#, fuzzy
 msgid "Smart speaker"
-msgstr "Enceinte intelligente"
+msgstr ""
 
 #: utils/details_payload.py:112
-#, fuzzy
 msgid "Smart TV"
-msgstr "SmartTV"
+msgstr ""
 
 #: utils/details_payload.py:113
-#, fuzzy
 msgid "Smart device"
-msgstr "SmartDevice"
+msgstr ""
 
 #: utils/details_payload.py:115
-#, fuzzy
 msgid "Home appliance"
-msgstr "HomeAppliance"
+msgstr ""
 
 #: utils/details_payload.py:120
 msgid "ESP3D / firmware"
@@ -854,9 +840,8 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:282
-#, fuzzy
 msgid "unknown error"
-msgstr "Inconnu"
+msgstr ""
 
 #: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:289
 msgid "Could not open file {filename!r}: {message}"
@@ -997,72 +982,3 @@ msgid "{len_type} values are required, but {len_value} was given."
 msgid_plural "{len_type} values are required, but {len_value} were given."
 msgstr[0] ""
 msgstr[1] ""
-
-#~ msgid "Show source badges"
-#~ msgstr "Afficher les badges de source"
-
-#~ msgid "Use provided icons"
-#~ msgstr "Utiliser les icones fournies"
-
-#~ msgid "Use system icons"
-#~ msgstr "Utiliser les icones systeme"
-
-#~ msgid "Icon source"
-#~ msgstr "Source de l'icone"
-
-#~ msgid "Use provided icon"
-#~ msgstr "Utiliser l'icone fournie"
-
-#~ msgid "Use system icon"
-#~ msgstr "Utiliser l'icone systeme"
-
-#~ msgid "Network Printer"
-#~ msgstr "Imprimante reseau"
-
-#~ msgid "All"
-#~ msgstr "Tous"
-
-#~ msgid "Open"
-#~ msgstr "Ouvrir"
-
-#~ msgid "SSDP details"
-#~ msgstr "Details SSDP"
-
-#~ msgid "mDNS details"
-#~ msgstr "Details mDNS"
-
-#~ msgid "Raw XML"
-#~ msgstr "XML brut"
-
-#~ msgid "Use notifications"
-#~ msgstr "Utiliser les notifications"
-
-#~ msgid "Last seen"
-#~ msgstr "Derniere apparition"
-
-#~ msgid "Serial number"
-#~ msgstr "Numéro de série"
-
-#~ msgid "MAC address"
-#~ msgstr "Adresse MAC"
-
-#~ msgid "Unique identifier"
-#~ msgstr "Identifiant unique"
-
-#~ msgid "Alternative names"
-#~ msgstr "Noms alternatifs"
-
-#~ msgid "Show SSDP XML"
-#~ msgstr "Afficher le XML SSDP"
-
-#~ msgid "Show mDNS TXT records"
-#~ msgstr "Afficher les enregistrements TXT mDNS"
-
-#~ msgid "SSDP XML"
-#~ msgstr "XML SSDP"
-
-#~ msgid "mDNS TXT records"
-#~ msgstr "Enregistrements TXT mDNS"
-
-#~ msgid "No details available."
-#~ msgstr "Aucun detail disponible."

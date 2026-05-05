@@ -1,7 +1,9 @@
 """Read-only protocol details dialog."""
 
 import gi
+import ipaddress
 import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 import subprocess
@@ -13,6 +15,26 @@ from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 from utils.gtk_dialog import prepare_gtk_dialog
 
 _LOG = logging.getLogger(__name__)
+
+_HOSTNAME_RE = re.compile(
+    r'^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*\.?$'
+)
+_IPV4_LIKE_RE = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+
+
+def _is_valid_ip_or_host(value: str) -> bool:
+    """Return True if value is empty, a valid IP address, or a valid hostname."""
+    if not value:
+        return True
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        pass
+    # Reject anything that looks like a dotted-quad but failed ip_address()
+    if _IPV4_LIKE_RE.match(value):
+        return False
+    return bool(_HOSTNAME_RE.match(value))
 
 
 class DeviceDetailsDialog(Gtk.Dialog):
@@ -41,6 +63,12 @@ class DeviceDetailsDialog(Gtk.Dialog):
         on_add_field_rule: Callable[[str, str], None] | None = None,
         on_remove_field_rule: Callable[[str, str | None], None] | None = None,
         overview: dict[str, str | None] | None = None,
+        url_override: str | None = None,
+        on_set_url_override: Callable[[str | None], None] | None = None,
+        device_commands: list[dict] | None = None,
+        on_set_device_commands: Callable[[list[dict]], None] | None = None,
+        custom_command: str | None = None,
+        on_set_custom_command: Callable[[str | None], None] | None = None,
     ) -> None:
         super().__init__(title=title, transient_for=parent, modal=True)
         prepare_gtk_dialog(self)
@@ -80,6 +108,12 @@ class DeviceDetailsDialog(Gtk.Dialog):
         self._on_add_field_rule = on_add_field_rule
         self._on_remove_field_rule = on_remove_field_rule
         self._overview = overview if isinstance(overview, dict) else None
+        self._url_override = (url_override or "").strip() or None
+        self._on_set_url_override = on_set_url_override
+        self._device_commands: list[dict] = list(device_commands) if isinstance(device_commands, list) else []
+        self._on_set_device_commands = on_set_device_commands
+        self._custom_command: str | None = (custom_command or "").strip() or None
+        self._on_set_custom_command = on_set_custom_command
 
         area = self.get_content_area()
         area.set_spacing(8)
@@ -100,7 +134,6 @@ class DeviceDetailsDialog(Gtk.Dialog):
         self._feedback_label.get_style_context().add_class("dim-label")
         self._feedback_revealer.add(self._feedback_label)
         area.pack_start(self._feedback_revealer, False, False, 0)
-        appearance_page_index: int | None = None
         rules_page_index: int | None = None
 
         first_tab_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -299,59 +332,302 @@ class DeviceDetailsDialog(Gtk.Dialog):
             raw_box.pack_start(raw_scroll, True, True, 0)
             notebook.append_page(raw_box, Gtk.Label(label=_("Device data")))
 
-        if on_apply_icon_settings is not None:
-            appearance_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-            appearance_box.set_margin_start(8)
-            appearance_box.set_margin_end(8)
-            appearance_box.set_margin_top(8)
-            appearance_box.set_margin_bottom(8)
+        # Options tab: dynamic device commands + custom command + icon settings
+        _show_options_tab = (
+            self._on_set_device_commands is not None
+            or bool(self._device_commands)
+            or self._on_set_custom_command is not None
+            or on_apply_icon_settings is not None
+        )
+        options_page_index: int | None = None
 
-            mode_label = Gtk.Label(label=_("Use icon from:"), xalign=0.0)
-            appearance_box.pack_start(mode_label, False, False, 0)
-            self._icon_mode_system_item = Gtk.RadioButton.new_with_label_from_widget(None, _("System"))
-            self._icon_mode_provided_item = Gtk.RadioButton.new_with_label_from_widget(
-                self._icon_mode_system_item, _("From device")
-            )
-            self._icon_mode_custom_item = Gtk.RadioButton.new_with_label_from_widget(
-                self._icon_mode_system_item, _("Custom")
-            )
-            appearance_box.pack_start(self._icon_mode_system_item, False, False, 0)
-            if self._has_device_icon_source:
-                appearance_box.pack_start(self._icon_mode_provided_item, False, False, 0)
-            appearance_box.pack_start(self._icon_mode_custom_item, False, False, 0)
+        if _show_options_tab:
+            options_scroll = Gtk.ScrolledWindow()
+            options_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            options_scroll.set_overlay_scrolling(False)
+            options_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            options_box.set_margin_start(8)
+            options_box.set_margin_end(12)
+            options_box.set_margin_top(8)
+            options_box.set_margin_bottom(8)
 
-            self._selected_icon_label_widget = Gtk.Label(label="", xalign=0.0)
-            self._selected_icon_label_widget.set_line_wrap(True)
-            self._selected_icon_label_widget.set_selectable(True)
-            appearance_box.pack_start(self._selected_icon_label_widget, False, False, 0)
+            device_ip = ""
+            if isinstance(self._overview, dict):
+                device_ip = (self._overview.get("ip") or "").strip().split()[0]
 
-            open_folder_button = Gtk.Button.new_with_label(_("Open custom icons folder"))
-            open_folder_button.set_halign(Gtk.Align.START)
-            open_folder_button.connect("clicked", self._on_open_custom_icons_folder_clicked)
-            appearance_box.pack_start(open_folder_button, False, False, 0)
+            _SCHEMES = ["http", "https", "smb", "ftp", "ssh", "sftp", "telnet"]
+            _SCHEME_PORTS = {"http": 80, "https": 443, "smb": 445, "ftp": 21,
+                             "ssh": 22, "sftp": 22, "telnet": 23}
+            _SCHEME_LABELS_LOCAL = {"http": "HTTP", "https": "HTTPS", "smb": "SMB",
+                                    "ftp": "FTP", "ssh": "SSH", "sftp": "SFTP", "telnet": "Telnet"}
+            _MODES = [_("Override"), _("Additional")]
 
-            normalized_mode = icon_mode if icon_mode in {"system", "provided", "custom"} else "provided"
-            if normalized_mode == "provided" and not self._has_device_icon_source:
-                normalized_mode = "system"
-            self._last_icon_mode = normalized_mode
+            editable = self._on_set_device_commands is not None
 
-            self._suppress_icon_mode_events = True
-            if normalized_mode == "system":
-                self._icon_mode_system_item.set_active(True)
-            elif normalized_mode == "custom":
-                self._icon_mode_custom_item.set_active(True)
-            else:
-                self._icon_mode_provided_item.set_active(True)
-            self._suppress_icon_mode_events = False
-            self._select_custom_icon(selected_icon_id)
-            self._icon_mode_system_item.connect("toggled", self._on_icon_mode_toggled, "system")
-            self._icon_mode_provided_item.connect("toggled", self._on_icon_mode_toggled, "provided")
-            self._icon_mode_custom_item.connect("toggled", self._on_custom_mode_toggled)
-            appearance_page_index = notebook.append_page(appearance_box, Gtk.Label(label=_("Icon")))
+            # --- dynamic rows container ---
+            rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+
+            # working copy of commands (mutated in-place by row callbacks)
+            working_cmds: list[dict] = [dict(c) for c in self._device_commands]
+
+            def _commit_all() -> None:
+                if self._on_set_device_commands is not None:
+                    self._on_set_device_commands([dict(c) for c in working_cmds])
+
+            def _confirm(msg: str) -> bool:
+                dlg = Gtk.MessageDialog(
+                    transient_for=self, modal=True,
+                    message_type=Gtk.MessageType.QUESTION,
+                    buttons=Gtk.ButtonsType.YES_NO,
+                    text=msg,
+                )
+                resp = dlg.run()
+                dlg.destroy()
+                return resp == Gtk.ResponseType.YES
+
+            def _build_row(idx: int) -> Gtk.Box:
+                cmd = working_cmds[idx]
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+
+                # Scheme combo
+                scheme_combo = Gtk.ComboBoxText()
+                for s in _SCHEMES:
+                    scheme_combo.append_text(_SCHEME_LABELS_LOCAL.get(s, s.upper()))
+                cur_scheme = str(cmd.get("scheme", "http")).lower()
+                scheme_idx = _SCHEMES.index(cur_scheme) if cur_scheme in _SCHEMES else 0
+                scheme_combo.set_active(scheme_idx)
+                scheme_combo.set_sensitive(editable)
+
+                # Mode combo
+                mode_combo = Gtk.ComboBoxText()
+                mode_combo.append_text(_("Override"))
+                mode_combo.append_text(_("Additional"))
+                mode_combo.set_active(0 if cmd.get("mode", "override") == "override" else 1)
+                mode_combo.set_sensitive(editable)
+
+                # Label entry
+                label_ent = Gtk.Entry()
+                label_ent.set_width_chars(10)
+                label_ent.set_text(str(cmd.get("label", "")))
+                label_ent.set_placeholder_text(_("Label"))
+                label_ent.set_sensitive(editable)
+
+                # IP entry
+                ip_ent = Gtk.Entry()
+                ip_ent.set_width_chars(13)
+                ip_ent.set_text(str(cmd.get("ip", "")))
+                ip_ent.set_placeholder_text(device_ip or _("IP"))
+                ip_ent.set_sensitive(editable)
+
+                # Port entry
+                port_ent = Gtk.Entry()
+                port_ent.set_width_chars(5)
+                cur_port = int(cmd.get("port", 0) or 0)
+                port_ent.set_text(str(cur_port) if cur_port else "")
+                def_port = _SCHEME_PORTS.get(cur_scheme, 0)
+                port_ent.set_placeholder_text(str(def_port) if def_port else "Port")
+                port_ent.set_sensitive(editable)
+
+                def _update(_w=None, _ev=None, _i=idx):
+                    s = _SCHEMES[scheme_combo.get_active()]
+                    m = "override" if mode_combo.get_active() == 0 else "additional"
+                    try:
+                        p = int(port_ent.get_text().strip() or "0")
+                    except ValueError:
+                        p = 0
+                    ip_val = ip_ent.get_text().strip()
+                    ip_valid = _is_valid_ip_or_host(ip_val)
+                    ctx = ip_ent.get_style_context()
+                    if ip_valid:
+                        ctx.remove_class("error")
+                    else:
+                        ctx.add_class("error")
+                    if not ip_valid:
+                        return
+                    working_cmds[_i] = {
+                        "scheme": s, "mode": m,
+                        "label": label_ent.get_text().strip(),
+                        "ip": ip_val,
+                        "port": p,
+                    }
+                    _commit_all()
+
+                def _update_port_placeholder(_combo, _p_ent=port_ent):
+                    s = _SCHEMES[_combo.get_active()]
+                    dp = _SCHEME_PORTS.get(s, 0)
+                    _p_ent.set_placeholder_text(str(dp) if dp else "Port")
+
+                scheme_combo.connect("changed", _update_port_placeholder)
+                scheme_combo.connect("changed", _update)
+                mode_combo.connect("changed", _update)
+                label_ent.connect("activate", _update)
+                label_ent.connect("focus-out-event", _update)
+                ip_ent.connect("activate", _update)
+                ip_ent.connect("focus-out-event", _update)
+                port_ent.connect("activate", _update)
+                port_ent.connect("focus-out-event", _update)
+
+                row.pack_start(scheme_combo, False, False, 0)
+                row.pack_start(mode_combo, False, False, 0)
+                row.pack_start(label_ent, False, False, 0)
+                row.pack_start(ip_ent, True, True, 0)
+                row.pack_start(Gtk.Label(label=":"), False, False, 0)
+                row.pack_start(port_ent, False, False, 0)
+
+                if editable:
+                    rm_btn = Gtk.Button()
+                    rm_btn.set_relief(Gtk.ReliefStyle.NONE)
+                    rm_btn.set_tooltip_text(_("Remove this command"))
+                    rm_img = Gtk.Image.new_from_icon_name("list-remove-symbolic", Gtk.IconSize.BUTTON)
+                    rm_btn.add(rm_img)
+
+                    def _on_remove(_b, _row=row, _i=idx):
+                        if not _confirm(_("Remove this command entry?")):
+                            return
+                        working_cmds.pop(_i)
+                        _row.destroy()
+                        _commit_all()
+                        # Rebuild remaining rows to keep indices consistent
+                        for child in list(rows_box.get_children()):
+                            child.destroy()
+                        for j in range(len(working_cmds)):
+                            rows_box.pack_start(_build_row(j), False, False, 0)
+                        rows_box.show_all()
+
+                    rm_btn.connect("clicked", _on_remove)
+                    row.pack_start(rm_btn, False, False, 0)
+
+                return row
+
+            # Populate existing rows
+            for i in range(len(working_cmds)):
+                rows_box.pack_start(_build_row(i), False, False, 0)
+
+            options_box.pack_start(rows_box, False, False, 0)
+
+            if editable:
+                add_btn = Gtk.Button.new_with_label(_("+ Add command"))
+                add_btn.set_halign(Gtk.Align.START)
+
+                def _on_add(_b):
+                    working_cmds.append({"scheme": "http", "mode": "override",
+                                         "label": "", "ip": "", "port": 0})
+                    rows_box.pack_start(_build_row(len(working_cmds) - 1), False, False, 0)
+                    rows_box.show_all()
+
+                add_btn.connect("clicked", _on_add)
+                options_box.pack_start(add_btn, False, False, 4)
+
+            # Custom command per device
+            _show_custom_cmd = self._on_set_custom_command is not None or self._custom_command is not None
+            if _show_custom_cmd:
+                cmd_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                cmd_sep.set_margin_top(6)
+                cmd_sep.set_margin_bottom(4)
+                options_box.pack_start(cmd_sep, False, False, 0)
+
+                cmd_hdr = Gtk.Label(label=_("Custom command"), xalign=0.0)
+                cmd_hdr.get_style_context().add_class("dim-label")
+                options_box.pack_start(cmd_hdr, False, False, 0)
+
+                cmd_ent = Gtk.Entry()
+                cmd_ent.set_hexpand(True)
+                cmd_ent.set_text(self._custom_command or "")
+                cmd_ent.set_placeholder_text(_("e.g. x-terminal-emulator -e ssh -p {port} {ip}"))
+                cmd_ent.set_margin_start(4)
+                cmd_ent.set_margin_end(4)
+                if self._on_set_custom_command is None:
+                    cmd_ent.set_sensitive(False)
+
+                _cmd_cb = self._on_set_custom_command
+
+                def _commit_cmd(_w=None, _ev=None, _e=cmd_ent, _cb=_cmd_cb):
+                    if _cb is None:
+                        return
+                    val = _e.get_text().strip()
+                    _cb(val if val else None)
+
+                cmd_ent.connect("activate", _commit_cmd)
+                cmd_ent.connect("focus-out-event", _commit_cmd)
+
+                cmd_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                cmd_row.pack_start(cmd_ent, True, True, 0)
+                if self._on_set_custom_command is not None:
+                    def _on_clear_cmd(_b):
+                        if not _confirm(_("Clear the per-device custom command?")):
+                            return
+                        cmd_ent.set_text("")
+                        if _cmd_cb is not None:
+                            _cmd_cb(None)
+                    clear_btn = Gtk.Button.new_with_label(_("Clear"))
+                    clear_btn.set_tooltip_text(_("Remove per-device override (use global command)"))
+                    clear_btn.connect("clicked", _on_clear_cmd)
+                    cmd_row.pack_start(clear_btn, False, False, 0)
+
+                hint = Gtk.Label(xalign=0.0)
+                hint.set_markup("<small><i>{ip}  {port}  {name}  {type}  {category}  {url}</i></small>")
+                hint.get_style_context().add_class("dim-label")
+                hint.set_margin_start(4)
+
+                options_box.pack_start(cmd_row, False, False, 2)
+                options_box.pack_start(hint, False, False, 0)
+
+            if on_apply_icon_settings is not None:
+                if self._device_commands or _show_custom_cmd:
+                    icon_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                    icon_sep.set_margin_top(8)
+                    icon_sep.set_margin_bottom(4)
+                    options_box.pack_start(icon_sep, False, False, 0)
+
+                mode_label = Gtk.Label(label=_("Use icon from:"), xalign=0.0)
+                options_box.pack_start(mode_label, False, False, 0)
+                self._icon_mode_system_item = Gtk.RadioButton.new_with_label_from_widget(None, _("System"))
+                self._icon_mode_provided_item = Gtk.RadioButton.new_with_label_from_widget(
+                    self._icon_mode_system_item, _("From device")
+                )
+                self._icon_mode_custom_item = Gtk.RadioButton.new_with_label_from_widget(
+                    self._icon_mode_system_item, _("Custom")
+                )
+                options_box.pack_start(self._icon_mode_system_item, False, False, 0)
+                if self._has_device_icon_source:
+                    options_box.pack_start(self._icon_mode_provided_item, False, False, 0)
+                options_box.pack_start(self._icon_mode_custom_item, False, False, 0)
+
+                self._selected_icon_label_widget = Gtk.Label(label="", xalign=0.0)
+                self._selected_icon_label_widget.set_line_wrap(True)
+                self._selected_icon_label_widget.set_selectable(True)
+                options_box.pack_start(self._selected_icon_label_widget, False, False, 0)
+
+                open_folder_button = Gtk.Button.new_with_label(_("Open custom icons folder"))
+                open_folder_button.set_halign(Gtk.Align.START)
+                open_folder_button.connect("clicked", self._on_open_custom_icons_folder_clicked)
+                options_box.pack_start(open_folder_button, False, False, 0)
+
+                normalized_mode = icon_mode if icon_mode in {"system", "provided", "custom"} else "provided"
+                if normalized_mode == "provided" and not self._has_device_icon_source:
+                    normalized_mode = "system"
+                self._last_icon_mode = normalized_mode
+
+                self._suppress_icon_mode_events = True
+                if normalized_mode == "system":
+                    self._icon_mode_system_item.set_active(True)
+                elif normalized_mode == "custom":
+                    self._icon_mode_custom_item.set_active(True)
+                else:
+                    self._icon_mode_provided_item.set_active(True)
+                self._suppress_icon_mode_events = False
+                self._select_custom_icon(selected_icon_id)
+                self._icon_mode_system_item.connect("toggled", self._on_icon_mode_toggled, "system")
+                self._icon_mode_provided_item.connect("toggled", self._on_icon_mode_toggled, "provided")
+                self._icon_mode_custom_item.connect("toggled", self._on_custom_mode_toggled)
+
+            options_scroll.add(options_box)
+            options_page_index = notebook.append_page(options_scroll, Gtk.Label(label=_("Options")))
+
         self.connect("response", self._on_response)
         self.show_all()
-        if self._initial_tab in ("appearance", "icon") and appearance_page_index is not None:
-            notebook.set_current_page(appearance_page_index)
+        if self._initial_tab in ("appearance", "icon", "options") and options_page_index is not None:
+            notebook.set_current_page(options_page_index)
         if self._initial_tab == "rules" and rules_page_index is not None:
             notebook.set_current_page(rules_page_index)
 

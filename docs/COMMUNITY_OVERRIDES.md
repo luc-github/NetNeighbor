@@ -21,6 +21,9 @@ bulk-reset or script defaults; invalid or missing keys fall back to built-in def
 | `start_minimized_to_tray` | If true and tray works, start hidden to the panel after launch. |
 | `start_at_login` | If true, ensures `~/.config/autostart/io.esp3d.netneighbor.desktop` exists (see [`MAINTENANCE.md`](MAINTENANCE.md)). |
 | `autostart_onboarding_done` | Set after the first-run **session startup** dialog; prevents showing that prompt again. |
+| `custom_command_template` | Optional shell-like command for **Run custom command** in the device menu; placeholders `{ip}`, `{port}`, `{name}`, `{type}`, `{category}`, `{url}` are expanded (quoted). |
+| `connect_command_templates` | Optional object keyed by **`http`**, **`https`**, **`smb`**, **`ftp`**, **`ssh`**, **`telnet`**, **`sftp`**: shell-like command for **Open** / double-click for that URL scheme; empty value = system default. Same placeholders as `custom_command_template`. |
+| `device_commands` | Per-device connection commands (set in the **Options** tab). Object keyed by device identity (`name:source` or `source:ip:port`). Each value is a list of `{scheme, ip, port, mode, label}` where `mode` is `"override"` or `"additional"`. Override entries replace auto-detected defaults for that scheme; additional entries add submenu entries without replacing. |
 
 Other keys store view mode, icon sort, overrides, sidebar width, notification mode, etc.; treat
 unknown keys as opaque unless you grep the codebase for `save_ui_preferences` / `ui_prefs`.
@@ -134,10 +137,10 @@ haystack matches.
 
 Use **real tokens** from your LAN (inspect device details → raw XML / TXT); replace the
 placeholder substrings (`myvendor-nas`, `my-upnp-gateway`, …) with strings that appear in the
-combined haystack (see [`SSDP_RULES_JSON.md`](SSDP_RULES_JSON.md) and [`MDNS_RULES_JSON.md`](MDNS_RULES_JSON.md)).
+combined haystack (see [`SSDP.md`](SSDP.md) and [`MDNS.md`](MDNS.md)).
 
 ## Contributing upstream
 
 Patterns that help others belong in merge requests updating the bundled `config/` or `data/`
-files; see [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md), [`SSDP_RULES_JSON.md`](SSDP_RULES_JSON.md),
-and [`MDNS_RULES_JSON.md`](MDNS_RULES_JSON.md).
+files; see [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md), [`SSDP.md`](SSDP.md),
+and [`MDNS.md`](MDNS.md).

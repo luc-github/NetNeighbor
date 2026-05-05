@@ -24,7 +24,6 @@ from collections.abc import Callable
 from model.device import Device
 from ui.device_details import DeviceDetailsDialog
 from ui.icons import resolve_icon_path
-from utils.browser import open_url
 from utils.location_label import is_plausible_room_location
 from utils.discovery_config import (
     information_precedence_rank,
@@ -34,6 +33,9 @@ from utils.discovery_config import (
 from utils.discovery_identity import uuid_urn_if_present
 from utils.neighbor_mac import lookup_mac_from_neighbor_cache
 from utils.gtk_dialog import prepare_gtk_dialog
+from utils.connect_launcher import launch_connect_for_uri
+from utils.custom_command import build_argv_from_template, spawn_custom_command_detached
+from utils.double_click_open import resolve_connect_target, resolve_all_connect_targets
 from utils.details_payload import (
     aggregate_ports_display,
     build_mdns_payload,
@@ -141,16 +143,6 @@ class _DeviceBundle:
         return []
 
     @property
-    def open_url(self) -> str | None:
-        # WSD "computer" rows use a :5357/… metadata URL that is not a useful browser target yet.
-        if (self.primary.type or "").strip().lower() == "computer":
-            return None
-        for candidate in (self.mdns_device, self.ssdp_device, self.wsdd_device, self.wsd_device, self.nmb_device, self.primary):
-            if candidate is not None and candidate.url:
-                return candidate.url
-        return None
-
-    @property
     def devices(self) -> list[Device]:
         unique: dict[str, Device] = {}
         for device in (self.mdns_device, self.ssdp_device, self.wsdd_device, self.wsd_device, self.nmb_device, self.primary):
@@ -182,6 +174,9 @@ class DeviceList(Gtk.Box):
         on_set_type_override: Callable[[str, str, int, str | None], None] | None = None,
         on_set_name_override: Callable[[str, str, int, str | None], None] | None = None,
         on_set_location_override: Callable[[str, str, int, str | None], None] | None = None,
+        on_set_url_override: Callable[[str, str, int, str | None], None] | None = None,
+        on_set_device_commands: Callable[[str, str, int, list], None] | None = None,
+        on_set_custom_command: Callable[[str, str, int, str | None], None] | None = None,
         on_set_field_rule: Callable[[str, str, int, str, str], None] | None = None,
         on_remove_field_rule: Callable[[str, str, int, str, str | None], None] | None = None,
         on_get_field_rules: Callable[[str, str, int], dict[str, list[str]]] | None = None,
@@ -200,6 +195,9 @@ class DeviceList(Gtk.Box):
         self._on_set_type_override = on_set_type_override
         self._on_set_name_override = on_set_name_override
         self._on_set_location_override = on_set_location_override
+        self._on_set_url_override = on_set_url_override
+        self._on_set_device_commands = on_set_device_commands
+        self._on_set_custom_command = on_set_custom_command
         self._on_set_field_rule = on_set_field_rule
         self._on_remove_field_rule = on_remove_field_rule
         self._on_get_field_rules = on_get_field_rules
@@ -220,6 +218,8 @@ class DeviceList(Gtk.Box):
         self._remote_icon_index_loaded = False
         self._custom_icons_dir = Path.home() / ".config" / "netneighbor" / "custom_icons"
         self._builtin_icons_dir = Path(__file__).resolve().parent.parent / "assets" / "icons"
+        self._custom_command_template = ""
+        self._connect_command_templates: dict[str, str] = {}
         self._install_css()
 
         self._list_store = Gtk.ListStore(object, str, str, str, str)
@@ -254,6 +254,12 @@ class DeviceList(Gtk.Box):
         self.pack_start(self._stack, True, True, 0)
         self.show_all()
         GLib.timeout_add(420, self._list_pulse_provisional_identity_tick)
+
+    def set_custom_command_template(self, template: str) -> None:
+        self._custom_command_template = str(template or "")
+
+    def set_connect_command_templates(self, templates: dict[str, str]) -> None:
+        self._connect_command_templates = dict(templates) if templates else {}
 
     def build_bundles(self, devices: list[Device]) -> list[_DeviceBundle]:
         """Merge SSDP/mDNS rows by host keys; same logic as the icon/list view."""
@@ -537,15 +543,31 @@ class DeviceList(Gtk.Box):
     def _show_device_context_menu(self, bundle: _DeviceBundle, event: Gdk.EventButton) -> None:
         menu = Gtk.Menu()
 
-        open_item = Gtk.MenuItem.new_with_label(_("Open"))
-        open_item.connect("activate", self._on_open_item_activate, bundle)
-        open_item.set_sensitive(bool(bundle.open_url))
-        menu.append(open_item)
+        connect_targets = self._bundle_all_connect_targets(bundle)
+        if len(connect_targets) == 1:
+            label, uri = connect_targets[0]
+            open_item = Gtk.MenuItem.new_with_label(_("Open ({label})").format(label=label))
+            open_item.connect("activate", self._on_open_uri_activate, bundle, uri)
+            menu.append(open_item)
+        elif connect_targets:
+            open_item = Gtk.MenuItem.new_with_label(_("Open"))
+            open_submenu = Gtk.Menu()
+            for label, uri in connect_targets:
+                sub_item = Gtk.MenuItem.new_with_label(label)
+                sub_item.connect("activate", self._on_open_uri_activate, bundle, uri)
+                open_submenu.append(sub_item)
+            open_item.set_submenu(open_submenu)
+            menu.append(open_item)
+
+        if (self._custom_command_template or "").strip() or self._get_bundle_custom_command(bundle):
+            custom_item = Gtk.MenuItem.new_with_label(_("Run custom command"))
+            custom_item.connect("activate", self._on_custom_command_activate, bundle)
+            menu.append(custom_item)
 
         details_item = Gtk.MenuItem.new_with_label(_("Details"))
         details_item.connect("activate", self._on_show_details_activate, bundle)
         menu.append(details_item)
-        icon_item = Gtk.MenuItem.new_with_label(_("Icon"))
+        icon_item = Gtk.MenuItem.new_with_label(_("Options"))
         icon_item.connect("activate", self._on_icon_item_activate, bundle)
         menu.append(icon_item)
 
@@ -711,6 +733,89 @@ class DeviceList(Gtk.Box):
     def _on_open_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_device(bundle)
 
+    def _bundle_all_connect_targets(self, bundle: _DeviceBundle) -> list[tuple[str, str]]:
+        return resolve_all_connect_targets(
+            bundle_ip=bundle.ip,
+            primary_type=bundle.primary.type or "",
+            devices=bundle.devices,
+        )
+
+    def _on_open_uri_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle, uri: str) -> None:
+        d = bundle.primary
+
+        def _spawn_err(msg: str) -> None:
+            GLib.idle_add(
+                lambda: self._show_command_error(
+                    _("Could not start the command: {error}").format(error=msg),
+                )
+            )
+
+        err = launch_connect_for_uri(
+            uri,
+            self._connect_command_templates,
+            ip=bundle.ip,
+            port=int(bundle.port),
+            name=bundle.name or "",
+            type_=d.type or "",
+            category=d.category or "",
+            device_cmd_override=self._get_bundle_custom_command(bundle),
+            on_spawn_error=_spawn_err,
+        )
+        if err:
+            self._show_command_error(err)
+
+    def _get_bundle_custom_command(self, bundle: _DeviceBundle) -> str:
+        """Return the per-device custom command from metadata, or empty string."""
+        for dev in bundle.devices:
+            md = dev.metadata if isinstance(dev.metadata, dict) else {}
+            cmd = md.get("custom_command")
+            if isinstance(cmd, str) and cmd.strip():
+                return cmd.strip()
+        return ""
+
+    def _on_custom_command_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
+        per_device_cmd = self._get_bundle_custom_command(bundle)
+        tmpl = per_device_cmd or (self._custom_command_template or "").strip()
+        if not tmpl:
+            return
+        d = bundle.primary
+        argv = build_argv_from_template(
+            tmpl,
+            ip=bundle.ip,
+            port=int(bundle.port),
+            name=bundle.name or "",
+            type_=d.type or "",
+            category=d.category or "",
+            url="",
+        )
+        if argv is None:
+            self._show_command_error(_("Could not parse the custom command (check placeholders)."))
+            return
+
+        def _on_err(msg: str) -> None:
+            self._show_command_error(
+                _("Could not start the command: {error}").format(error=msg),
+            )
+
+        spawn_custom_command_detached(argv, on_error=_on_err)
+
+    def _show_command_error(self, message: str) -> None:
+        parent = self._parent_window
+        if parent is None:
+            top = self.get_toplevel()
+            if isinstance(top, Gtk.Window):
+                parent = top
+        dlg = Gtk.MessageDialog(
+            transient_for=parent,
+            flags=Gtk.DialogFlags.MODAL,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text=message,
+        )
+        prepare_gtk_dialog(dlg)
+        dlg.run()
+        dlg.destroy()
+
     def _on_show_details_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
         self._open_any_details(bundle)
 
@@ -771,6 +876,29 @@ class DeviceList(Gtk.Box):
             )
             details_field_rule_map = {}
         fields = dedupe_last_seen_in_fields(strip_detail_fields_covered_by_overview(fields, overview))
+        current_url_override: str | None = None
+        for _dev in bundle.devices:
+            _md = _dev.metadata if isinstance(_dev.metadata, dict) else {}
+            _v = _md.get("url_override")
+            if isinstance(_v, str) and _v.strip():
+                current_url_override = _v.strip()
+                break
+        # Collect per-device commands from bundle devices
+        current_device_cmds: list[dict] = []
+        for _dev in bundle.devices:
+            _md = _dev.metadata if isinstance(_dev.metadata, dict) else {}
+            _cmds = _md.get("device_commands")
+            if isinstance(_cmds, list) and _cmds:
+                current_device_cmds = _cmds
+                break
+        # Collect per-device custom command
+        current_custom_cmd: str | None = None
+        for _dev in bundle.devices:
+            _md = _dev.metadata if isinstance(_dev.metadata, dict) else {}
+            _cc = _md.get("custom_command")
+            if isinstance(_cc, str) and _cc.strip():
+                current_custom_cmd = _cc.strip()
+                break
         self._show_details_dialog(
             title=f"{_('Device details')} - {bundle.name}",
             fields=fields,
@@ -793,18 +921,68 @@ class DeviceList(Gtk.Box):
             endpoint_ip=bundle.primary.ip,
             endpoint_port=int(bundle.primary.port),
             overview=overview,
+            url_override=current_url_override,
+            on_set_url_override=(
+                None if self._on_set_url_override is None else
+                lambda url, _b=bundle: [
+                    self._on_set_url_override(d.source, d.ip, d.port, url)
+                    for d in _b.devices
+                ]
+            ),
+            device_commands=current_device_cmds or None,
+            on_set_device_commands=(
+                None if self._on_set_device_commands is None else
+                lambda cmds, _b=bundle: [
+                    self._on_set_device_commands(d.source, d.ip, d.port, cmds)
+                    for d in _b.devices
+                ]
+            ),
+            custom_command=current_custom_cmd,
+            on_set_custom_command=(
+                None if self._on_set_custom_command is None else
+                lambda cmd, _b=bundle: [
+                    self._on_set_custom_command(d.source, d.ip, d.port, cmd)
+                    for d in _b.devices
+                ]
+            ),
         )
 
     def _on_icon_item_activate(self, _item: Gtk.MenuItem, bundle: _DeviceBundle) -> None:
-        self._open_any_details(bundle, initial_tab="icon")
+        self._open_any_details(bundle, initial_tab="options")
+
+    def _bundle_connect_target(self, bundle: _DeviceBundle) -> str | None:
+        return resolve_connect_target(
+            bundle_ip=bundle.ip,
+            primary_type=bundle.primary.type or "",
+            devices=bundle.devices,
+        )
 
     def _open_device(self, bundle: _DeviceBundle) -> None:
-        # Double-click: open URL, else details (all bundles).
-        url = bundle.open_url
-        if url:
-            open_url(url)
+        """Double-click / Open menu: HTTP(S) → SMB → FTP → SSH → Telnet; *computer* → SMB if nothing else; else no-op."""
+        target = self._bundle_connect_target(bundle)
+        if not target:
             return
-        self._open_any_details(bundle)
+        d = bundle.primary
+
+        def _spawn_err(msg: str) -> None:
+            GLib.idle_add(
+                lambda: self._show_command_error(
+                    _("Could not start the command: {error}").format(error=msg),
+                )
+            )
+
+        err = launch_connect_for_uri(
+            target,
+            self._connect_command_templates,
+            ip=bundle.ip,
+            port=int(bundle.port),
+            name=bundle.name or "",
+            type_=d.type or "",
+            category=d.category or "",
+            on_spawn_error=_spawn_err,
+        )
+        if err:
+            self._show_command_error(err)
 
     def _show_details_dialog(
         self,
@@ -830,6 +1008,12 @@ class DeviceList(Gtk.Box):
         endpoint_ip: str | None = None,
         endpoint_port: int | None = None,
         overview: dict[str, str | None] | None = None,
+        url_override: str | None = None,
+        on_set_url_override=None,
+        device_commands: list[dict] | None = None,
+        on_set_device_commands=None,
+        custom_command: str | None = None,
+        on_set_custom_command=None,
     ) -> None:
         parent = self._parent_window
         if parent is None:
@@ -867,6 +1051,12 @@ class DeviceList(Gtk.Box):
             provided_icon_display=provided_icon_display,
             details_field_rule_map=details_field_rule_map or {},
             overview=overview,
+            url_override=url_override,
+            on_set_url_override=on_set_url_override,
+            device_commands=device_commands,
+            on_set_device_commands=on_set_device_commands,
+            custom_command=custom_command,
+            on_set_custom_command=on_set_custom_command,
             active_field_rules=active_rules,
             on_add_field_rule=(
                 (lambda target, path: self._on_set_field_rule(endpoint_source, endpoint_ip, endpoint_port, target, path))
@@ -1397,19 +1587,6 @@ class DeviceList(Gtk.Box):
             self._open_device(bundle)
 
     def _on_tree_button_press(self, tree: Gtk.TreeView, event: Gdk.EventButton) -> bool:
-        if event.button == 1 and event.type == Gdk.EventType.BUTTON_PRESS:
-            hit = tree.get_path_at_pos(int(event.x), int(event.y))
-            if hit is None:
-                return False
-            path, _column, _x, _y = hit
-            model = tree.get_model()
-            tree_iter = model.get_iter(path)
-            bundle = model.get_value(tree_iter, 0)
-            if isinstance(bundle, _DeviceBundle):
-                self._open_device(bundle)
-                return True
-            return False
-
         if event.button == 3:
             hit = tree.get_path_at_pos(int(event.x), int(event.y))
             if hit is None:

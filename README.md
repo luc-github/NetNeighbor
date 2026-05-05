@@ -3,7 +3,7 @@
 NetNeighbor is a Linux desktop application that replicates and extends the Windows Network
 Neighborhood experience.
 
-**Current release:** **0.8.0** — highlights in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+**Current release:** **0.9.0**
 
 ## Current state
 
@@ -16,12 +16,14 @@ Neighborhood experience.
 - Main window: list + icon grid, categories, details dialogs, notifications (optional), **View → Preferences** persisted in `~/.config/netneighbor/ui_prefs.json`
 - **System tray** (Ayatana/AppIndicator or Gtk.StatusIcon fallback): **Open** / **Minimize to tray** / **Quit**, keep running when closing the window, optional **start minimized**, optional **session autostart**. Autostart `Exec=` adds **`--start-minimized-to-tray`** only in `~/.config/autostart/` — not in the menu launcher — see [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
 - When tray is active: client-side title bar **Maximize + Close** (window minimization to tray is via tray menu or close-with-tray; **F11** toggles fullscreen)
+- **Open / double-click** resolves the best connection target in priority order (`http > smb > ssh > ftp > sftp > telnet`); right-click **Open ▶** submenu lists all available targets with labels when multiple are present
+- **Per-device commands** (Options tab in device details): dynamic list of connection commands — each entry sets the scheme, optional IP/port override, mode (**Override** replaces the auto-detected default; **Additional** adds an extra entry to the submenu), and optional label. Confirmation dialogs protect Remove / Clear / Reset actions.
+- **External applications** (**Tools → External applications…**): per-scheme command templates for Open (`{ip}`, `{port}`, `{name}`, `{type}`, `{category}`, `{url}`) and a global **Custom command** for the right-click menu; **Reset** restores the built-in default per scheme
 - Root app icon: **`assets/svg/netneighbor.svg`** (also wired into the hicolor theme path for tray/launcher names `io.esp3d.netneighbor` / `io.esp3d.netneighbor-tray`)
 - **`.deb`** packaging script: `packaging/build_deb.sh` (see [`docs/PACKAGING.md`](docs/PACKAGING.md))
 
 Developer documentation lives under [`docs/README.md`](docs/README.md).
-User documentation (MVP) lives in [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
-Release notes: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+User documentation lives in [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
 
 ## Autodetection (limits) and corrections
 
@@ -69,6 +71,7 @@ NetNeighbor does **not** require Samba server daemons (`smbd` / `nmbd`) — only
 
 Python dependencies installed in the virtual environment:
 - `zeroconf`
+- `WSDiscovery` (optional; graceful degradation if absent)
 
 ## Run (development)
 
@@ -87,7 +90,18 @@ NETNEIGHBOR_DEMO=0 python main.py
 
 ## Translations (i18n)
 
-French catalog is available in `locale/fr/LC_MESSAGES/netneighbor.po`.
+Translation catalogs are available under `locale/`:
+
+| Language | Code | Status |
+|----------|------|--------|
+| French | `fr` | Partial (~150 untranslated strings) |
+| Italian | `it` | Ready for translation |
+| Spanish | `es` | Ready for translation |
+| German | `de` | Ready for translation |
+| Dutch | `nl` | Ready for translation |
+| Traditional Chinese (Taiwan) | `zh_TW` | Ready for translation |
+| Simplified Chinese | `zh_CN` | Ready for translation |
+| Japanese | `ja` | Ready for translation |
 
 Compile translations after edits:
 
@@ -107,8 +121,8 @@ Full translation workflow (new language, POT merge/update, runtime checks):
 Only one NetNeighbor instance is allowed at a time on Linux to avoid discovery conflicts.
 A second launch asks the first instance to bring its window to the foreground.
 
-## Next implementation milestones
+## Pending work
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the living list (AppImage / service / file-manager integration, richer PC workflows, tests, etc.).
+See [`docs/TODO.md`](docs/TODO.md) for known items and future ideas.
 
 Contribution and maintenance reminders: [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md), user overlays: [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md).
