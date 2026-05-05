@@ -354,11 +354,11 @@ def _load_logging_config() -> dict:
         "default": "INFO",
         "app": "INFO",
         "device_list": "INFO",
-        "ssdp": "WARNING",
+        "ssdp": "NONE",
         "mdns": "DEBUG",
-        "wsd": "INFO",
-        "wsdd": "INFO",
-        "nmb": "INFO",
+        "wsd": "DEBUG",
+        "wsdd": "DEBUG",
+        "nmb": "DEBUG",
     }
     try:
         config_dir.mkdir(parents=True, exist_ok=True)

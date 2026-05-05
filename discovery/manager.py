@@ -95,6 +95,34 @@ def _join_descriptor_base_and_path(base_url: str, absolute_path: str) -> str | N
     return urlunparse((p.scheme, p.netloc, path, "", "", ""))
 
 
+_VALID_COMMAND_SCHEMES = frozenset(("http", "https", "smb", "ftp", "ssh", "sftp", "telnet"))
+_VALID_COMMAND_MODES = frozenset(("override", "additional"))
+
+
+def _normalize_command_list(raw: object) -> list[dict]:
+    """Validate and normalize a list of per-device command dicts."""
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for c in raw:
+        if not isinstance(c, dict):
+            continue
+        scheme = str(c.get("scheme", "")).strip().lower()
+        if scheme not in _VALID_COMMAND_SCHEMES:
+            continue
+        mode = str(c.get("mode", "override")).strip().lower()
+        if mode not in _VALID_COMMAND_MODES:
+            mode = "override"
+        result.append({
+            "scheme": scheme,
+            "ip": str(c.get("ip", "")).strip(),
+            "port": int(c.get("port", 0) or 0),
+            "mode": mode,
+            "label": str(c.get("label", "")).strip(),
+        })
+    return result
+
+
 class DiscoveryManager:
     def __init__(
         self,
@@ -203,6 +231,9 @@ class DiscoveryManager:
         self._type_overrides: dict[str, str] = {}
         self._name_overrides: dict[str, str] = {}
         self._location_overrides: dict[str, str] = {}
+        self._url_overrides: dict[str, str] = {}
+        self._device_commands: dict[str, list[dict]] = {}  # key → [{scheme,ip,port,mode,label}]
+        self._custom_command_overrides: dict[str, str] = {}  # key → command template
         self._field_mapping_rules: dict[str, dict[str, list[str]]] = {}
         self._monitored_overrides: dict[str, bool] = {}
         self._last_seen_overrides: dict[str, str] = {}
@@ -324,6 +355,9 @@ class DiscoveryManager:
         self._apply_type_override(device)
         self._apply_name_override(device)
         self._apply_location_override(device)
+        self._apply_url_override(device)
+        self._apply_device_commands(device)
+        self._apply_custom_command_override(device)
         self._apply_monitored_override(device)
 
         prev_online: bool | None = existing.online if existing is not None else None
@@ -895,6 +929,9 @@ class DiscoveryManager:
             self._apply_type_override(updated)
             self._apply_name_override(updated)
             self._apply_location_override(updated)
+            self._apply_url_override(updated)
+            self._apply_endpoint_overrides(updated)
+            self._apply_custom_command_override(updated)
             self._apply_monitored_override(updated)
             self._devices[device_key] = updated
             self._run_location_reapply_sweep()
@@ -989,6 +1026,58 @@ class DiscoveryManager:
 
     def get_name_overrides(self) -> dict[str, str]:
         return dict(self._name_overrides)
+
+    def set_url_overrides(self, overrides: dict[str, str]) -> None:
+        normalized: dict[str, str] = {}
+        for key, value in overrides.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            value_norm = value.strip()
+            if value_norm:
+                normalized[key] = value_norm
+        self._url_overrides = normalized
+
+    def get_url_overrides(self) -> dict[str, str]:
+        return dict(self._url_overrides)
+
+    def set_device_commands_overrides(self, overrides: object) -> None:
+        """Bulk-load per-device commands from persisted preferences.
+        Accepts new list format or legacy dict format (auto-migrated to override mode)."""
+        normalized: dict[str, list[dict]] = {}
+        if not isinstance(overrides, dict):
+            self._device_commands = normalized
+            return
+        for key, raw in overrides.items():
+            if not isinstance(key, str):
+                continue
+            # Legacy format: {scheme: {ip, port}} → convert to list with mode=override
+            if isinstance(raw, dict):
+                raw = [
+                    {"scheme": s, "ip": ep.get("ip", ""), "port": ep.get("port", 0),
+                     "mode": "override", "label": ""}
+                    for s, ep in raw.items() if isinstance(ep, dict)
+                ]
+            if not isinstance(raw, list):
+                continue
+            valid = _normalize_command_list(raw)
+            if valid:
+                normalized[key] = valid
+        self._device_commands = normalized
+
+    def get_device_commands_overrides(self) -> dict[str, list[dict]]:
+        return {k: [dict(c) for c in cmds] for k, cmds in self._device_commands.items()}
+
+    def set_custom_command_overrides(self, overrides: dict[str, str]) -> None:
+        """Bulk-load per-device custom command overrides from persisted preferences."""
+        normalized: dict[str, str] = {}
+        if isinstance(overrides, dict):
+            for key, cmd in overrides.items():
+                if isinstance(key, str) and isinstance(cmd, str) and cmd.strip():
+                    normalized[key] = cmd.strip()
+        self._custom_command_overrides = normalized
+
+    def get_custom_command_overrides(self) -> dict[str, str]:
+        return dict(self._custom_command_overrides)
 
     def set_location_overrides(self, overrides: dict[str, str]) -> None:
         normalized: dict[str, str] = {}
@@ -1188,6 +1277,64 @@ class DiscoveryManager:
                 self._location_overrides.pop(endpoint_key, None)
                 self._location_overrides[preferred_key] = str(location).strip()
             self._apply_location_override(existing)
+            changed = True
+        if changed:
+            self._notify()
+
+    def set_device_url_override(self, source: str, ip: str, port: int, url: str | None) -> None:
+        changed = False
+        for _old_key, existing in list(self._devices.items()):
+            if existing.source != source or existing.ip != ip or existing.port != port:
+                continue
+            preferred_key = self._make_name_override_key_for_device(existing)
+            endpoint_key = self._make_override_key(source, ip, port)
+            if url is None or not str(url).strip():
+                self._url_overrides.pop(preferred_key, None)
+                self._url_overrides.pop(endpoint_key, None)
+            else:
+                self._url_overrides.pop(endpoint_key, None)
+                self._url_overrides[preferred_key] = str(url).strip()
+            self._apply_url_override(existing)
+            changed = True
+        if changed:
+            self._notify()
+
+    def set_device_commands(
+        self, source: str, ip: str, port: int, commands: list[dict],
+    ) -> None:
+        """Replace all per-device commands for a specific device."""
+        changed = False
+        for _old_key, existing in list(self._devices.items()):
+            if existing.source != source or existing.ip != ip or existing.port != port:
+                continue
+            preferred_key = self._make_name_override_key_for_device(existing)
+            endpoint_key = self._make_override_key(source, ip, port)
+            self._device_commands.pop(endpoint_key, None)
+            valid = _normalize_command_list(commands) if isinstance(commands, list) else []
+            if valid:
+                self._device_commands[preferred_key] = valid
+            else:
+                self._device_commands.pop(preferred_key, None)
+            self._apply_device_commands(existing)
+            changed = True
+        if changed:
+            self._notify()
+
+    def set_device_custom_command(self, source: str, ip: str, port: int, cmd: str | None) -> None:
+        """Set or clear a per-device custom command override."""
+        changed = False
+        for _old_key, existing in list(self._devices.items()):
+            if existing.source != source or existing.ip != ip or existing.port != port:
+                continue
+            preferred_key = self._make_name_override_key_for_device(existing)
+            endpoint_key = self._make_override_key(source, ip, port)
+            if cmd is None or not str(cmd).strip():
+                self._custom_command_overrides.pop(preferred_key, None)
+                self._custom_command_overrides.pop(endpoint_key, None)
+            else:
+                self._custom_command_overrides.pop(endpoint_key, None)
+                self._custom_command_overrides[preferred_key] = str(cmd).strip()
+            self._apply_custom_command_override(existing)
             changed = True
         if changed:
             self._notify()
@@ -1735,6 +1882,34 @@ class DiscoveryManager:
         if not override_name:
             return
         device.name = override_name
+
+    def _apply_url_override(self, device: Device) -> None:
+        override_url = self._find_override_value(self._url_overrides, device)
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        if isinstance(override_url, str) and override_url.strip():
+            device.metadata["url_override"] = override_url.strip()
+        else:
+            device.metadata.pop("url_override", None)
+
+    def _apply_device_commands(self, device: Device) -> None:
+        cmds = self._find_override_value(self._device_commands, device)
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        valid = _normalize_command_list(cmds) if isinstance(cmds, list) else []
+        if valid:
+            device.metadata["device_commands"] = valid
+        else:
+            device.metadata.pop("device_commands", None)
+
+    def _apply_custom_command_override(self, device: Device) -> None:
+        cmd = self._find_override_value(self._custom_command_overrides, device)
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        if isinstance(cmd, str) and cmd.strip():
+            device.metadata["custom_command"] = cmd.strip()
+        else:
+            device.metadata.pop("custom_command", None)
 
     def _clip_loc_log(self, value: str) -> str:
         return value if len(value) <= 120 else value[:117] + "..."

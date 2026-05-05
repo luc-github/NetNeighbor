@@ -72,6 +72,23 @@ done
 if [[ -f "${PROJECT_ROOT}/VERSION" ]]; then
   install -m 0644 "${PROJECT_ROOT}/VERSION" "${APP_ROOT}/VERSION"
 fi
+# Overlay local config/ and locale/ to include uncommitted additions
+# (new default_commands.json, new language catalogs, etc.).
+for _dir in config locale; do
+  if [[ -d "${PROJECT_ROOT}/${_dir}" ]]; then
+    mkdir -p "${APP_ROOT}/${_dir}"
+    cp -a "${PROJECT_ROOT}/${_dir}/." "${APP_ROOT}/${_dir}/"
+  fi
+done
+# Compile .po → .mo for any catalog missing or older than its source.
+if command -v msgfmt >/dev/null 2>&1; then
+  find "${APP_ROOT}/locale" -name "*.po" | while read -r _po; do
+    _mo="${_po%.po}.mo"
+    if [[ ! -f "${_mo}" ]] || [[ "${_po}" -nt "${_mo}" ]]; then
+      msgfmt "${_po}" -o "${_mo}" || true
+    fi
+  done
+fi
 
 install -m 0755 "${SCRIPT_DIR}/netneighbor" "${PKG_ROOT}/usr/bin/netneighbor"
 sed "s/@APP_VERSION@/${VERSION}/g" "${SCRIPT_DIR}/netneighbor.desktop" > "${PKG_ROOT}/usr/share/applications/netneighbor.desktop"
@@ -96,11 +113,13 @@ Installed-Size: ${INSTALLED_SIZE_KB}
 Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, python3-zeroconf
 Recommends: samba-common-bin, gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1
 Maintainer: Luc LEBOSSE (luc@esp3d.io)
-Description: Linux network neighborhood for SSDP/mDNS discovery
+Description: Linux network neighborhood for LAN device discovery
  NetNeighbor is a GTK desktop application for local network discovery
- using SSDP and mDNS, with list/icon views and device details.
- Optional NetBIOS names use nmblookup from samba-common-bin (Samba server daemons are
- not required). System tray icons need Ayatana or GNOME AppIndicator GObject bindings.
+ using SSDP, mDNS, WS-Discovery and NetBIOS, with list/icon views,
+ device details, per-device connection commands, and system tray support.
+ Optional NetBIOS names use nmblookup from samba-common-bin (Samba server
+ daemons are not required). System tray icons need Ayatana or GNOME
+ AppIndicator GObject bindings.
 EOF
 
 OUTPUT_DEB="${PROJECT_ROOT}/dist/${PKG_NAME}_${VERSION}_${ARCH}.deb"

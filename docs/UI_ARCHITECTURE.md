@@ -20,8 +20,8 @@ Dialog chrome: **`prepare_gtk_dialog`** in `utils/gtk_dialog.py` (disable header
 | `ui/main_window.py` | Menu bar, paned layout (sidebar + content), discovery listener wiring, notifications mode, UI prefs load/save, notification history (session), sidebar counts. When **close-to-tray** works, installs a **Gtk.HeaderBar** (**Maximize + Close**; minimize via tray menu). **F11** fullscreen accel. Tray creation on idle; skip initial present when starting minimized-to-tray; **View → Quit** calls `application.quit()`. |
 | `ui/tray_indicator.py` | Ayatana **AppIndicator** / **AppIndicator3**, else **Gtk.StatusIcon**; tray menu **Open** / **Minimize to tray** / **Quit**; resolves icon names (bundled hicolor **SVG** under `assets/icons/`). |
 | `utils/session_autostart.py` | Writes or removes `~/.config/autostart/io.esp3d.netneighbor.desktop` from the **Start when logging in** preference. |
-| `ui/device_list.py` | `DeviceList`: bundles devices by `(ip, port)` for display (mDNS + SSDP on same host), list store, icon tiles, context menus, details entry points. **Open** (`open_url`) is disabled for bundled rows whose primary **type** is **`computer`** (WSD metadata URL not opened in browser). |
-| `ui/device_details.py` | Dialog: **Overview** summary + protocol fields; optional raw XML, SSDP services table, mDNS service expanders **Services** tab, icon tab. Multiline values are not rendered as `Gtk.LinkButton`. |
+| `ui/device_list.py` | `DeviceList`: bundles devices by `(ip, port)` for display (mDNS + SSDP on same host), list store, icon tiles, context menus, details entry points. **Open** / double-click resolves **`resolve_connect_target`** (`utils/double_click_open.py`), then **`launch_connect_for_uri`** (`utils/connect_launcher.py`) using **`connect_command_templates`** from **Tools → External applications…**. When ≥ 2 targets exist, right-click shows **Open ▶** submenu (via **`resolve_all_connect_targets`**) with labelled entries. **Run custom command** uses **`custom_command_template`** (`utils/custom_command.py`). |
+| `ui/device_details.py` | Dialog: **Overview** summary + protocol fields; **Options** tab for per-device commands (dynamic list — scheme, mode, label, IP, port); optional raw XML, SSDP services table, mDNS service expanders **Services** tab, icon tab. Multiline values are not rendered as `Gtk.LinkButton`. |
 | `utils/details_payload.py` | Pure builders for SSDP / mDNS / WSD-family detail rows; merges duplicate **Last seen** to the latest; WSD-only supplementary rows are minimal (no Discovery / XAddrs / NetBIOS registration lines). |
 | `utils/ui_prefs.py` | JSON read/write under `~/.config/netneighbor/ui_prefs.json`. |
 
@@ -66,8 +66,31 @@ See [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) for a short key reference
 GNU gettext; catalogs under `locale/`. UI strings use `_()` where wired.  
 See [`I18N.md`](I18N.md) for add/update workflow.
 
+## Per-device command model
+
+The **Options** tab in `device_details.py` manages a list of `dict` entries:
+
+```python
+[
+    {"scheme": "http",  "ip": "",             "port": 0,  "mode": "override",    "label": ""},
+    {"scheme": "ssh",   "ip": "192.168.1.10", "port": 22, "mode": "additional",  "label": "Admin"},
+]
+```
+
+- Stored in `ui_prefs.json` under `device_commands` (keyed by device identity).
+- Validated and normalized by `_normalize_command_list()` in `discovery/manager.py`.
+- Applied to each `Device` on every pipeline run via `_apply_device_commands`.
+- Read by `resolve_connect_target` / `resolve_all_connect_targets` in `utils/double_click_open.py`.
+
+## Title bar and tray
+
+When **close-to-tray** is active the window uses a `Gtk.HeaderBar` set via `set_titlebar()`.
+This call must happen **before** `show_all()` — calling it afterwards loses WM decorations on
+Muffin/Cinnamon. `_ensure_tray()` and `_apply_tray_window_decorations()` are therefore invoked
+in `__init__` before `show_all()`.
+
 ## See also
 
+- [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) — DiscoveryManager, override system, device commands.
 - [`MAINTENANCE.md`](MAINTENANCE.md) — paths, tray, packaging-related runtime deps, troubleshooting.  
-- [`PACKAGING.md`](PACKAGING.md) — `.deb` layout and **Recommends** (AppIndicator, `nmblookup`).  
-- [`NetNeighbor_Brief_v1.4.md`](NetNeighbor_Brief_v1.4.md) — product constraints (e.g. GLib idle requirement).
+- [`PACKAGING.md`](PACKAGING.md) — `.deb` layout and **Recommends** (AppIndicator, `nmblookup`).

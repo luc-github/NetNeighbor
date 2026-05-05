@@ -7,7 +7,7 @@ keeping the project healthy between releases.
 
 | Path | Content |
 |------|---------|
-| `~/.config/netneighbor/ui_prefs.json` | UI state + per-device overrides + rules (not a full device DB). Tray-related booleans include **`close_to_tray`** (default true), **`start_minimized_to_tray`**, **`start_at_login`** (writes XDG autostart when enabled). |
+| `~/.config/netneighbor/ui_prefs.json` | UI state + per-device overrides + rules (not a full device DB). Tray-related booleans include **`close_to_tray`** (default true), **`start_minimized_to_tray`**, **`start_at_login`** (writes XDG autostart when enabled). **`custom_command_template`** (**Tools → External applications**) for **Run custom command**; **`connect_command_templates`** overrides **Open** per URL scheme; **`device_commands`** stores per-device connection command lists from the **Options** tab (see [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md)). |
 | `~/.config/autostart/io.esp3d.netneighbor.desktop` | Present when **Start NetNeighbor when logging in** is checked in View → Preferences; standard XDG autostart entry. **`Exec=`** appends **`--start-minimized-to-tray`** (tray-only login start) while the **menu** `.desktop` from packaging stays without that flag. Implemented in `utils/session_autostart.py`. |
 | `~/.cache/netneighbor/discovery-cache.json` | Volatile discovery cache (`last_seen_overrides`, monitored snapshots metadata, SSDP XML/profile cache). Safe to delete; app rebuilds it. |
 | `~/.config/netneighbor/logging.json` | Per-area log levels (`default`, `app`, `ssdp`, `mdns`). Created with defaults on first run if missing. |
@@ -30,7 +30,7 @@ keeping the project healthy between releases.
 - **Icons**: canonical vector logo — **`assets/svg/netneighbor.svg`**. Theme resolution uses **`assets/icons/`** as an extra icon search path; **`hicolor/scalable/apps/`** contains symlinks **`io.esp3d.netneighbor.svg`** and **`io.esp3d.netneighbor-tray.svg`** pointing at that file (so GTK finds app + tray names). Installed `.deb` copies the SVG into `/usr/share/icons/hicolor/scalable/apps/` under both names.
 - **Close-to-tray + tray available**: main window uses a **Gtk.HeaderBar** with **Maximize** and **Close** only (explicit minimize lives on the tray menu). **CLI** **`--start-minimized-to-tray`** and first-run flow can skip stealing focus until the user opens from the tray (`app.py` → `MainWindow`). **F11** toggles fullscreen (useful for the icon grid); implemented via a window **Gtk.AccelGroup** in `ui/main_window.py`.
 - **`utils/gtk_dialog.py`**: **`prepare_gtk_dialog`** disables CSD/header-bar dialogs that lose WM title bars on some compositors/window managers (used by main window, details, list, and related dialogs).
-- **Open on PCs**: context-menu / double-click **Open** is suppressed for merged rows whose primary **type** is **`computer`** (WSD metadata URL on port 5357 is not a useful browser target yet); double-click opens **Details** instead (`ui/device_list.py`).
+- **Open on PCs**: **Open** / double-click uses **`resolve_connect_target`** — **HTTP(S)** first, then **SMB** / **FTP** / **SSH** / **Telnet** from merged mDNS or explicit device URLs; type **`computer`** with no other target opens **`smb://`** toward the host IP (file manager). The resulting URI is opened via **`launch_connect_for_uri`** (`utils/connect_launcher.py`) — empty per-scheme template in **Tools → External applications…** keeps the system default. If no target exists, **Open** is inactive.
 
 ## Common tasks
 
@@ -40,7 +40,7 @@ keeping the project healthy between releases.
 
 ## Discovery extension hooks
 
-- **`DiscoveryManager.register_presence_transition_hook` / `unregister_presence_transition_hook`** (`discovery/manager.py`): optional observers for **`"online"`** / **`"offline"`** transitions per device identity row (not wired in core UI). Callbacks run on the same thread as the discovery update — use `GLib.idle_add` before touching GTK. Failures are logged and do not stop discovery. Planned use: future plugins / alerting (see [`ROADMAP.md`](ROADMAP.md) « Future — plugins »). Extension code may import `DiscoveryManager`, `PresenceTransitionHook`, and `PresenceTransitionKind` from the **`discovery`** package (`from discovery import …`).
+- **`DiscoveryManager.register_presence_transition_hook` / `unregister_presence_transition_hook`** (`discovery/manager.py`): optional observers for **`"online"`** / **`"offline"`** transitions per device identity row (not wired in core UI). Callbacks run on the same thread as the discovery update — use `GLib.idle_add` before touching GTK. Failures are logged and do not stop discovery. Planned use: future plugins / alerting. Extension code may import `DiscoveryManager`, `PresenceTransitionHook`, and `PresenceTransitionKind` from the **`discovery`** package (`from discovery import …`).
 
 ## Debugging discovery issues
 
@@ -54,7 +54,7 @@ keeping the project healthy between releases.
 
 ## Changelog / release notes
 
-- [`CHANGELOG.md`](CHANGELOG.md) tracks versioned highlights (since **0.8.0**).
+Archived in [`archive/CHANGELOG.md`](archive/CHANGELOG.md) (up to **0.8.0**). New release notes go in the repository changelog or release tags.
 
 ## Suggested additional docs (optional)
 
@@ -69,9 +69,11 @@ Architecture Decision Records (ADR): optional short files under `docs/adr/` for 
 
 ## Release checklist (minimal)
 
-- [ ] `README.md` and brief aligned with behavior.
-- [ ] **`VERSION`** bumped; **`docs/CHANGELOG.md`** entry for the release.
-- [ ] `docs/MAINTENANCE.md`, `docs/PACKAGING.md`, and `docs/COMMUNITY_OVERRIDES.md` aligned if behavior or deps changed.
-- [ ] `docs/ROADMAP.md` updated.
+- [ ] **`VERSION`** bumped.
+- [ ] `README.md` and `USER_DOCUMENTATION.md` aligned with new behavior.
+- [ ] `docs/MAINTENANCE.md`, `docs/PACKAGING.md`, and `docs/COMMUNITY_OVERRIDES.md` updated if behavior or deps changed.
+- [ ] `docs/TODO.md` updated (move done items, add new known issues).
+- [ ] Translation catalogs merged (`msgmerge`) and `.mo` files compiled.
 - [ ] Smoke run: start app, discovery, details, tray hide/show, **CLI** `--start-minimized-to-tray`, optional autostart toggle, monitored device restart.
+- [ ] Test Open / double-click with Override and Additional device commands.
 - [ ] Packaging smoke: `./packaging/build_deb.sh`, install in VM, verify icons + `Recommends` (tray + `nmblookup`).

@@ -22,13 +22,21 @@ def resolve_icon_path(icon_name: str | None) -> Path:
 
 
 def resolve_app_icon_path() -> Path | None:
+    """Return the window/taskbar icon path (netneighbor_icon.svg preferred)."""
     root = Path(__file__).resolve().parent.parent
-    preferred = root / "assets" / "svg" / "netneighbor.svg"
-    if preferred.is_file():
-        return preferred
+    svg_dir = root / "assets" / "svg"
+    for name in ("netneighbor_icon.svg", "netneighbor.svg"):
+        candidate = svg_dir / name
+        if candidate.is_file():
+            return candidate
     base = root / "assets" / "icons"
     for name in ("logo.png", "logo.svg", "netneighbor.png", "netneighbor.svg", "app.png", "app.svg"):
         candidate = base / name
         if candidate.exists():
             return candidate
     return None
+
+
+def resolve_app_logo_path() -> Path | None:
+    """Return the high-res logo path used in the About dialog (same preference order)."""
+    return resolve_app_icon_path()

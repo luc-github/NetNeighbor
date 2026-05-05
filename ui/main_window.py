@@ -17,9 +17,11 @@ from utils.location_label import is_plausible_room_location, normalize_location_
 from utils.discovery_cache import load_discovery_cache, save_discovery_cache
 from utils.details_payload import format_device_type_for_details
 from utils.session_autostart import apply_autostart_pref, autostart_enabled_on_disk
+from utils.connect_launcher import normalize_connect_templates
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 from utils.notifications import send_notification
 from utils.gtk_dialog import prepare_gtk_dialog
+from ui.icons import resolve_app_logo_path
 
 _LOG = logging.getLogger(__name__)
 
@@ -57,6 +59,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self._start_minimized_to_tray = bool(self._prefs.get("start_minimized_to_tray", False))
         self._start_at_login = bool(self._prefs.get("start_at_login", autostart_enabled_on_disk()))
         self._autostart_onboarding_done = bool(self._prefs.get("autostart_onboarding_done", False))
+        self._custom_command_template = str(self._prefs.get("custom_command_template", "") or "")
+        self._connect_command_templates = normalize_connect_templates(self._prefs.get("connect_command_templates"))
         self._tray: TrayIndicator | None = None
         self._tray_csd_header: Gtk.HeaderBar | None = None
         self._show_ip_in_device_list = bool(show_ip_in_device_list)
@@ -191,6 +195,9 @@ class MainWindow(Gtk.ApplicationWindow):
         menubar.append(self._notifications_item)
         notifications_menu = Gtk.Menu()
         self._notifications_item.set_submenu(notifications_menu)
+        external_apps_item = Gtk.MenuItem.new_with_label(_("External applications…"))
+        external_apps_item.connect("activate", self._on_tools_external_apps_activate)
+        notifications_menu.append(external_apps_item)
         notifications_history_item = Gtk.MenuItem.new_with_label(_("Notifications history"))
         notifications_history_item.connect("activate", self._on_notifications_history_activate)
         notifications_menu.append(notifications_history_item)
@@ -224,6 +231,9 @@ class MainWindow(Gtk.ApplicationWindow):
             on_set_type_override=self._on_set_type_override,
             on_set_name_override=self._on_set_name_override,
             on_set_location_override=self._on_set_location_override,
+            on_set_url_override=self._on_set_url_override,
+            on_set_device_commands=self._on_set_device_commands,
+            on_set_custom_command=self._on_set_device_custom_command,
             on_set_field_rule=self._on_set_field_rule,
             on_remove_field_rule=self._on_remove_field_rule,
             on_get_field_rules=self._on_get_field_rules,
@@ -246,20 +256,15 @@ class MainWindow(Gtk.ApplicationWindow):
         self.connect("delete-event", self._on_delete_event)
         self.connect("destroy", self._on_destroy)
         self._install_fullscreen_accel()
-        self.show_all()
-        GLib.idle_add(self._idle_init_tray_and_minimize)
-
-    def _idle_init_tray_and_minimize(self) -> bool:
+        # set_titlebar() must be called before the window is realized/shown.
         self._ensure_tray()
         self._apply_tray_window_decorations()
-        GLib.idle_add(self._run_autostart_onboarding_then_maybe_minimize)
-        return False
+        self.show_all()
+        GLib.idle_add(self._idle_post_show)
 
-    def _run_autostart_onboarding_then_maybe_minimize(self) -> bool:
+    def _idle_post_show(self) -> bool:
         ran_first_run_dialog = self._maybe_show_autostart_onboarding()
         if self._tray is not None and self._tray.available:
-            # First launch: hide so the user opens from the tray (fixes broken WM chrome until then).
-            # Session autostart passes --start-minimized-to-tray; otherwise honor saved preference.
             if (
                 ran_first_run_dialog
                 or self._start_minimized_to_tray
@@ -530,6 +535,18 @@ class MainWindow(Gtk.ApplicationWindow):
         self._manager.set_device_location_override(source, ip, port, location)
         self._persist_ui_preferences()
 
+    def _on_set_url_override(self, source: str, ip: str, port: int, url: str | None) -> None:
+        self._manager.set_device_url_override(source, ip, port, url)
+        self._persist_ui_preferences()
+
+    def _on_set_device_commands(self, source: str, ip: str, port: int, commands: list) -> None:
+        self._manager.set_device_commands(source, ip, port, commands)
+        self._persist_ui_preferences()
+
+    def _on_set_device_custom_command(self, source: str, ip: str, port: int, cmd: str | None) -> None:
+        self._manager.set_device_custom_command(source, ip, port, cmd)
+        self._persist_ui_preferences()
+
     def _on_set_field_rule(self, source: str, ip: str, port: int, target: str, field_path: str) -> None:
         self._manager.set_device_field_mapping_rule(source, ip, port, target, field_path)
         self._persist_ui_preferences()
@@ -716,6 +733,121 @@ class MainWindow(Gtk.ApplicationWindow):
         if changed:
             self._manager.set_location_overrides(overrides)
 
+    def _on_tools_external_apps_activate(self, _menu_item: Gtk.MenuItem) -> None:
+        dialog = Gtk.Dialog(title=_("External applications"), transient_for=self, modal=True)
+        prepare_gtk_dialog(dialog)
+        dialog.set_default_size(580, 520)
+        outer = dialog.get_content_area()
+        outer.set_border_width(8)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_overlay_scrolling(False)
+        scroll.set_min_content_height(380)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_start(8)
+        box.set_margin_end(12)
+        box.set_margin_top(4)
+        box.set_margin_bottom(8)
+
+        from utils.connect_launcher import default_connect_command_templates as _defaults
+        _cmd_defaults = _defaults()
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(6)
+        entry_by_key: dict[str, Gtk.Entry] = {}
+        rows = [
+            ("http", _("HTTP")),
+            ("https", _("HTTPS")),
+            ("smb", _("SMB")),
+            ("ftp", _("FTP")),
+            ("ssh", _("SSH")),
+            ("telnet", _("Telnet")),
+            ("sftp", _("SFTP")),
+        ]
+        for i, (key, title) in enumerate(rows):
+            lab = Gtk.Label(label=title + ":", xalign=1.0)
+            ent = Gtk.Entry()
+            ent.set_hexpand(True)
+            ent.set_text(self._connect_command_templates.get(key, ""))
+            ent.set_placeholder_text(_("Empty = system default"))
+            reset_btn = Gtk.Button.new_with_label(_("Reset"))
+            reset_btn.set_tooltip_text(_("Restore default command"))
+            _default_val = _cmd_defaults.get(key, "")
+
+            def _on_reset_scheme(_b, _e=ent, _v=_default_val, _w=dialog):
+                dlg = Gtk.MessageDialog(
+                    transient_for=_w, modal=True,
+                    message_type=Gtk.MessageType.QUESTION,
+                    buttons=Gtk.ButtonsType.YES_NO,
+                    text=_("Reset this command to its default value?"),
+                )
+                if dlg.run() == Gtk.ResponseType.YES:
+                    _e.set_text(_v)
+                dlg.destroy()
+
+            reset_btn.connect("clicked", _on_reset_scheme)
+            grid.attach(lab, 0, i, 1, 1)
+            grid.attach(ent, 1, i, 1, 1)
+            grid.attach(reset_btn, 2, i, 1, 1)
+            entry_by_key[key] = ent
+
+        custom_ent = Gtk.Entry()
+        custom_ent.set_hexpand(True)
+        custom_ent.set_text(self._custom_command_template)
+        custom_ent.set_placeholder_text(_("Empty = disabled"))
+        custom_clear_btn = Gtk.Button.new_with_label(_("Clear"))
+        custom_clear_btn.set_tooltip_text(_("Remove the global custom command"))
+
+        def _on_clear_custom(_b, _e=custom_ent, _w=dialog):
+            dlg = Gtk.MessageDialog(
+                transient_for=_w, modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text=_("Clear the global custom command?"),
+            )
+            if dlg.run() == Gtk.ResponseType.YES:
+                _e.set_text("")
+            dlg.destroy()
+
+        custom_clear_btn.connect("clicked", _on_clear_custom)
+        custom_row = len(rows)
+        grid.attach(Gtk.Label(label=_("Custom:"), xalign=1.0), 0, custom_row, 1, 1)
+        grid.attach(custom_ent, 1, custom_row, 1, 1)
+        grid.attach(custom_clear_btn, 2, custom_row, 1, 1)
+
+        box.pack_start(grid, False, False, 0)
+
+        hint = Gtk.Label(xalign=0.0)
+        hint.set_markup(
+            "<small>"
+            "<b>{url}</b> full address   "
+            "<b>{ip}</b> device IP   "
+            "<b>{port}</b> service port   "
+            "<b>{name}</b> device name   "
+            "<b>{type}</b> device type   "
+            "<b>{category}</b> category"
+            "</small>"
+        )
+        hint.set_line_wrap(True)
+        hint.set_margin_start(2)
+        hint.set_margin_top(4)
+        box.pack_start(hint, False, False, 0)
+
+        scroll.add(box)
+        outer.pack_start(scroll, True, True, 0)
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        dialog.add_button(_("Save"), Gtk.ResponseType.OK)
+        dialog.show_all()
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            for key, ent in entry_by_key.items():
+                self._connect_command_templates[key] = ent.get_text()
+            self._custom_command_template = custom_ent.get_text().strip()
+            self._device_list.set_connect_command_templates(self._connect_command_templates)
+            self._device_list.set_custom_command_template(self._custom_command_template)
+            self._persist_ui_preferences()
+        dialog.destroy()
+
     def _on_about_activate(self, _menu_item: Gtk.MenuItem) -> None:
         _LOG.debug("About menu clicked")
         dialog = Gtk.AboutDialog(transient_for=self, modal=True)
@@ -727,6 +859,14 @@ class MainWindow(Gtk.ApplicationWindow):
             close_button.grab_default()
             close_button.grab_focus()
             dialog.set_focus(close_button)
+        logo_path = resolve_app_logo_path()
+        if logo_path is not None:
+            try:
+                from gi.repository import GdkPixbuf
+                logo = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(logo_path), 128, 128, True)
+                dialog.set_logo(logo)
+            except Exception:
+                _LOG.debug("Could not load About dialog logo from %s", logo_path, exc_info=True)
         dialog.set_program_name("NetNeighbor")
         dialog.set_version(get_app_version())
         dialog.set_authors(["Luc"])
@@ -734,9 +874,9 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.add_credit_section(
             _("Python libraries"),
             [
-                "PyGObject (GTK 3)",
-                "zeroconf",
-                "requests",
+                "PyGObject — GTK 3 bindings  https://pygobject.gnome.org",
+                "zeroconf — mDNS/DNS-SD discovery  https://github.com/python-zeroconf/python-zeroconf",
+                "WSDiscovery — WS-Discovery (Windows devices)  https://github.com/andreikop/python-ws-discovery",
             ],
         )
         dialog.add_credit_section(
@@ -1086,6 +1226,16 @@ class MainWindow(Gtk.ApplicationWindow):
         name_overrides = self._prefs.get("name_overrides")
         if isinstance(name_overrides, dict):
             self._manager.set_name_overrides(name_overrides)
+        url_overrides = self._prefs.get("url_overrides")
+        if isinstance(url_overrides, dict):
+            self._manager.set_url_overrides(url_overrides)
+        # Load device_commands (new format) with fallback to legacy endpoint_overrides
+        device_commands_raw = self._prefs.get("device_commands") or self._prefs.get("endpoint_overrides")
+        if isinstance(device_commands_raw, dict):
+            self._manager.set_device_commands_overrides(device_commands_raw)
+        custom_command_overrides = self._prefs.get("custom_command_overrides")
+        if isinstance(custom_command_overrides, dict):
+            self._manager.set_custom_command_overrides(custom_command_overrides)
         location_overrides = self._prefs.get("location_overrides")
         if isinstance(location_overrides, dict):
             if any(
@@ -1139,6 +1289,10 @@ class MainWindow(Gtk.ApplicationWindow):
         self._start_minimized_to_tray = bool(self._prefs.get("start_minimized_to_tray", False))
         self._start_at_login = bool(self._prefs.get("start_at_login", autostart_enabled_on_disk()))
         self._autostart_onboarding_done = bool(self._prefs.get("autostart_onboarding_done", False))
+        self._custom_command_template = str(self._prefs.get("custom_command_template", "") or "")
+        self._connect_command_templates = normalize_connect_templates(self._prefs.get("connect_command_templates"))
+        self._device_list.set_custom_command_template(self._custom_command_template)
+        self._device_list.set_connect_command_templates(self._connect_command_templates)
         if hasattr(self, "_close_tray_prefs_item") and hasattr(self, "_start_minimized_prefs_item"):
             self._close_tray_prefs_item.handler_block_by_func(self._on_close_tray_pref_toggled)
             self._start_minimized_prefs_item.handler_block_by_func(self._on_start_minimized_pref_toggled)
@@ -1164,6 +1318,9 @@ class MainWindow(Gtk.ApplicationWindow):
             "icon_sort_mode": self._device_list.icon_sort_mode,
             "type_overrides": self._manager.get_type_overrides(),
             "name_overrides": self._manager.get_name_overrides(),
+            "url_overrides": self._manager.get_url_overrides(),
+            "device_commands": self._manager.get_device_commands_overrides(),
+            "custom_command_overrides": self._manager.get_custom_command_overrides(),
             "location_overrides": self._manager.get_location_overrides(),
             "field_mapping_rules": self._manager.get_field_mapping_rules(),
             "location_options": normalize_location_options(self._location_options),
@@ -1176,6 +1333,8 @@ class MainWindow(Gtk.ApplicationWindow):
             "start_minimized_to_tray": bool(self._start_minimized_to_tray),
             "start_at_login": bool(self._start_at_login),
             "autostart_onboarding_done": bool(self._autostart_onboarding_done),
+            "custom_command_template": str(self._custom_command_template or ""),
+            "connect_command_templates": dict(self._connect_command_templates),
         }
         save_ui_preferences(prefs)
         self._discovery_cache = {
@@ -1243,9 +1402,7 @@ class MainWindow(Gtk.ApplicationWindow):
         ).start()
 
     def _refresh_notifications_menu_state(self) -> None:
-        enabled = self._notification_mode != "off"
-        if hasattr(self, "_notifications_item"):
-            self._notifications_item.set_sensitive(enabled)
+        pass
 
     def _refresh_icon_sort_menu_state(self) -> None:
         enabled = self._device_list.view_mode == "icons"

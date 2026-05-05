@@ -1,0 +1,9 @@
+{
+  "http": "xdg-open http://{ip}",
+  "https": "xdg-open https://{ip}",
+  "smb": "nemo smb://{ip}",
+  "ftp": "nemo ftp://{ip}",
+  "ssh": "x-terminal-emulator -e ssh -p {port} {ip}",
+  "telnet": "x-terminal-emulator -e nc {ip} {port}",
+  "sftp": "nemo sftp://{ip}"
+}
