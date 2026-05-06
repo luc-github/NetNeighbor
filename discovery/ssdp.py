@@ -506,22 +506,22 @@ class SSDPDiscovery(BaseDiscovery):
 
     def _infer_category(self, device_type: str) -> str:
         return {
-            "router": "Routers & Gateways",
-            "mediaserver": "Media Servers",
-            "printer": "Printers",
-            "networkprinter": "Printers",
-            "multifunction_printer": "Printers",
-            "smartspeaker": "Smart Speakers",
-            "smarttv": "Smart TVs",
-            "smartdevice": "Smart Devices",
-            "camera": "Cameras",
-            "homeappliance": "Home Appliances",
-            "cnc": "CNC Machines",
-            "3dprinter": "3D Printers",
-            "nas": "NAS / File Servers",
-            "computer": "Computers",
-            "unknown": "Unknown Devices",
-        }.get(device_type, "Unknown Devices")
+            "router": _("Routers & Gateways"),
+            "mediaserver": _("Media Servers"),
+            "printer": _("Printers"),
+            "networkprinter": _("Printers"),
+            "multifunction_printer": _("Printers"),
+            "smartspeaker": _("Smart Speakers"),
+            "smarttv": _("Smart TVs"),
+            "smartdevice": _("Smart Devices"),
+            "camera": _("Cameras"),
+            "homeappliance": _("Home Appliances"),
+            "cnc": _("CNC Machines"),
+            "3dprinter": _("3D Printers"),
+            "nas": _("NAS / File Servers"),
+            "computer": _("Computers"),
+            "unknown": _("Unknown Devices"),
+        }.get(device_type, _("Unknown Devices"))
 
     def _device_key(self, payload: dict) -> str:
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}

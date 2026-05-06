@@ -12,7 +12,7 @@ Neighborhood experience.
 - **mDNS** discovery with `zeroconf` (service browse, host-level aggregation, TXT/services details)
 - **WSD** (WS-Discovery) via PyPI `WSDiscovery` — Windows-compatible hosts and printers on UDP 3702
 - **NetBIOS** browse via `nmblookup` (Samba **client** tools) and optional **wsdd** cache — see runtime notes below
-- Discovery manager with in-memory device cache, cross-protocol merge rules (**MAC** from neighbor cache assists bundle merge), user overrides; details can show **IPv4 from ARP/neigh** when discovery only listed IPv6 for the same MAC
+- Discovery manager with in-memory device cache, cross-protocol merge rules (**MAC** from neighbor cache assists bundle merge), user overrides; details can show **IPv4 from ARP/neigh** when discovery only listed IPv6 for the same MAC; **instant startup** — previously-seen devices from the SSDP profile cache appear immediately at launch (< 100 ms) before live discovery completes
 - Main window: list + icon grid, categories, details dialogs, notifications (optional), **View → Preferences** persisted in `~/.config/netneighbor/ui_prefs.json`
 - **System tray** (Ayatana/AppIndicator or Gtk.StatusIcon fallback): **Open** / **Minimize to tray** / **Quit**, keep running when closing the window, optional **start minimized**, optional **session autostart**. Autostart `Exec=` adds **`--start-minimized-to-tray`** only in `~/.config/autostart/` — not in the menu launcher — see [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
 - When tray is active: client-side title bar **Maximize + Close** (window minimization to tray is via tray menu or close-with-tray; **F11** toggles fullscreen)
@@ -59,7 +59,7 @@ sudo apt update
 sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev pkg-config
 ```
 
-**Recommended on desktop** (NetBIOS names + system tray):
+NetBIOS name resolution and system tray support:
 
 ```bash
 sudo apt install -y samba-common-bin
@@ -67,7 +67,7 @@ sudo apt install -y gir1.2-ayatanaappindicator3-0.1   # typical on Mint/Ubuntu
 # or, on some setups: gir1.2-appindicator3-0.1
 ```
 
-NetNeighbor does **not** require Samba server daemons (`smbd` / `nmbd`) — only the **`nmblookup`** client from `samba-common-bin`.
+These are included automatically when installing the `.deb` package. NetNeighbor does **not** require Samba server daemons (`smbd` / `nmbd`) — only the **`nmblookup`** client from `samba-common-bin`.
 
 Python dependencies installed in the virtual environment:
 - `zeroconf`

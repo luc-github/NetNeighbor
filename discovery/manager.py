@@ -277,6 +277,7 @@ class DiscoveryManager:
 
     def start(self) -> None:
         self._logger.info("Starting discovery protocols: %s", [p.source for p in self._protocols])
+        self._emit_cached_devices()
         if not self._protocols:
             self._logger.warning("No discovery protocols enabled (check ~/.config/netneighbor/discovery.json)")
             return
@@ -523,6 +524,79 @@ class DiscoveryManager:
                 continue
             out[host] = dict(row)
         return out
+
+    def _emit_cached_devices(self) -> None:
+        """Pre-populate the device store from the SSDP profile disk cache before protocols start.
+
+        Iterates the cached SSDP profiles and emits each as a synthetic ``ssdp`` device so that
+        previously-seen devices appear in the UI immediately at startup — without waiting 5-15 s
+        for live discovery to respond.
+
+        Cache entries older than 24 h are skipped (same TTL as the cache GC).  Once live
+        protocol events arrive they overwrite these entries: a live SSDP row shares the same
+        Device key (``ssdp:udn:…`` when a UDN is present, else ``ssdp:{ip}:{port}``) and simply
+        replaces the pre-populated entry via the normal ``add_or_update_device`` pipeline.
+        """
+        _CACHE_MAX_AGE_S = 86_400  # 24 h
+        now = datetime.now(timezone.utc)
+        emitted = 0
+        for sip, row in self._ssdp_profile_cache_by_ip.items():
+            if not isinstance(row, dict):
+                continue
+            # TTL guard — skip entries not updated in the last 24 h.
+            updated_raw = row.get("updated_at")
+            if isinstance(updated_raw, str):
+                try:
+                    updated_dt = datetime.fromisoformat(updated_raw)
+                    if (now - updated_dt).total_seconds() > _CACHE_MAX_AGE_S:
+                        self._logger.debug("_emit_cached_devices: skipping stale entry ip=%s updated_at=%s", sip, updated_raw)
+                        continue
+                except ValueError:
+                    pass  # malformed timestamp → include the entry rather than skip it
+            name = self._ssdp_profile_display_name(row)
+            if not name:
+                name = f"Device ({sip})"
+            device_type = row.get("type") or "unknown"
+            if not isinstance(device_type, str):
+                device_type = "unknown"
+            device_category = row.get("category") or self._category_for_type(device_type)
+            if not isinstance(device_category, str):
+                device_category = self._category_for_type(device_type)
+            # Derive port from ssdp_location URL (e.g. "http://192.168.1.103:8008/…").
+            port = 0
+            ssdp_loc = row.get("ssdp_location")
+            if isinstance(ssdp_loc, str) and ssdp_loc.strip():
+                try:
+                    parsed = urlparse(ssdp_loc.strip())
+                    if parsed.port:
+                        port = parsed.port
+                except Exception:
+                    pass
+            # Build metadata mirrors a lean SSDP device event so hydration / details work.
+            metadata: dict = {"from_ssdp_cache": True}
+            xml_fields = row.get("xml_fields")
+            if isinstance(xml_fields, dict):
+                metadata["xml_fields"] = dict(xml_fields)
+            raw_xml = row.get("raw_xml")
+            if isinstance(raw_xml, str) and raw_xml.strip():
+                metadata["xml"] = raw_xml
+            if isinstance(ssdp_loc, str) and ssdp_loc.strip():
+                metadata["location"] = ssdp_loc.strip()
+            url = row.get("url")
+            device = Device(
+                name=name,
+                ip=sip,
+                port=port,
+                type=device_type,
+                category=device_category,
+                source="ssdp",
+                url=url if isinstance(url, str) and url.strip() else None,
+                metadata=metadata,
+                online=True,
+            )
+            self.add_or_update_device(device)
+            emitted += 1
+        self._logger.info("_emit_cached_devices: pre-populated %d device(s) from SSDP profile cache", emitted)
 
     def _ssdp_profile_display_name(self, row: dict) -> str:
         """Best-effort human label from persisted SSDP profile (disk cache)."""
@@ -2408,23 +2482,23 @@ class DiscoveryManager:
 
     def _category_for_type(self, device_type: str) -> str:
         return {
-            "router": "Routers & Gateways",
-            "mediaserver": "Media Servers",
-            "printer": "Printers",
-            "networkprinter": "Printers",
-            "multifunction_printer": "Printers",
-            "smartspeaker": "Smart Speakers",
-            "smarttv": "Smart TVs",
-            "smartdevice": "Smart Devices",
-            "camera": "Cameras",
-            "homeappliance": "Home Appliances",
-            "cnc": "CNC Machines",
-            "3dprinter": "3D Printers",
-            "nas": "NAS / File Servers",
-            "computer": "Computers",
-            "esp32": "ESP3D Devices",
-            "unknown": "Unknown Devices",
-        }.get(device_type, "Unknown Devices")
+            "router": _("Routers & Gateways"),
+            "mediaserver": _("Media Servers"),
+            "printer": _("Printers"),
+            "networkprinter": _("Printers"),
+            "multifunction_printer": _("Printers"),
+            "smartspeaker": _("Smart Speakers"),
+            "smarttv": _("Smart TVs"),
+            "smartdevice": _("Smart Devices"),
+            "camera": _("Cameras"),
+            "homeappliance": _("Home Appliances"),
+            "cnc": _("CNC Machines"),
+            "3dprinter": _("3D Printers"),
+            "nas": _("NAS / File Servers"),
+            "computer": _("Computers"),
+            "esp32": _("ESP3D Devices"),
+            "unknown": _("Unknown Devices"),
+        }.get(device_type, _("Unknown Devices"))
 
     def set_device_monitored(self, device_key: str, monitored: bool) -> None:
         device = self._devices.get(device_key)

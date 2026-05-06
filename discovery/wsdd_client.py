@@ -81,10 +81,10 @@ def _infer_type_and_category(types_csv: str) -> tuple[str, str]:
     t = (types_csv or "").lower()
     for hint in _COMPUTER_TYPE_HINTS:
         if hint in t:
-            return "computer", "Computers"
+            return "computer", _("Computers")
     if "print" in t or "scan" in t or "fax" in t:
-        return "multifunction_printer", "Printers"
-    return "unknown", "Unknown Devices"
+        return "multifunction_printer", _("Printers")
+    return "unknown", _("Unknown Devices")
 
 
 def _parse_list_response(text: str) -> list[tuple[str, str, str, str, str, str]]:

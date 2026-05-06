@@ -378,9 +378,12 @@ class DeviceDetailsDialog(Gtk.Dialog):
                 dlg = Gtk.MessageDialog(
                     transient_for=self, modal=True,
                     message_type=Gtk.MessageType.QUESTION,
-                    buttons=Gtk.ButtonsType.YES_NO,
+                    buttons=Gtk.ButtonsType.NONE,
                     text=msg,
                 )
+                dlg.add_button(_("No"), Gtk.ResponseType.NO)
+                dlg.add_button(_("Yes"), Gtk.ResponseType.YES)
+                dlg.set_default_response(Gtk.ResponseType.NO)
                 resp = dlg.run()
                 dlg.destroy()
                 return resp == Gtk.ResponseType.YES

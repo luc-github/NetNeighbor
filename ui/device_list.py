@@ -206,6 +206,7 @@ class DeviceList(Gtk.Box):
         )
         self._show_ip_in_device_list = bool(show_ip_in_device_list)
         self._location_options: list[str] = []
+        self._type_options: list[tuple[str, str]] = []  # (translated_label, slug)
         self._icon_source_overrides: dict[tuple[str, int], str] = {}
         self._custom_icon_overrides: dict[tuple[str, int], str] = {}
         self._remote_icon_cache: dict[str, GdkPixbuf.Pixbuf] = {}
@@ -309,6 +310,27 @@ class DeviceList(Gtk.Box):
             return
         self._icon_sort_mode = mode
         self._rebuild_icon_sections(self._filtered_devices)
+
+    def set_type_options(self, options: list[tuple[str, str]]) -> None:
+        """Set the type choices shown in the right-click 'Device type' submenu.
+
+        Each entry is a ``(translated_label, slug)`` pair.  The *Auto* entry is
+        always prepended automatically; callers should not include it.
+        """
+        seen_slugs: set[str] = set()
+        normalized: list[tuple[str, str]] = []
+        for item in options:
+            if not isinstance(item, (list, tuple)) or len(item) < 2:
+                continue
+            label = str(item[0]).strip()
+            slug = str(item[1]).strip().lower()
+            if not label or not slug:
+                continue
+            if slug in seen_slugs:
+                continue
+            seen_slugs.add(slug)
+            normalized.append((label, slug))
+        self._type_options = normalized
 
     def set_location_options(self, options: list[str]) -> None:
         normalized: list[str] = []
@@ -614,8 +636,7 @@ class DeviceList(Gtk.Box):
         type_item.set_submenu(type_menu)
         menu.append(type_item)
         current_type = bundle.primary.type.strip().lower() if isinstance(bundle.primary.type, str) else "unknown"
-        type_choices = [
-            (_("Auto"), None),
+        _default_type_choices: list[tuple[str, str | None]] = [
             (_("NAS"), "nas"),
             (_("Computer"), "computer"),
             (_("Router"), "router"),
@@ -631,6 +652,11 @@ class DeviceList(Gtk.Box):
             (_("CNC"), "cnc"),
             (_("3D printer"), "3dprinter"),
         ]
+        type_choices: list[tuple[str, str | None]] = [(_("Auto"), None)] + (
+            [(lbl, slug) for lbl, slug in self._type_options]
+            if self._type_options
+            else _default_type_choices
+        )
         known_types = {value for _label, value in type_choices if value is not None}
         for label, type_value in type_choices:
             item = Gtk.CheckMenuItem.new_with_label(label)

@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from gettext import gettext as _
 
 from model.device import Device
 
@@ -85,14 +84,14 @@ def with_aggregate_ports_field(fields: list[tuple[str, str]], *devices: Device |
 
     cleaned = [(k, v) for k, v in fields if _nk(k) not in skip]
     insert_idx = 0
-    for i, (k, _) in enumerate(cleaned):
+    for i, (k, _v) in enumerate(cleaned):
         if _nk(k) == "ip":
             insert_idx = i + 1
             break
     # Order IP → Type → Ports when Type row exists immediately after IP.
     if insert_idx < len(cleaned) and _nk(cleaned[insert_idx][0]) == "type":
         insert_idx += 1
-    return cleaned[:insert_idx] + [("Ports", aggregate_ports_display(*devices))] + cleaned[insert_idx:]
+    return cleaned[:insert_idx] + [(_("Ports"), aggregate_ports_display(*devices))] + cleaned[insert_idx:]
 
 
 def format_device_type_for_details(device: Device) -> str:
@@ -265,26 +264,26 @@ def build_ssdp_payload(device: Device) -> tuple[
     else:
         last_seen_text = _value_or_unavailable(device.last_seen)
     fields = [
-        ("IP", format_device_ip_for_details(device)),
-        ("Type", format_device_type_for_details(device)),
-        ("Ports", aggregate_ports_display(device)),
-        ("Location", _value_or_unavailable(metadata.get("user_location"))),
-        ("Last seen", last_seen_text),
-        ("Friendly name", _value_or_unavailable(xml_fields.get("friendlyName"))),
-        ("Information", _value_or_unavailable(metadata.get("information"))),
-        ("Manufacturer", _value_or_unavailable(xml_fields.get("manufacturer"))),
-        ("Manufacturer URL", _value_or_unavailable(xml_fields.get("manufacturerURL"))),
-        ("Model", _value_or_unavailable(xml_fields.get("modelName"))),
-        ("Model URL", _value_or_unavailable(xml_fields.get("modelURL"))),
-        ("MAC address", _value_or_unavailable(resolve_mac_for_device(device))),
+        (_("IP"), format_device_ip_for_details(device)),
+        (_("Type"), format_device_type_for_details(device)),
+        (_("Ports"), aggregate_ports_display(device)),
+        (_("Location"), _value_or_unavailable(metadata.get("user_location"))),
+        (_("Last seen"), last_seen_text),
+        (_("Friendly name"), _value_or_unavailable(xml_fields.get("friendlyName"))),
+        (_("Information"), _value_or_unavailable(metadata.get("information"))),
+        (_("Manufacturer"), _value_or_unavailable(xml_fields.get("manufacturer"))),
+        (_("Manufacturer URL"), _value_or_unavailable(xml_fields.get("manufacturerURL"))),
+        (_("Model"), _value_or_unavailable(xml_fields.get("modelName"))),
+        (_("Model URL"), _value_or_unavailable(xml_fields.get("modelURL"))),
+        (_("MAC address"), _value_or_unavailable(resolve_mac_for_device(device))),
     ]
     xml_location = metadata.get("location")
     xml_location_norm = xml_location if isinstance(xml_location, str) else None
     raw_xml = xml_data if isinstance(xml_data, str) and xml_data.strip() else None
     troubleshooting_fields: list[tuple[str, str]] = [
-        ("Serial number", _value_or_unavailable(xml_fields.get("serialNumber"))),
+        (_("Serial number"), _value_or_unavailable(xml_fields.get("serialNumber"))),
         (
-            "Unique identifier",
+            _("Unique identifier"),
             _value_or_unavailable(
                 xml_fields.get("UDN")
                 or xml_fields.get("uniqueIdentifier")
@@ -342,19 +341,19 @@ def build_mdns_payload(device: Device) -> tuple[list[tuple[str, str]], list[dict
     # xml_fields may be hydrated from the SSDP profile cache even on mDNS-only devices.
     xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
     fields = [
-        ("IP", format_device_ip_for_details(device)),
-        ("Type", format_device_type_for_details(device)),
-        ("Ports", aggregate_ports_display(device)),
-        ("Location", _value_or_unavailable(metadata.get("user_location"))),
-        ("Last seen", last_seen_text),
-        ("Friendly name", _value_or_unavailable(xml_fields.get("friendlyName"))),
-        ("Hostname", _value_or_unavailable(display_host)),
-        ("MAC address", _value_or_unavailable(resolve_mac_for_device(device))),
-        ("Manufacturer", _value_or_unavailable(xml_fields.get("manufacturer"))),
-        ("Manufacturer URL", _value_or_unavailable(xml_fields.get("manufacturerURL"))),
-        ("Model", _value_or_unavailable(xml_fields.get("modelName"))),
-        ("Model URL", _value_or_unavailable(xml_fields.get("modelURL"))),
-        ("Information", _value_or_unavailable(metadata.get("information"))),
+        (_("IP"), format_device_ip_for_details(device)),
+        (_("Type"), format_device_type_for_details(device)),
+        (_("Ports"), aggregate_ports_display(device)),
+        (_("Location"), _value_or_unavailable(metadata.get("user_location"))),
+        (_("Last seen"), last_seen_text),
+        (_("Friendly name"), _value_or_unavailable(xml_fields.get("friendlyName"))),
+        (_("Hostname"), _value_or_unavailable(display_host)),
+        (_("MAC address"), _value_or_unavailable(resolve_mac_for_device(device))),
+        (_("Manufacturer"), _value_or_unavailable(xml_fields.get("manufacturer"))),
+        (_("Manufacturer URL"), _value_or_unavailable(xml_fields.get("manufacturerURL"))),
+        (_("Model"), _value_or_unavailable(xml_fields.get("modelName"))),
+        (_("Model URL"), _value_or_unavailable(xml_fields.get("modelURL"))),
+        (_("Information"), _value_or_unavailable(metadata.get("information"))),
     ]
 
     for label, raw in summary_rows_from_rules(metadata):
@@ -606,7 +605,7 @@ def build_wsd_family_detail_fields(*devices: Device | None) -> list[tuple[str, s
     txt = _best_last_seen_among_devices(devs)
     if not txt or str(txt).strip().lower() == "unavailable":
         return rows
-    rows.append(("Last seen", txt))
+    rows.append((_("Last seen"), txt))
     return rows
 
 
@@ -627,7 +626,7 @@ def merge_ssdp_mdns_detail_fields(
 
     summary_norm_labels = summary_field_labels_norm(cached_mdns_rules())
 
-    ssdp_keys = {_norm_key(k) for k, _ in ssdp_fields}
+    ssdp_keys = {_norm_key(k) for k, _v in ssdp_fields}
     mdns_fallbacks_norm: dict[str, tuple[str, str]] = {}
     mdns_for_merge: list[tuple[str, str]] = []
     for key, value in mdns_fields:

@@ -442,7 +442,7 @@ class MDNSDiscovery(BaseDiscovery):
         type_name = self._infer_type_from_context(type_name, service_key, display_name, txt)
         category = self._category_for_type(
             type_name,
-            str(mapping.get("category", "Unknown Devices")) or "Unknown Devices",
+            str(mapping.get("category", _("Unknown Devices"))) or _("Unknown Devices"),
         )
         icon = mapping.get("icon")
         if not isinstance(icon, str):
@@ -489,7 +489,7 @@ class MDNSDiscovery(BaseDiscovery):
         type_name = self._infer_type_from_context(type_name, service_key, self._infer_display_name(name, {}), {})
         category = self._category_for_type(
             type_name,
-            str(mapping.get("category", "Unknown Devices")) or "Unknown Devices",
+            str(mapping.get("category", _("Unknown Devices"))) or _("Unknown Devices"),
         )
         icon = mapping.get("icon")
         if not isinstance(icon, str):
@@ -771,7 +771,7 @@ class MDNSDiscovery(BaseDiscovery):
                 "ip": "0.0.0.0",
                 "port": 0,
                 "type": "unknown",
-                "category": "Unknown Devices",
+                "category": _("Unknown Devices"),
                 "source": "mdns",
                 "url": None,
                 "metadata": {"service": "_mdns._udp.local.", "txt": {}, "services": []},
@@ -871,7 +871,7 @@ class MDNSDiscovery(BaseDiscovery):
             icon_out = self._icon_for_type(agg_type)
         elif self._aggregate_type_rank(agg_type) > self._aggregate_type_rank(seed_type):
             icon_out = self._icon_for_type(agg_type)
-        category = self._category_for_type(agg_type, representative.get("category", "Unknown Devices"))
+        category = self._category_for_type(agg_type, representative.get("category", _("Unknown Devices")))
 
         rep_svc = str(rep_metadata.get("service", ""))
         self._logger.debug(
@@ -913,25 +913,25 @@ class MDNSDiscovery(BaseDiscovery):
 
     def _category_for_type(self, device_type: str, fallback: str) -> str:
         return {
-            "router": "Routers & Gateways",
-            "mediaserver": "Media Servers",
-            "scanner": "Printers",
-            "printer": "Printers",
-            "networkprinter": "Printers",
-            "multifunction_printer": "Printers",
-            "smartspeaker": "Smart Speakers",
-            "smarttv": "Smart TVs",
-            "smartdevice": "Smart Devices",
-            "camera": "Cameras",
-            "homeappliance": "Home Appliances",
-            "cnc": "CNC Machines",
-            "3dprinter": "3D Printers",
-            "nas": "NAS / File Servers",
-            "computer": "Computers",
-            "esp32": "ESP3D Devices",
-            "http": "Unknown Devices",
-            "unknown": "Unknown Devices",
-        }.get(device_type, fallback or "Unknown Devices")
+            "router": _("Routers & Gateways"),
+            "mediaserver": _("Media Servers"),
+            "scanner": _("Printers"),
+            "printer": _("Printers"),
+            "networkprinter": _("Printers"),
+            "multifunction_printer": _("Printers"),
+            "smartspeaker": _("Smart Speakers"),
+            "smarttv": _("Smart TVs"),
+            "smartdevice": _("Smart Devices"),
+            "camera": _("Cameras"),
+            "homeappliance": _("Home Appliances"),
+            "cnc": _("CNC Machines"),
+            "3dprinter": _("3D Printers"),
+            "nas": _("NAS / File Servers"),
+            "computer": _("Computers"),
+            "esp32": _("ESP3D Devices"),
+            "http": _("Unknown Devices"),
+            "unknown": _("Unknown Devices"),
+        }.get(device_type, fallback or _("Unknown Devices"))
 
     def _icon_for_type(self, device_type: str) -> str | None:
         return {

@@ -51,6 +51,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._discovery_cache = load_discovery_cache()
         self._notification_history: list[dict[str, str]] = []
         self._location_options: list[str] = []
+        self._type_options: list[dict] = []  # [{"label": str, "slug": str}, ...]
         self._auto_add_discovered_locations: bool = True
         self._defer_persist_cleaned_location_prefs = False
         self._startup_refresh_timer_ids: list[int] = []
@@ -158,6 +159,9 @@ class MainWindow(Gtk.ApplicationWindow):
         locations_item = Gtk.MenuItem.new_with_label(_("Location presets"))
         locations_item.connect("activate", self._on_locations_presets_activate)
         preferences_menu.append(locations_item)
+        types_item = Gtk.MenuItem.new_with_label(_("Type presets"))
+        types_item.connect("activate", self._on_type_presets_activate)
+        preferences_menu.append(types_item)
         preferences_menu.append(Gtk.SeparatorMenuItem())
 
         self._close_tray_prefs_item = Gtk.CheckMenuItem.new_with_label(
@@ -714,6 +718,177 @@ class MainWindow(Gtk.ApplicationWindow):
             self._persist_ui_preferences()
         dialog.destroy()
 
+    def _default_type_options(self) -> list[dict]:
+        """Default list of device type presets (translatable labels with stable slugs)."""
+        return [
+            {"label": _("NAS"), "slug": "nas"},
+            {"label": _("Computer"), "slug": "computer"},
+            {"label": _("Router"), "slug": "router"},
+            {"label": _("Media server"), "slug": "mediaserver"},
+            {"label": _("Printer"), "slug": "printer"},
+            {"label": _("Multifunction printer"), "slug": "multifunction_printer"},
+            {"label": _("Printer (network / IPP)"), "slug": "networkprinter"},
+            {"label": _("SmartSpeaker"), "slug": "smartspeaker"},
+            {"label": _("SmartTV"), "slug": "smarttv"},
+            {"label": _("SmartDevice"), "slug": "smartdevice"},
+            {"label": _("Camera"), "slug": "camera"},
+            {"label": _("HomeAppliance"), "slug": "homeappliance"},
+            {"label": _("CNC"), "slug": "cnc"},
+            {"label": _("3D printer"), "slug": "3dprinter"},
+        ]
+
+    def _on_type_presets_activate(self, _menu_item: Gtk.MenuItem) -> None:
+        dialog = Gtk.Dialog(title=_("Type presets"), transient_for=self, modal=True)
+        prepare_gtk_dialog(dialog)
+        dialog.set_default_size(500, 440)
+        content = dialog.get_content_area()
+        content.set_border_width(8)
+        label = Gtk.Label(
+            label=_("Manage device type presets shown in the right-click menu."),
+            xalign=0.0,
+        )
+        label.set_line_wrap(True)
+        content.pack_start(label, False, False, 4)
+
+        # Two-column store: display label | slug
+        presets_store = Gtk.ListStore(str, str)
+        initial_presets = list(self._type_options)
+        if not initial_presets:
+            initial_presets = self._default_type_options()
+        for entry in initial_presets:
+            if isinstance(entry, dict):
+                lbl = str(entry.get("label", "")).strip()
+                slg = str(entry.get("slug", "")).strip()
+                if lbl and slg:
+                    presets_store.append([lbl, slg])
+        presets_view = Gtk.TreeView(model=presets_store)
+        presets_view.set_headers_visible(True)
+        presets_view.get_selection().set_mode(Gtk.SelectionMode.SINGLE)
+        presets_view.append_column(Gtk.TreeViewColumn(_("Label"), Gtk.CellRendererText(), text=0))
+        presets_view.append_column(Gtk.TreeViewColumn(_("Type ID"), Gtk.CellRendererText(), text=1))
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_hexpand(True)
+        scroll.set_vexpand(True)
+        scroll.add(presets_view)
+        content.pack_start(scroll, True, True, 4)
+
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        add_button = Gtk.Button.new_with_label(_("Add"))
+        rename_button = Gtk.Button.new_with_label(_("Rename"))
+        remove_button = Gtk.Button.new_with_label(_("Remove"))
+        restore_button = Gtk.Button.new_with_label(_("Restore defaults"))
+        controls.pack_start(add_button, False, False, 0)
+        controls.pack_start(rename_button, False, False, 0)
+        controls.pack_start(remove_button, False, False, 0)
+        controls.pack_end(restore_button, False, False, 0)
+        content.pack_start(controls, False, False, 2)
+
+        def _prompt_type(title: str, initial_label: str = "", initial_slug: str = "") -> tuple[str, str] | None:
+            prompt = Gtk.Dialog(title=title, transient_for=dialog, modal=True)
+            prepare_gtk_dialog(prompt)
+            prompt.set_default_size(340, -1)
+            area = prompt.get_content_area()
+            area.set_border_width(8)
+            grid = Gtk.Grid()
+            grid.set_column_spacing(8)
+            grid.set_row_spacing(6)
+            lbl_label = Gtk.Label(label=_("Label:"), xalign=1.0)
+            lbl_slug = Gtk.Label(label=_("Type ID:"), xalign=1.0)
+            entry_label = Gtk.Entry()
+            entry_slug = Gtk.Entry()
+            entry_label.set_text(initial_label)
+            entry_label.select_region(0, -1)
+            entry_slug.set_text(initial_slug)
+            entry_slug.set_placeholder_text(_("e.g. nas, router, camera…"))
+            grid.attach(lbl_label, 0, 0, 1, 1)
+            grid.attach(entry_label, 1, 0, 1, 1)
+            grid.attach(lbl_slug, 0, 1, 1, 1)
+            grid.attach(entry_slug, 1, 1, 1, 1)
+            area.pack_start(grid, False, False, 0)
+            prompt.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+            prompt.add_button(_("OK"), Gtk.ResponseType.OK)
+            prompt.show_all()
+            resp = prompt.run()
+            result = None
+            if resp == Gtk.ResponseType.OK:
+                lv = entry_label.get_text().strip()
+                sv = entry_slug.get_text().strip().lower().replace(" ", "_")
+                if lv and sv:
+                    result = (lv, sv)
+            prompt.destroy()
+            return result
+
+        def _selected_iter():
+            _model, tree_iter = presets_view.get_selection().get_selected()
+            return tree_iter
+
+        def _existing_slugs() -> set[str]:
+            slugs: set[str] = set()
+            it = presets_store.get_iter_first()
+            while it is not None:
+                slugs.add(presets_store.get_value(it, 1))
+                it = presets_store.iter_next(it)
+            return slugs
+
+        def _on_add_clicked(_btn: Gtk.Button) -> None:
+            result = _prompt_type(_("Add type preset"))
+            if not result:
+                return
+            new_label, new_slug = result
+            if new_slug in _existing_slugs():
+                return
+            presets_store.append([new_label, new_slug])
+
+        def _on_rename_clicked(_btn: Gtk.Button) -> None:
+            it = _selected_iter()
+            if it is None:
+                return
+            old_label = presets_store.get_value(it, 0)
+            old_slug = presets_store.get_value(it, 1)
+            result = _prompt_type(_("Rename type preset"), old_label, old_slug)
+            if not result:
+                return
+            new_label, new_slug = result
+            if new_slug != old_slug and new_slug in _existing_slugs():
+                return
+            presets_store.set_value(it, 0, new_label)
+            presets_store.set_value(it, 1, new_slug)
+
+        def _on_remove_clicked(_btn: Gtk.Button) -> None:
+            it = _selected_iter()
+            if it is None:
+                return
+            presets_store.remove(it)
+
+        def _on_restore_clicked(_btn: Gtk.Button) -> None:
+            presets_store.clear()
+            for entry in self._default_type_options():
+                presets_store.append([entry["label"], entry["slug"]])
+
+        add_button.connect("clicked", _on_add_clicked)
+        rename_button.connect("clicked", _on_rename_clicked)
+        remove_button.connect("clicked", _on_remove_clicked)
+        restore_button.connect("clicked", _on_restore_clicked)
+
+        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        dialog.add_button(_("Save"), Gtk.ResponseType.OK)
+        dialog.show_all()
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            new_options: list[dict] = []
+            it = presets_store.get_iter_first()
+            while it is not None:
+                lv = presets_store.get_value(it, 0)
+                sv = presets_store.get_value(it, 1)
+                if isinstance(lv, str) and isinstance(sv, str) and lv.strip() and sv.strip():
+                    new_options.append({"label": lv.strip(), "slug": sv.strip()})
+                it = presets_store.iter_next(it)
+            self._type_options = new_options
+            self._device_list.set_type_options([(e["label"], e["slug"]) for e in self._type_options])
+            self._persist_ui_preferences()
+        dialog.destroy()
+
     def _apply_location_preset_changes(
         self, old_options: list[str], new_options: list[str], rename_map: dict[str, str]
     ) -> None:
@@ -778,9 +953,12 @@ class MainWindow(Gtk.ApplicationWindow):
                 dlg = Gtk.MessageDialog(
                     transient_for=_w, modal=True,
                     message_type=Gtk.MessageType.QUESTION,
-                    buttons=Gtk.ButtonsType.YES_NO,
+                    buttons=Gtk.ButtonsType.NONE,
                     text=_("Reset this command to its default value?"),
                 )
+                dlg.add_button(_("No"), Gtk.ResponseType.NO)
+                dlg.add_button(_("Yes"), Gtk.ResponseType.YES)
+                dlg.set_default_response(Gtk.ResponseType.NO)
                 if dlg.run() == Gtk.ResponseType.YES:
                     _e.set_text(_v)
                 dlg.destroy()
@@ -802,9 +980,12 @@ class MainWindow(Gtk.ApplicationWindow):
             dlg = Gtk.MessageDialog(
                 transient_for=_w, modal=True,
                 message_type=Gtk.MessageType.QUESTION,
-                buttons=Gtk.ButtonsType.YES_NO,
+                buttons=Gtk.ButtonsType.NONE,
                 text=_("Clear the global custom command?"),
             )
+            dlg.add_button(_("No"), Gtk.ResponseType.NO)
+            dlg.add_button(_("Yes"), Gtk.ResponseType.YES)
+            dlg.set_default_response(Gtk.ResponseType.NO)
             if dlg.run() == Gtk.ResponseType.YES:
                 _e.set_text("")
             dlg.destroy()
@@ -820,13 +1001,13 @@ class MainWindow(Gtk.ApplicationWindow):
         hint = Gtk.Label(xalign=0.0)
         hint.set_markup(
             "<small>"
-            "<b>{url}</b> full address   "
-            "<b>{ip}</b> device IP   "
-            "<b>{port}</b> service port   "
-            "<b>{name}</b> device name   "
-            "<b>{type}</b> device type   "
-            "<b>{category}</b> category"
-            "</small>"
+            + "<b>{url}</b> " + _("full address") + "   "
+            + "<b>{ip}</b> " + _("device IP") + "   "
+            + "<b>{port}</b> " + _("service port") + "   "
+            + "<b>{name}</b> " + _("device name") + "   "
+            + "<b>{type}</b> " + _("device type") + "   "
+            + "<b>{category}</b> " + _("category")
+            + "</small>"
         )
         hint.set_line_wrap(True)
         hint.set_margin_start(2)
@@ -848,10 +1029,40 @@ class MainWindow(Gtk.ApplicationWindow):
             self._persist_ui_preferences()
         dialog.destroy()
 
+    @staticmethod
+    def _relabel_about_dialog_buttons(dialog: Gtk.AboutDialog) -> None:
+        """Relabel AboutDialog built-in buttons with translated strings.
+
+        GTK creates these buttons internally (labels like 'C_redits', '_License',
+        '_Close' with mnemonic markers) and translates them via its own catalog.
+        On setups where GTK's locale is not picked up we relabel them explicitly.
+        """
+        _label_map = {
+            "credits": _("Credits"),
+            "license": _("License"),
+            "close":   _("Close"),
+        }
+        try:
+            action_area = dialog.get_action_area()
+        except Exception:
+            return
+        if action_area is None:
+            return
+        for btn in action_area.get_children():
+            if not isinstance(btn, (Gtk.Button,)):
+                continue
+            raw = btn.get_label() or ""
+            # Strip GTK mnemonic underscore (e.g. "C_redits" → "Credits")
+            key = raw.replace("_", "").lower()
+            if key in _label_map:
+                btn.set_label(_label_map[key])
+
     def _on_about_activate(self, _menu_item: Gtk.MenuItem) -> None:
         _LOG.debug("About menu clicked")
         dialog = Gtk.AboutDialog(transient_for=self, modal=True)
         dialog.set_default_response(Gtk.ResponseType.CLOSE)
+        # Relabel built-in buttons after they are realized (GTK creates them lazily)
+        dialog.connect("realize", self._relabel_about_dialog_buttons)
         close_button = dialog.get_widget_for_response(Gtk.ResponseType.CLOSE)
         if close_button is not None:
             close_button.connect("clicked", self._on_about_close_clicked)
@@ -1219,6 +1430,18 @@ class MainWindow(Gtk.ApplicationWindow):
         else:
             self._auto_add_discovered_locations = True
         self._device_list.set_location_options(self._location_options)
+        type_options_raw = self._prefs.get("type_options")
+        if isinstance(type_options_raw, list):
+            self._type_options = [
+                {"label": str(e.get("label", "")).strip(), "slug": str(e.get("slug", "")).strip()}
+                for e in type_options_raw
+                if isinstance(e, dict)
+                and str(e.get("label", "")).strip()
+                and str(e.get("slug", "")).strip()
+            ]
+        else:
+            self._type_options = []
+        self._device_list.set_type_options([(e["label"], e["slug"]) for e in self._type_options])
         self._device_list.set_icon_sort_mode(icon_sort_mode)
         type_overrides = self._prefs.get("type_overrides")
         if isinstance(type_overrides, dict):
@@ -1325,6 +1548,7 @@ class MainWindow(Gtk.ApplicationWindow):
             "field_mapping_rules": self._manager.get_field_mapping_rules(),
             "location_options": normalize_location_options(self._location_options),
             "auto_add_discovered_locations": bool(self._auto_add_discovered_locations),
+            "type_options": list(self._type_options),
             "monitored_overrides": self._manager.get_monitored_overrides(),
             "notification_mode": self._notification_mode,
             "selected_category": self._selected_category,

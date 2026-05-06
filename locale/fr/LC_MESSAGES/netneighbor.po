@@ -1,8 +1,9 @@
+#
 msgid ""
 msgstr ""
 "Project-Id-Version: NetNeighbor 0.1.0-dev\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-05 11:49+0800\n"
+"POT-Creation-Date: 2026-05-06 22:13+0800\n"
 "PO-Revision-Date: 2026-04-29 13:30+0800\n"
 "Last-Translator: Luc\n"
 "Language-Team: French\n"
@@ -12,991 +13,1181 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: ui/device_details.py:63 ui/main_window.py:930
-msgid "Close"
-msgstr "Fermer"
-
-#: ui/device_details.py:132 ui/device_details.py:270 ui/device_details.py:1045
-msgid "Name"
-msgstr "Nom"
-
-#: ui/device_details.py:133 ui/device_details.py:364
-msgid "IP address"
-msgstr "Adresse IP"
-
-#: ui/device_details.py:134 ui/device_details.py:795 ui/device_list.py:584
-#, fuzzy
-msgid "Location"
-msgstr "Emplacement XML"
-
-#: ui/device_details.py:135 ui/device_list.py:233
-msgid "Type"
-msgstr ""
-
-#: ui/device_details.py:186
-#, fuzzy
-msgid "Overview"
-msgstr "Service"
-
-#: ui/device_details.py:186
-msgid "Device details"
-msgstr "Details appareil"
-
-#: ui/device_details.py:196
-msgid "Per-device field mapping rules. Select rows and remove if needed."
-msgstr ""
-
-#: ui/device_details.py:206 ui/device_details.py:718
-msgid "Select"
-msgstr ""
-
-#: ui/device_details.py:207 ui/device_details.py:242
-msgid "Target"
-msgstr "Cible"
-
-#: ui/device_details.py:208
-msgid "Source field"
-msgstr ""
-
-#: ui/device_details.py:217
-msgid "Remove selected"
-msgstr ""
-
-#: ui/device_details.py:220
-msgid "Remove all"
-msgstr ""
-
-#: ui/device_details.py:226
-msgid "Rules"
-msgstr ""
-
-#: ui/device_details.py:234 ui/device_details.py:249
-msgid "Services"
-msgstr "Services"
-
-#: ui/device_details.py:241 ui/device_details.py:969
-msgid "Service"
-msgstr "Service"
-
-#: ui/device_details.py:243
-msgid "Port"
-msgstr "Port"
-
-#: ui/device_details.py:256
-msgid "Field"
-msgstr "Champ"
-
-#: ui/device_details.py:257 ui/device_details.py:1046
-msgid "Value"
-msgstr "Valeur"
-
-#: ui/device_details.py:263
-msgid "Troubleshooting Information"
-msgstr "Informations de dépannage"
-
-#: ui/device_details.py:271
-msgid "Record"
-msgstr "Enregistrement"
-
-#: ui/device_details.py:277
-msgid "TXT records"
-msgstr "Enregistrements TXT"
-
-#: ui/device_details.py:292
-msgid "Copy to clipboard"
-msgstr "Copier dans le presse-papiers"
-
-#: ui/device_details.py:311
-msgid "Device data"
-msgstr "Donnees appareil"
-
-#: ui/device_details.py:335
-msgid "Custom connections"
-msgstr ""
-
-#: ui/device_details.py:359
-msgid "IP:"
-msgstr ""
-
-#: ui/device_details.py:367
-#, fuzzy
-msgid "Port:"
-msgstr "Port"
-
-#: ui/device_details.py:443 ui/main_window.py:775
-msgid "HTTP"
-msgstr ""
-
-#: ui/device_details.py:450 ui/main_window.py:777
-msgid "SMB"
-msgstr ""
-
-#: ui/device_details.py:451 ui/main_window.py:778
-msgid "FTP"
-msgstr ""
-
-#: ui/device_details.py:452 ui/main_window.py:779
-msgid "SSH"
-msgstr ""
-
-#: ui/device_details.py:474 ui/main_window.py:809
-msgid "Custom command"
-msgstr ""
-
-#: ui/device_details.py:481
-#, python-brace-format
-msgid "e.g. x-terminal-emulator -e ssh -p {port} {ip}"
-msgstr ""
-
-#: ui/device_details.py:501 ui/main_window.py:820 ui/main_window.py:928
-msgid "Clear"
-msgstr ""
-
-#: ui/device_details.py:502
-msgid "Remove per-device override (use global command)"
-msgstr ""
-
-#: ui/device_details.py:513
-#, python-brace-format
-msgid "Placeholders: {ip} {port} {name} {type} {category} {url}"
-msgstr ""
-
-#: ui/device_details.py:529
-msgid "Use icon from:"
-msgstr ""
-
-#: ui/device_details.py:531
-msgid "System"
-msgstr ""
-
-#: ui/device_details.py:533
-#, fuzzy
-msgid "From device"
-msgstr "Tous les appareils"
-
-#: ui/device_details.py:536
-msgid "Custom"
-msgstr ""
-
-#: ui/device_details.py:548
-msgid "Open custom icons folder"
-msgstr ""
-
-#: ui/device_details.py:571 ui/device_list.py:566
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1199
-msgid "Options"
-msgstr ""
-
-#: ui/device_details.py:617 ui/device_details.py:970 ui/device_details.py:971
-#: ui/device_details.py:1104
-msgid "unavailable"
-msgstr ""
-
-#: ui/device_details.py:620 ui/device_details.py:626
-msgid "none"
-msgstr ""
-
-#: ui/device_details.py:676
-msgid "Choose icon"
-msgstr ""
-
-#: ui/device_details.py:717 ui/device_list.py:701 ui/main_window.py:647
-#: ui/main_window.py:709 ui/main_window.py:837
-msgid "Cancel"
-msgstr ""
-
-#: ui/device_details.py:794
-msgid "Friendly name"
-msgstr ""
-
-#: ui/device_details.py:796
-msgid "Information"
-msgstr "Informations"
-
-#: ui/device_details.py:801
-#, python-brace-format
-msgid "Use as {target}"
-msgstr ""
-
-#: ui/device_details.py:806
-#, python-brace-format
-msgid "Remove {target} rule"
-msgstr ""
-
-#: ui/device_details.py:823
-msgid "Rule saved"
-msgstr ""
-
-#: ui/device_details.py:833
-msgid "Rule removed"
-msgstr ""
-
-#: ui/device_details.py:877
-msgid "Selected rules removed"
-msgstr ""
-
-#: ui/device_details.py:889
-msgid "All rules removed"
-msgstr ""
-
-#: ui/device_details.py:1037
-#, fuzzy
-msgid "No TXT records"
-msgstr "Enregistrements TXT"
-
-#: ui/device_list.py:232
-#, fuzzy
-msgid "Ports"
-msgstr "Port"
-
-#: ui/device_list.py:416 ui/main_window.py:144
-msgid "All devices"
-msgstr "Tous les appareils"
-
-#: ui/device_list.py:440 ui/device_list.py:442 ui/device_list.py:443
-#: ui/device_list.py:474 ui/device_list.py:1565 ui/main_window.py:1115
-#: ui/main_window.py:1148 ui/main_window.py:1152 ui/main_window.py:1153
-#, fuzzy
-msgid "No location"
-msgstr "Emplacement XML"
-
-#: ui/device_list.py:525
-msgid ""
-"Provisional IPv6 identity — highlighted row pulses while discovery matches "
-"hostname / IPv4."
-msgstr ""
-
-#: ui/device_list.py:528
-msgid "Fetching device icon in the background — tile pulses until it arrives."
-msgstr ""
-
-#: ui/device_list.py:549
-#, python-brace-format
-msgid "Open ({label})"
-msgstr ""
-
-#: ui/device_list.py:554
-#, python-brace-format
-msgid "Connect to {label}"
-msgstr ""
-
-#: ui/device_list.py:559
-msgid "Run custom command"
-msgstr ""
-
-#: ui/device_list.py:563
-msgid "Details"
-msgstr "Details"
-
-#: ui/device_list.py:571
-msgid "Unfollow"
-msgstr "Ne plus surveiller"
-
-#: ui/device_list.py:575
-msgid "Monitor"
-msgstr "Surveiller"
-
-#: ui/device_list.py:579 ui/main_window.py:626
-msgid "Rename"
-msgstr ""
-
-#: ui/device_list.py:595 ui/device_list.py:614
-msgid "Auto"
-msgstr "Auto"
-
-#: ui/device_list.py:608
-msgid "Device type"
-msgstr "Type d'appareil"
-
-#: ui/device_list.py:615 utils/details_payload.py:118
-msgid "NAS"
-msgstr "NAS"
-
-#: ui/device_list.py:616 utils/details_payload.py:119
-msgid "Computer"
-msgstr "Ordinateur"
-
-#: ui/device_list.py:617 utils/details_payload.py:106
-msgid "Router"
-msgstr "Routeur"
-
-#: ui/device_list.py:618 utils/details_payload.py:107
-msgid "Media server"
-msgstr "Serveur multimedia"
-
-#: ui/device_list.py:619 utils/details_payload.py:108
-#: utils/details_payload.py:109
-msgid "Printer"
-msgstr "Imprimante"
-
-#: ui/device_list.py:620 utils/details_payload.py:110
-msgid "Multifunction printer"
-msgstr ""
-
-#: ui/device_list.py:621
-msgid "Printer (network / IPP)"
-msgstr ""
-
-#: ui/device_list.py:622
-msgid "SmartSpeaker"
-msgstr "Enceinte intelligente"
-
-#: ui/device_list.py:623
-msgid "SmartTV"
-msgstr "SmartTV"
-
-#: ui/device_list.py:624
-msgid "SmartDevice"
-msgstr "SmartDevice"
-
-#: ui/device_list.py:625 utils/details_payload.py:114
-msgid "Camera"
-msgstr "Camera"
-
-#: ui/device_list.py:626
-msgid "HomeAppliance"
-msgstr "HomeAppliance"
-
-#: ui/device_list.py:627 utils/details_payload.py:116
-msgid "CNC"
-msgstr "CNC"
-
-#: ui/device_list.py:628 utils/details_payload.py:117
-msgid "3D printer"
-msgstr "Imprimante 3D"
-
-#: ui/device_list.py:689
-msgid "Rename device"
-msgstr ""
-
-#: ui/device_list.py:694
-msgid "Custom name"
-msgstr ""
-
-#: ui/device_list.py:700 ui/main_window.py:789
-msgid "Reset"
-msgstr ""
-
-#: ui/device_list.py:702 ui/main_window.py:297 ui/main_window.py:710
-#: ui/main_window.py:838
-msgid "Save"
-msgstr ""
-
-#: ui/device_list.py:745 ui/device_list.py:793 ui/device_list.py:967
-#, python-brace-format
-msgid "Could not start the command: {error}"
-msgstr ""
-
-#: ui/device_list.py:788
-msgid "Could not parse the custom command (check placeholders)."
-msgstr ""
-
-#: ui/device_list.py:903
-msgid "Show raw XML"
-msgstr "Afficher le XML brut"
-
-#: ui/main_window.py:87
+#: ui/main_window.py:88
 msgid "View"
 msgstr "Affichage"
 
-#: ui/main_window.py:92
+#: ui/main_window.py:93
 msgid "Reload"
 msgstr "Recharger"
 
-#: ui/main_window.py:107
+#: ui/main_window.py:108
 msgid "Display:"
-msgstr ""
+msgstr "Affichage :"
 
-#: ui/main_window.py:111 ui/main_window.py:882
+#: ui/main_window.py:112 ui/main_window.py:1094
 msgid "Icons"
 msgstr "Icônes"
 
-#: ui/main_window.py:112
+#: ui/main_window.py:113
 msgid "List"
 msgstr "Liste"
 
-#: ui/main_window.py:119
+#: ui/main_window.py:120
 msgid "Arrange:"
-msgstr ""
+msgstr "Organiser :"
 
-#: ui/main_window.py:122
+#: ui/main_window.py:123
 msgid "Unsorted"
-msgstr ""
+msgstr "Non trié"
 
-#: ui/main_window.py:124
+#: ui/main_window.py:125
 msgid "by Type"
-msgstr ""
+msgstr "par type"
 
-#: ui/main_window.py:127
-#, fuzzy
+#: ui/main_window.py:128
 msgid "by Location"
-msgstr "Emplacement XML"
+msgstr "par localisation"
 
-#: ui/main_window.py:137
+#: ui/main_window.py:138
 msgid "Preferences"
 msgstr "Preferences"
 
-#: ui/main_window.py:142
+#: ui/main_window.py:143
 msgid "Notifications off"
 msgstr "Notifications désactivées"
 
-#: ui/main_window.py:143
+#: ui/main_window.py:144
 msgid "Monitored devices only"
 msgstr "Appareils surveillés uniquement"
 
-#: ui/main_window.py:158 ui/main_window.py:583
-msgid "Location presets"
-msgstr ""
+#: ui/main_window.py:145 ui/device_list.py:438
+msgid "All devices"
+msgstr "Tous les appareils"
 
-#: ui/main_window.py:164
+#: ui/main_window.py:159 ui/main_window.py:582
+msgid "Location presets"
+msgstr "Présets d'emplacement"
+
+#: ui/main_window.py:162 ui/main_window.py:741
+msgid "Type presets"
+msgstr "Présets de type"
+
+#: ui/main_window.py:168
 msgid "Keep running in tray when closing window"
 msgstr ""
+"Continuer à s'exécuter dans la barre d'état système lors de la fermeture de "
+"la fenêtre"
 
-#: ui/main_window.py:170
+#: ui/main_window.py:174
 msgid "Start minimized to tray"
-msgstr ""
+msgstr "Démarrer réduit dans la barre d'état système"
 
-#: ui/main_window.py:175
+#: ui/main_window.py:179
 msgid "Start NetNeighbor when logging in"
-msgstr ""
+msgstr "Démarrer NetNeighbor lors de la connexion"
 
-#: ui/main_window.py:181 ui/main_window.py:383
+#: ui/main_window.py:185 ui/main_window.py:382
 msgid "Quit"
-msgstr ""
-
-#: ui/main_window.py:194
-msgid "Tools"
-msgstr ""
+msgstr "Quitter"
 
 #: ui/main_window.py:198
-msgid "External applications…"
-msgstr ""
+msgid "Tools"
+msgstr "Outils"
 
-#: ui/main_window.py:201
-#, fuzzy
-msgid "Notifications history"
-msgstr "Notifications désactivées"
+#: ui/main_window.py:202
+msgid "External applications…"
+msgstr "Applications externes…"
 
 #: ui/main_window.py:205
+msgid "Notifications history"
+msgstr "Historique des notifications"
+
+#: ui/main_window.py:209
 msgid "Help"
 msgstr "Aide"
 
-#: ui/main_window.py:210
+#: ui/main_window.py:214
 msgid "About"
 msgstr "A propos"
 
-#: ui/main_window.py:290
+#: ui/main_window.py:289
 msgid "Session startup"
-msgstr ""
+msgstr "Démarrage de session"
 
-#: ui/main_window.py:296
+#: ui/main_window.py:295
 msgid "Not now"
-msgstr ""
+msgstr "Pas maintenant"
 
-#: ui/main_window.py:305
+#: ui/main_window.py:296 ui/main_window.py:709 ui/main_window.py:875
+#: ui/main_window.py:1020 ui/device_list.py:732
+msgid "Save"
+msgstr "Enregistrer"
+
+#: ui/main_window.py:304
 msgid "Run NetNeighbor in the background?"
-msgstr ""
+msgstr "Exécuter NetNeighbor en arrière-plan ?"
 
-#: ui/main_window.py:309
+#: ui/main_window.py:308
 msgid ""
 "You can keep NetNeighbor in the system tray when you close the window. "
-"Starting it with your session keeps LAN discovery running in the background. "
-"You can change this anytime under View → Preferences."
+"Starting it with your session keeps LAN discovery running in the background."
+" You can change this anytime under View → Preferences."
 msgstr ""
+"Vous pouvez garder NetNeighbor dans la barre système lorsque vous fermez la "
+"fenêtre. Le démarrer avec votre session maintient la découverte LAN active "
+"en arrière-plan. Vous pouvez modifier ceci à tout moment dans Affichage → "
+"Préférences."
 
-#: ui/main_window.py:318
+#: ui/main_window.py:317
 msgid "Launch NetNeighbor when I log in"
-msgstr ""
+msgstr "Lancer NetNeighbor à la connexion"
 
-#: ui/main_window.py:326
+#: ui/main_window.py:325
 msgid ""
 "After you close this dialog, the main window hides to the system tray — "
 "click the NetNeighbor tray icon to open it (recommended after install)."
 msgstr ""
+"Après fermeture de cette boîte de dialogue, la fenêtre principale se masque "
+"dans la barre système — cliquez sur l'icône NetNeighbor dans la barre "
+"système pour l'ouvrir (recommandé après l'installation)."
+
+#: ui/main_window.py:380
+msgid "NetNeighbor — LAN discovery"
+msgstr "NetNeighbor — Découverte LAN"
 
 #: ui/main_window.py:381
-msgid "NetNeighbor — LAN discovery"
-msgstr ""
-
-#: ui/main_window.py:382
 msgid "Open NetNeighbor"
-msgstr ""
+msgstr "Ouvrir NetNeighbor"
 
-#: ui/main_window.py:384
+#: ui/main_window.py:383
 msgid "Minimize to tray"
-msgstr ""
+msgstr "Réduire à la barre système"
+
+#: ui/main_window.py:572
+msgid "Office"
+msgstr "Bureau"
 
 #: ui/main_window.py:573
-msgid "Office"
-msgstr ""
+msgid "Room"
+msgstr "Pièce"
 
 #: ui/main_window.py:574
-msgid "Room"
-msgstr ""
+msgid "Living room"
+msgstr "Salon"
 
 #: ui/main_window.py:575
-msgid "Living room"
-msgstr ""
+msgid "Kitchen"
+msgstr "Cuisine"
 
 #: ui/main_window.py:576
-msgid "Kitchen"
-msgstr ""
+msgid "Workshop"
+msgstr "Atelier"
 
 #: ui/main_window.py:577
-msgid "Workshop"
-msgstr ""
-
-#: ui/main_window.py:578
 msgid "Garage"
-msgstr ""
+msgstr "Garage"
 
-#: ui/main_window.py:589
+#: ui/main_window.py:588
 msgid "Manage location presets."
-msgstr ""
+msgstr "Gérer les présélections de localisation."
 
-#: ui/main_window.py:596
+#: ui/main_window.py:595
 msgid "Automatically add locations discovered on the network to this list"
 msgstr ""
+"Ajouter automatiquement les localisations découvertes sur le réseau à cette "
+"liste"
 
-#: ui/main_window.py:601
+#: ui/main_window.py:600
 msgid ""
 "When enabled, room names and similar strings from devices (for example some "
 "speakers) can be added to the preset list as they are seen."
 msgstr ""
+"Lorsque cette option est activée, les noms de pièces et les chaînes "
+"similaires provenant des appareils (par exemple certains haut-parleurs) "
+"peuvent être ajoutés à la liste des présélections au fur et à mesure qu'ils "
+"sont détectés."
 
-#: ui/main_window.py:616
+#: ui/main_window.py:615
 msgid "Preset"
-msgstr ""
+msgstr "Présélection"
 
-#: ui/main_window.py:625
+#: ui/main_window.py:624 ui/main_window.py:777
 msgid "Add"
-msgstr ""
+msgstr "Ajouter"
+
+#: ui/main_window.py:625 ui/main_window.py:778 ui/device_list.py:605
+msgid "Rename"
+msgstr "Renommer"
+
+#: ui/main_window.py:626 ui/main_window.py:779
+msgid "Remove"
+msgstr "Supprimer"
 
 #: ui/main_window.py:627
-msgid "Remove"
-msgstr ""
-
-#: ui/main_window.py:628
 msgid "Clear all"
-msgstr ""
+msgstr "Effacer tout"
 
-#: ui/main_window.py:648
+#: ui/main_window.py:646 ui/main_window.py:708 ui/main_window.py:809
+#: ui/main_window.py:874 ui/main_window.py:1019 ui/device_list.py:731
+#: ui/device_details.py:774
+msgid "Cancel"
+msgstr "Annuler"
+
+#: ui/main_window.py:647 ui/main_window.py:810
 msgid "OK"
-msgstr ""
+msgstr "OK"
 
-#: ui/main_window.py:673
+#: ui/main_window.py:672
 msgid "Add location preset"
-msgstr ""
+msgstr "Ajouter un préset de localisation"
 
-#: ui/main_window.py:687
+#: ui/main_window.py:686
 msgid "Rename location preset"
-msgstr ""
+msgstr "Renommer un préset de localisation"
 
-#: ui/main_window.py:742
-msgid "External applications"
-msgstr ""
+#: ui/main_window.py:724 ui/device_list.py:640 utils/details_payload.py:117
+msgid "NAS"
+msgstr "NAS"
 
-#: ui/main_window.py:760
-#, python-brace-format
-msgid ""
-"Open / double-click: optional handler per URL scheme. Leave empty to use the "
-"system default (browser, file manager, etc.). Example: xdg-open {url} or "
-"dolphin {url}"
-msgstr ""
+#: ui/main_window.py:725 ui/device_list.py:641 utils/details_payload.py:118
+msgid "Computer"
+msgstr "Ordinateur"
 
-#: ui/main_window.py:776
-msgid "HTTPS"
+#: ui/main_window.py:726 ui/device_list.py:642 utils/details_payload.py:105
+msgid "Router"
+msgstr "Routeur"
+
+#: ui/main_window.py:727 ui/device_list.py:643 utils/details_payload.py:106
+msgid "Media server"
+msgstr "Serveur multimedia"
+
+#: ui/main_window.py:728 ui/device_list.py:644 utils/details_payload.py:107
+#: utils/details_payload.py:108
+msgid "Printer"
+msgstr "Imprimante"
+
+#: ui/main_window.py:729 ui/device_list.py:645 utils/details_payload.py:109
+msgid "Multifunction printer"
+msgstr "Imprimante multifonction"
+
+#: ui/main_window.py:730 ui/device_list.py:646
+msgid "Printer (network / IPP)"
+msgstr "Imprimante (réseau / IPP)"
+
+#: ui/main_window.py:731 ui/device_list.py:647
+msgid "SmartSpeaker"
+msgstr "Enceinte intelligente"
+
+#: ui/main_window.py:732 ui/device_list.py:648
+msgid "SmartTV"
+msgstr "SmartTV"
+
+#: ui/main_window.py:733 ui/device_list.py:649
+msgid "SmartDevice"
+msgstr "SmartDevice"
+
+#: ui/main_window.py:734 ui/device_list.py:650 utils/details_payload.py:113
+msgid "Camera"
+msgstr "Camera"
+
+#: ui/main_window.py:735 ui/device_list.py:651
+msgid "HomeAppliance"
+msgstr "HomeAppliance"
+
+#: ui/main_window.py:736 ui/device_list.py:652 utils/details_payload.py:115
+msgid "CNC"
+msgstr "CNC"
+
+#: ui/main_window.py:737 ui/device_list.py:653 utils/details_payload.py:116
+msgid "3D printer"
+msgstr "Imprimante 3D"
+
+#: ui/main_window.py:747
+msgid "Manage device type presets shown in the right-click menu."
 msgstr ""
+"Gérer les présets de type d'appareil affichés dans le menu contextuel."
+
+#: ui/main_window.py:767 ui/device_details.py:415
+msgid "Label"
+msgstr "Étiquette"
+
+#: ui/main_window.py:768
+msgid "Type ID"
+msgstr "ID de type"
 
 #: ui/main_window.py:780
+msgid "Restore defaults"
+msgstr "Restaurer les valeurs par défaut"
+
+#: ui/main_window.py:796
+msgid "Label:"
+msgstr "Étiquette :"
+
+#: ui/main_window.py:797
+msgid "Type ID:"
+msgstr "ID de type :"
+
+#: ui/main_window.py:803
+msgid "e.g. nas, router, camera…"
+msgstr "p. ex. nas, routeur, caméra…"
+
+#: ui/main_window.py:835
+msgid "Add type preset"
+msgstr "Ajouter un préset de type"
+
+#: ui/main_window.py:849
+msgid "Rename type preset"
+msgstr "Renommer le préset de type"
+
+#: ui/main_window.py:912
+msgid "External applications"
+msgstr "Applications externes"
+
+#: ui/main_window.py:934
+msgid "HTTP"
+msgstr "HTTP"
+
+#: ui/main_window.py:935
+msgid "HTTPS"
+msgstr "HTTPS"
+
+#: ui/main_window.py:936
+msgid "SMB"
+msgstr "SMB"
+
+#: ui/main_window.py:937
+msgid "FTP"
+msgstr "FTP"
+
+#: ui/main_window.py:938
+msgid "SSH"
+msgstr "SSH"
+
+#: ui/main_window.py:939
 msgid "Telnet"
-msgstr ""
+msgstr "Telnet"
 
-#: ui/main_window.py:781
+#: ui/main_window.py:940
 msgid "SFTP"
-msgstr ""
+msgstr "SFTP"
 
-#: ui/main_window.py:788
+#: ui/main_window.py:947
 msgid "Empty = system default"
-msgstr ""
+msgstr "Vide = paramètre par défaut du système"
 
-#: ui/main_window.py:790
+#: ui/main_window.py:948 ui/device_list.py:730
+msgid "Reset"
+msgstr "Réinitialiser"
+
+#: ui/main_window.py:949
 msgid "Restore default command"
-msgstr ""
+msgstr "Restaurer la commande par défaut"
 
-#: ui/main_window.py:815
-msgid "Command:"
-msgstr ""
+#: ui/main_window.py:957
+msgid "Reset this command to its default value?"
+msgstr "Réinitialiser cette commande à sa valeur par défaut ?"
 
-#: ui/main_window.py:819
+#: ui/main_window.py:959 ui/main_window.py:986 ui/device_details.py:384
+msgid "No"
+msgstr "Non"
+
+#: ui/main_window.py:960 ui/main_window.py:987 ui/device_details.py:385
+msgid "Yes"
+msgstr "Oui"
+
+#: ui/main_window.py:975
 msgid "Empty = disabled"
-msgstr ""
+msgstr "Vide = désactivé"
 
-#: ui/main_window.py:821
+#: ui/main_window.py:976 ui/main_window.py:1140 ui/device_details.py:565
+msgid "Clear"
+msgstr "Effacer"
+
+#: ui/main_window.py:977
 msgid "Remove the global custom command"
-msgstr ""
+msgstr "Supprimer la commande personnalisée globale"
 
-#: ui/main_window.py:872
+#: ui/main_window.py:984
+msgid "Clear the global custom command?"
+msgstr "Effacer la commande personnalisée globale ?"
+
+#: ui/main_window.py:995
+msgid "Custom:"
+msgstr "Personnalisé :"
+
+#: ui/main_window.py:1004
+msgid "full address"
+msgstr "adresse complète"
+
+#: ui/main_window.py:1005
+msgid "device IP"
+msgstr "adresse IP du périphérique"
+
+#: ui/main_window.py:1006
+msgid "service port"
+msgstr "port de service"
+
+#: ui/main_window.py:1007
+msgid "device name"
+msgstr "nom du périphérique"
+
+#: ui/main_window.py:1008
+msgid "device type"
+msgstr "type de périphérique"
+
+#: ui/main_window.py:1009
+msgid "category"
+msgstr "catégorie"
+
+#: ui/main_window.py:1041
+msgid "Credits"
+msgstr "Crédits"
+
+#: ui/main_window.py:1042
+msgid "License"
+msgstr "Licence"
+
+#: ui/main_window.py:1043 ui/main_window.py:1142 ui/device_details.py:85
+msgid "Close"
+msgstr "Fermer"
+
+#: ui/main_window.py:1084
 msgid "Linux network neighborhood for SSDP/mDNS discovery."
 msgstr "Voisinage reseau Linux pour la decouverte SSDP/mDNS."
 
-#: ui/main_window.py:874
+#: ui/main_window.py:1086
 msgid "Python libraries"
-msgstr ""
+msgstr "Bibliothèques Python"
 
-#: ui/main_window.py:889
+#: ui/main_window.py:1101
 msgid "GitHub Project"
 msgstr "Projet GitHub"
 
-#: ui/main_window.py:906
-#, fuzzy
+#: ui/main_window.py:1118
 msgid "Notification history"
-msgstr "Notifications désactivées"
+msgstr "Historique des notifications"
 
-#: ui/main_window.py:917
+#: ui/main_window.py:1129
 msgid "Date/Time"
-msgstr ""
+msgstr "Date/Heure"
 
-#: ui/main_window.py:917
-#, fuzzy
+#: ui/main_window.py:1129
 msgid "Device"
+msgstr "Appareil"
+
+#: ui/main_window.py:1129
+msgid "Status"
+msgstr "État"
+
+#: ui/main_window.py:1327 ui/main_window.py:1360 ui/main_window.py:1364
+#: ui/main_window.py:1365 ui/device_list.py:462 ui/device_list.py:464
+#: ui/device_list.py:465 ui/device_list.py:496 ui/device_list.py:1594
+msgid "No location"
+msgstr "Aucune localisation"
+
+#: ui/main_window.py:1350
+msgid "All Locations"
+msgstr "Toutes les localisations"
+
+#: ui/main_window.py:1350
+msgid "All Types"
+msgstr "Tous les types"
+
+#: ui/device_list.py:233 utils/details_payload.py:94
+#: utils/details_payload.py:269 utils/details_payload.py:346
+msgid "Ports"
+msgstr "Ports"
+
+#: ui/device_list.py:234 ui/device_details.py:157 utils/details_payload.py:268
+#: utils/details_payload.py:345
+msgid "Type"
+msgstr "Type"
+
+#: ui/device_list.py:547
+msgid ""
+"Provisional IPv6 identity — highlighted row pulses while discovery matches "
+"hostname / IPv4."
+msgstr ""
+"Identité IPv6 provisoire — la ligne en surbrillance pulse pendant que la "
+"découverte correspond au nom d'hôte / IPv4."
+
+#: ui/device_list.py:550
+msgid "Fetching device icon in the background — tile pulses until it arrives."
+msgstr ""
+"Récupération de l'icône de l'appareil en arrière-plan — la tuile pulse "
+"jusqu'à son arrivée."
+
+#: ui/device_list.py:571
+#, python-brace-format
+msgid "Open ({label})"
+msgstr "Ouvrir ({label})"
+
+#: ui/device_list.py:575
+msgid "Open"
+msgstr "Ouvrir"
+
+#: ui/device_list.py:585
+msgid "Run custom command"
+msgstr "Exécuter une commande personnalisée"
+
+#: ui/device_list.py:589
+msgid "Details"
+msgstr "Details"
+
+#: ui/device_list.py:592 ui/device_details.py:628
+msgid "Options"
+msgstr "Options"
+
+#: ui/device_list.py:597
+msgid "Unfollow"
+msgstr "Ne plus surveiller"
+
+#: ui/device_list.py:601
+msgid "Monitor"
+msgstr "Surveiller"
+
+#: ui/device_list.py:610 ui/device_details.py:156 ui/device_details.py:852
+#: utils/details_payload.py:270 utils/details_payload.py:347
+msgid "Location"
+msgstr "Localisation"
+
+#: ui/device_list.py:621 ui/device_list.py:655
+msgid "Auto"
+msgstr "Auto"
+
+#: ui/device_list.py:634
+msgid "Device type"
+msgstr "Type d'appareil"
+
+#: ui/device_list.py:719
+msgid "Rename device"
+msgstr "Renommer l'appareil"
+
+#: ui/device_list.py:724
+msgid "Custom name"
+msgstr "Nom personnalisé"
+
+#: ui/device_list.py:775 ui/device_list.py:823 ui/device_list.py:996
+#, python-brace-format
+msgid "Could not start the command: {error}"
+msgstr "Impossible de démarrer la commande : {error}"
+
+#: ui/device_list.py:818
+msgid "Could not parse the custom command (check placeholders)."
+msgstr ""
+"Impossible d'analyser la commande personnalisée (vérifiez les espaces "
+"réservés)."
+
+#: ui/device_list.py:932
+msgid "Show raw XML"
+msgstr "Afficher le XML brut"
+
+#: ui/device_details.py:154 ui/device_details.py:292 ui/device_details.py:1102
+msgid "Name"
+msgstr "Nom"
+
+#: ui/device_details.py:155
+msgid "IP address"
+msgstr "Adresse IP"
+
+#: ui/device_details.py:208
+msgid "Overview"
+msgstr "Aperçu"
+
+#: ui/device_details.py:208
+msgid "Device details"
+msgstr "Details appareil"
+
+#: ui/device_details.py:218
+msgid "Per-device field mapping rules. Select rows and remove if needed."
+msgstr ""
+"Règles de mappage des champs par appareil. Sélectionnez les lignes et "
+"supprimez si nécessaire."
+
+#: ui/device_details.py:228 ui/device_details.py:775
+msgid "Select"
+msgstr "Sélectionner"
+
+#: ui/device_details.py:229 ui/device_details.py:264
+msgid "Target"
+msgstr "Cible"
+
+#: ui/device_details.py:230
+msgid "Source field"
+msgstr "Champ source"
+
+#: ui/device_details.py:239
+msgid "Remove selected"
+msgstr "Supprimer la sélection"
+
+#: ui/device_details.py:242
+msgid "Remove all"
+msgstr "Tout supprimer"
+
+#: ui/device_details.py:248
+msgid "Rules"
+msgstr "Règles"
+
+#: ui/device_details.py:256 ui/device_details.py:271
+msgid "Services"
+msgstr "Services"
+
+#: ui/device_details.py:263 ui/device_details.py:1026
+msgid "Service"
 msgstr "Service"
 
-#: ui/main_window.py:917
-msgid "Status"
-msgstr ""
+#: ui/device_details.py:265
+msgid "Port"
+msgstr "Port"
 
-#: ui/main_window.py:1138
-#, fuzzy
-msgid "All Locations"
-msgstr "Emplacement XML"
+#: ui/device_details.py:278
+msgid "Field"
+msgstr "Champ"
 
-#: ui/main_window.py:1138
-#, fuzzy
-msgid "All Types"
-msgstr "Tous les appareils"
+#: ui/device_details.py:279 ui/device_details.py:1103
+msgid "Value"
+msgstr "Valeur"
 
-#: utils/connect_launcher.py:112
-msgid "Invalid command template for this protocol."
-msgstr ""
+#: ui/device_details.py:285
+msgid "Troubleshooting Information"
+msgstr "Informations de dépannage"
 
-#: utils/details_payload.py:103 utils/details_payload.py:127
+#: ui/device_details.py:293
+msgid "Record"
+msgstr "Enregistrement"
+
+#: ui/device_details.py:299
+msgid "TXT records"
+msgstr "Enregistrements TXT"
+
+#: ui/device_details.py:314
+msgid "Copy to clipboard"
+msgstr "Copier dans le presse-papiers"
+
+#: ui/device_details.py:333
+msgid "Device data"
+msgstr "Donnees appareil"
+
+#: ui/device_details.py:363 ui/device_details.py:406
+msgid "Override"
+msgstr "Remplacer"
+
+#: ui/device_details.py:363 ui/device_details.py:407
+msgid "Additional"
+msgstr "Supplémentaire"
+
+#: ui/device_details.py:422 utils/details_payload.py:267
+#: utils/details_payload.py:344
+msgid "IP"
+msgstr "Adresse IP"
+
+#: ui/device_details.py:483
+msgid "Remove this command"
+msgstr "Supprimer cette commande"
+
+#: ui/device_details.py:488
+msgid "Remove this command entry?"
+msgstr "Supprimer cette entrée de commande ?"
+
+#: ui/device_details.py:512
+msgid "+ Add command"
+msgstr "+ Ajouter une commande"
+
+#: ui/device_details.py:532
+msgid "Custom command"
+msgstr "Commande personnalisée"
+
+#: ui/device_details.py:539
+#, python-brace-format
+msgid "e.g. x-terminal-emulator -e ssh -p {port} {ip}"
+msgstr "p. ex. x-terminal-emulator -e ssh -p {port} {ip}"
+
+#: ui/device_details.py:560
+msgid "Clear the per-device custom command?"
+msgstr "Effacer la commande personnalisée par appareil ?"
+
+#: ui/device_details.py:566
+msgid "Remove per-device override (use global command)"
+msgstr "Supprimer le remplacement par appareil (utiliser la commande globale)"
+
+#: ui/device_details.py:585
+msgid "Use icon from:"
+msgstr "Utiliser l'icône de :"
+
+#: ui/device_details.py:587
+msgid "System"
+msgstr "Système"
+
+#: ui/device_details.py:589
+msgid "From device"
+msgstr "Depuis l'appareil"
+
+#: ui/device_details.py:592
+msgid "Custom"
+msgstr "Personnalisé"
+
+#: ui/device_details.py:604
+msgid "Open custom icons folder"
+msgstr "Ouvrir le dossier des icônes personnalisées"
+
+#: ui/device_details.py:674 ui/device_details.py:1027
+#: ui/device_details.py:1028 ui/device_details.py:1161
+msgid "unavailable"
+msgstr "indisponible"
+
+#: ui/device_details.py:677 ui/device_details.py:683
+msgid "none"
+msgstr "aucun"
+
+#: ui/device_details.py:733
+msgid "Choose icon"
+msgstr "Choisir une icône"
+
+#: ui/device_details.py:851 utils/details_payload.py:272
+#: utils/details_payload.py:349
+msgid "Friendly name"
+msgstr "Nom convivial"
+
+#: ui/device_details.py:853 utils/details_payload.py:273
+#: utils/details_payload.py:356
+msgid "Information"
+msgstr "Informations"
+
+#: ui/device_details.py:858
+#, python-brace-format
+msgid "Use as {target}"
+msgstr "Utiliser comme {target}"
+
+#: ui/device_details.py:863
+#, python-brace-format
+msgid "Remove {target} rule"
+msgstr "Supprimer la règle {target}"
+
+#: ui/device_details.py:880
+msgid "Rule saved"
+msgstr "Règle enregistrée"
+
+#: ui/device_details.py:890
+msgid "Rule removed"
+msgstr "Règle supprimée"
+
+#: ui/device_details.py:934
+msgid "Selected rules removed"
+msgstr "Règles sélectionnées supprimées"
+
+#: ui/device_details.py:946
+msgid "All rules removed"
+msgstr "Toutes les règles supprimées"
+
+#: ui/device_details.py:1094
+msgid "No TXT records"
+msgstr "Aucun enregistrement TXT"
+
+#: utils/details_payload.py:102 utils/details_payload.py:126
 msgid "Unknown"
 msgstr "Inconnu"
 
-#: utils/details_payload.py:104
-#, fuzzy
+#: utils/details_payload.py:103
 msgid "HTTP device"
-msgstr "Tous les appareils"
+msgstr "Appareil HTTP"
 
-#: utils/details_payload.py:105
-#, fuzzy
+#: utils/details_payload.py:104
 msgid "HTTPS device"
-msgstr "Service"
+msgstr "Appareil HTTPS"
 
-#: utils/details_payload.py:111
-#, fuzzy
+#: utils/details_payload.py:110
 msgid "Smart speaker"
 msgstr "Enceinte intelligente"
 
-#: utils/details_payload.py:112
-#, fuzzy
+#: utils/details_payload.py:111
 msgid "Smart TV"
-msgstr "SmartTV"
+msgstr "Téléviseur intelligent"
 
-#: utils/details_payload.py:113
-#, fuzzy
+#: utils/details_payload.py:112
 msgid "Smart device"
-msgstr "SmartDevice"
+msgstr "Appareil intelligent"
 
-#: utils/details_payload.py:115
-#, fuzzy
+#: utils/details_payload.py:114
 msgid "Home appliance"
-msgstr "HomeAppliance"
+msgstr "Électroménager"
+
+#: utils/details_payload.py:119
+msgid "ESP3D / firmware"
+msgstr "ESP3D / firmware"
 
 #: utils/details_payload.py:120
-msgid "ESP3D / firmware"
-msgstr ""
-
-#: utils/details_payload.py:121
 msgid "Scanner"
-msgstr ""
+msgstr "Analyseur"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1143
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1180
+#: utils/details_payload.py:271 utils/details_payload.py:348
+#: utils/details_payload.py:608
+msgid "Last seen"
+msgstr "Derniere apparition"
+
+#: utils/details_payload.py:274 utils/details_payload.py:352
+msgid "Manufacturer"
+msgstr "Fabricant"
+
+#: utils/details_payload.py:275 utils/details_payload.py:353
+msgid "Manufacturer URL"
+msgstr "URL du fabricant"
+
+#: utils/details_payload.py:276 utils/details_payload.py:354
+msgid "Model"
+msgstr "Modèle"
+
+#: utils/details_payload.py:277 utils/details_payload.py:355
+msgid "Model URL"
+msgstr "URL du modèle"
+
+#: utils/details_payload.py:278 utils/details_payload.py:351
+msgid "MAC address"
+msgstr "Adresse MAC"
+
+#: utils/details_payload.py:284
+msgid "Serial number"
+msgstr "Numéro de série"
+
+#: utils/details_payload.py:286
+msgid "Unique identifier"
+msgstr "Identifiant unique"
+
+#: utils/details_payload.py:350
+msgid "Hostname"
+msgstr "Nom d'hôte"
+
+#: discovery/manager.py:2485 discovery/ssdp.py:509 discovery/mdns.py:916
+#: discovery/wsd.py:94
+msgid "Routers & Gateways"
+msgstr "Routeurs et passerelles"
+
+#: discovery/manager.py:2486 discovery/ssdp.py:510 discovery/mdns.py:917
+#: discovery/wsd.py:95
+msgid "Media Servers"
+msgstr "Serveurs multimédias"
+
+#: discovery/manager.py:2487 discovery/manager.py:2488
+#: discovery/manager.py:2489 discovery/ssdp.py:511 discovery/ssdp.py:512
+#: discovery/ssdp.py:513 discovery/mdns.py:918 discovery/mdns.py:919
+#: discovery/mdns.py:920 discovery/mdns.py:921 discovery/wsd.py:96
+#: discovery/wsd.py:97 discovery/wsd.py:98 discovery/wsdd_client.py:86
+msgid "Printers"
+msgstr "Imprimantes"
+
+#: discovery/manager.py:2490 discovery/ssdp.py:514 discovery/mdns.py:922
+#: discovery/wsd.py:99
+msgid "Smart Speakers"
+msgstr "Enceintes intelligentes"
+
+#: discovery/manager.py:2491 discovery/ssdp.py:515 discovery/mdns.py:923
+#: discovery/wsd.py:100
+msgid "Smart TVs"
+msgstr "Téléviseurs intelligents"
+
+#: discovery/manager.py:2492 discovery/ssdp.py:516 discovery/mdns.py:924
+#: discovery/wsd.py:101
+msgid "Smart Devices"
+msgstr "Appareils intelligents"
+
+#: discovery/manager.py:2493 discovery/ssdp.py:517 discovery/mdns.py:925
+#: discovery/wsd.py:102
+msgid "Cameras"
+msgstr "Caméras"
+
+#: discovery/manager.py:2494 discovery/ssdp.py:518 discovery/mdns.py:926
+#: discovery/wsd.py:103
+msgid "Home Appliances"
+msgstr "Électroménagers"
+
+#: discovery/manager.py:2495 discovery/ssdp.py:519 discovery/mdns.py:927
+#: discovery/wsd.py:104
+msgid "CNC Machines"
+msgstr "Machines CNC"
+
+#: discovery/manager.py:2496 discovery/ssdp.py:520 discovery/mdns.py:928
+#: discovery/wsd.py:105
+msgid "3D Printers"
+msgstr "Imprimantes 3D"
+
+#: discovery/manager.py:2497 discovery/ssdp.py:521 discovery/mdns.py:929
+#: discovery/wsd.py:106
+msgid "NAS / File Servers"
+msgstr "NAS / Serveurs de fichiers"
+
+#: discovery/manager.py:2498 discovery/ssdp.py:522 discovery/mdns.py:930
+#: discovery/wsd.py:107 discovery/wsdd_client.py:84 discovery/netbios.py:360
+msgid "Computers"
+msgstr "Ordinateurs"
+
+#: discovery/manager.py:2499 discovery/mdns.py:931 discovery/wsd.py:108
+msgid "ESP3D Devices"
+msgstr "Appareils ESP3D"
+
+#: discovery/manager.py:2500 discovery/manager.py:2501 discovery/ssdp.py:523
+#: discovery/ssdp.py:524 discovery/mdns.py:445 discovery/mdns.py:492
+#: discovery/mdns.py:774 discovery/mdns.py:874 discovery/mdns.py:932
+#: discovery/mdns.py:933 discovery/mdns.py:934 discovery/wsd.py:109
+#: discovery/wsd.py:110 discovery/wsdd_client.py:87
+msgid "Unknown Devices"
+msgstr "Appareils inconnus"
+
+#~ msgid "Icon"
+#~ msgstr "Icône"
+
+#~ msgid "Invalid command template for this protocol."
+#~ msgstr "Modèle de commande invalide pour ce protocole."
+
 #, python-brace-format
-msgid "{text} {deprecated_message}"
-msgstr ""
+#~ msgid "{text} {deprecated_message}"
+#~ msgstr "{text} {deprecated_message}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1274
 #, python-brace-format
-msgid "Got unexpected extra argument ({args})"
-msgid_plural "Got unexpected extra arguments ({args})"
-msgstr[0] ""
-msgstr[1] ""
+#~ msgid "Got unexpected extra argument ({args})"
+#~ msgid_plural "Got unexpected extra arguments ({args})"
+#~ msgstr[0] "Argument supplémentaire inattendu reçu ({args})"
+#~ msgstr[1] "Arguments supplémentaires inattendus reçus ({args})"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1293
-msgid "DeprecationWarning: The command {name!r} is deprecated.{extra_message}"
-msgstr ""
+#~ msgid "DeprecationWarning: The command {name!r} is deprecated.{extra_message}"
+#~ msgstr ""
+#~ "DeprecationWarning: La commande {name!r} est dépréciée.{extra_message}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1477
-msgid "Aborted!"
-msgstr ""
+#~ msgid "Aborted!"
+#~ msgstr "Annulé !"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1851
-msgid "Commands"
-msgstr ""
+#~ msgid "Commands"
+#~ msgstr "Commandes"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1882
-msgid "Missing command."
-msgstr ""
+#~ msgid "Missing command."
+#~ msgstr "Commande manquante."
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:1960
-msgid "No such command {name!r}."
-msgstr ""
+#~ msgid "No such command {name!r}."
+#~ msgstr "Aucune commande {name!r}."
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:2385
-msgid "Value must be an iterable."
-msgstr ""
+#~ msgid "Value must be an iterable."
+#~ msgstr "La valeur doit être un itérable."
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:2408
 #, python-brace-format
-msgid "Takes {nargs} values but 1 was given."
-msgid_plural "Takes {nargs} values but {len} were given."
-msgstr[0] ""
-msgstr[1] ""
+#~ msgid "Takes {nargs} values but 1 was given."
+#~ msgid_plural "Takes {nargs} values but {len} were given."
+#~ msgstr[0] "Nécessite {nargs} valeurs mais 1 a été fournie."
+#~ msgstr[1] "Nécessite {nargs} valeurs mais {len} ont été fournies."
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:2597
-msgid ""
-"DeprecationWarning: The {param_type} {name!r} is deprecated.{extra_message}"
-msgstr ""
+#~ msgid ""
+#~ "DeprecationWarning: The {param_type} {name!r} is deprecated.{extra_message}"
+#~ msgstr ""
+#~ "DeprecationWarning: Le {param_type} {name!r} est déprécié.{extra_message}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:3079
 #, python-brace-format
-msgid "env var: {var}"
-msgstr ""
+#~ msgid "env var: {var}"
+#~ msgstr "variable d'env : {var}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:3082
 #, python-brace-format
-msgid "default: {default}"
-msgstr ""
+#~ msgid "default: {default}"
+#~ msgstr "par défaut : {default}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/core.py:3146
-msgid "(dynamic)"
-msgstr ""
+#~ msgid "(dynamic)"
+#~ msgstr "(dynamique)"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/decorators.py:465
 #, python-format
-msgid "%(prog)s, version %(version)s"
-msgstr ""
+#~ msgid "%(prog)s, version %(version)s"
+#~ msgstr "%(prog)s, version %(version)s"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/decorators.py:522
-msgid "Show the version and exit."
-msgstr ""
+#~ msgid "Show the version and exit."
+#~ msgstr "Afficher la version et quitter."
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/decorators.py:548
-msgid "Show this message and exit."
-msgstr ""
+#~ msgid "Show this message and exit."
+#~ msgstr "Afficher ce message et quitter."
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:50
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:89
 #, python-brace-format
-msgid "Error: {message}"
-msgstr ""
+#~ msgid "Error: {message}"
+#~ msgstr "Erreur : {message}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:81
 #, python-brace-format
-msgid "Try '{command} {option}' for help."
-msgstr ""
+#~ msgid "Try '{command} {option}' for help."
+#~ msgstr "Essayez « {command} {option} » pour obtenir de l'aide."
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:130
 #, python-brace-format
-msgid "Invalid value: {message}"
-msgstr ""
+#~ msgid "Invalid value: {message}"
+#~ msgstr "Valeur invalide : {message}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:132
 #, python-brace-format
-msgid "Invalid value for {param_hint}: {message}"
-msgstr ""
+#~ msgid "Invalid value for {param_hint}: {message}"
+#~ msgstr "Valeur invalide pour {param_hint} : {message}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:190
-msgid "Missing argument"
-msgstr ""
+#~ msgid "Missing argument"
+#~ msgstr "Argument manquant"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:192
-msgid "Missing option"
-msgstr ""
+#~ msgid "Missing option"
+#~ msgstr "Option manquante"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:194
-msgid "Missing parameter"
-msgstr ""
+#~ msgid "Missing parameter"
+#~ msgstr "Paramètre manquant"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:196
 #, python-brace-format
-msgid "Missing {param_type}"
-msgstr ""
+#~ msgid "Missing {param_type}"
+#~ msgstr "{param_type} manquant"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:203
 #, python-brace-format
-msgid "Missing parameter: {param_name}"
-msgstr ""
+#~ msgid "Missing parameter: {param_name}"
+#~ msgstr "Paramètre manquant : {param_name}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:223
 #, python-brace-format
-msgid "No such option: {name}"
-msgstr ""
+#~ msgid "No such option: {name}"
+#~ msgstr "Aucune telle option : {name}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:235
 #, python-brace-format
-msgid "Did you mean {possibility}?"
-msgid_plural "(Possible options: {possibilities})"
-msgstr[0] ""
-msgstr[1] ""
+#~ msgid "Did you mean {possibility}?"
+#~ msgid_plural "(Possible options: {possibilities})"
+#~ msgstr[0] "Vouliez-vous dire {possibility} ?"
+#~ msgstr[1] "(Options possibles : {possibilities})"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:282
+#~ msgid "unknown error"
+#~ msgstr "erreur inconnue"
+
+#~ msgid "Could not open file {filename!r}: {message}"
+#~ msgstr "Impossible d'ouvrir le fichier {filename!r} : {message}"
+
+#~ msgid "Argument {name!r} takes {nargs} values."
+#~ msgstr "L'argument {name!r} prend {nargs} valeurs."
+
+#~ msgid "Option {name!r} does not take a value."
+#~ msgstr "L'option {name!r} ne prend pas de valeur."
+
+#~ msgid "Option {name!r} requires an argument."
+#~ msgid_plural "Option {name!r} requires {nargs} arguments."
+#~ msgstr[0] "L'option {name!r} nécessite un argument."
+#~ msgstr[1] "L'option {name!r} nécessite {nargs} arguments."
+
+#~ msgid "Shell completion is not supported for Bash versions older than 4.4."
+#~ msgstr ""
+#~ "La complétion de shell n'est pas prise en charge pour les versions Bash "
+#~ "antérieures à 4.4."
+
+#~ msgid "Couldn't detect Bash version, shell completion is not supported."
+#~ msgstr ""
+#~ "Impossible de détecter la version de Bash, la complétion de shell n'est pas "
+#~ "prise en charge."
+
+#, python-brace-format
+#~ msgid "{editor}: Editing failed"
+#~ msgstr "{editor} : L'édition a échoué"
+
+#, python-brace-format
+#~ msgid "{editor}: Editing failed: {e}"
+#~ msgstr "{editor} : L'édition a échoué : {e}"
+
+#~ msgid "Repeat for confirmation"
+#~ msgstr "Répétez pour confirmation"
+
+#~ msgid "Error: The value you entered was invalid."
+#~ msgstr "Erreur : La valeur que vous avez entrée n'est pas valide."
+
+#, python-brace-format
+#~ msgid "Error: {e.message}"
+#~ msgstr "Erreur : {e.message}"
+
+#~ msgid "Error: The two entered values do not match."
+#~ msgstr "Erreur : Les deux valeurs entrées ne correspondent pas."
+
+#~ msgid "Error: invalid input"
+#~ msgstr "Erreur : entrée non valide"
+
+#~ msgid "Press any key to continue..."
+#~ msgstr "Appuyez sur n'importe quelle touche pour continuer..."
+
+#, python-brace-format
+#~ msgid ""
+#~ "Choose from:\n"
+#~ "\t{choices}"
+#~ msgstr ""
+#~ "Choisissez parmi :\n"
+#~ "\t{choices}"
+
+#~ msgid "{value!r} is not {choice}."
+#~ msgid_plural "{value!r} is not one of {choices}."
+#~ msgstr[0] "{value!r} n'est pas {choice}."
+#~ msgstr[1] "{value!r} n'est pas l'un de {choices}."
+
+#~ msgid "{value!r} does not match the format {format}."
+#~ msgid_plural "{value!r} does not match the formats {formats}."
+#~ msgstr[0] "{value!r} ne correspond pas au format {format}."
+#~ msgstr[1] "{value!r} ne correspond pas aux formats {formats}."
+
+#~ msgid "{value!r} is not a valid {number_type}."
+#~ msgstr "{value!r} n'est pas un {number_type} valide."
+
+#, python-brace-format
+#~ msgid "{value} is not in the range {range}."
+#~ msgstr "{value} n'est pas dans la plage {range}."
+
+#~ msgid "{value!r} is not a valid boolean. Recognized values: {states}"
+#~ msgstr "{value!r} n'est pas un booléen valide. Valeurs reconnues : {states}"
+
+#~ msgid "{value!r} is not a valid UUID."
+#~ msgstr "{value!r} n'est pas un UUID valide."
+
+#~ msgid "file"
+#~ msgstr "fichier"
+
+#~ msgid "directory"
+#~ msgstr "répertoire"
+
+#~ msgid "path"
+#~ msgstr "chemin"
+
+#~ msgid "{name} {filename!r} does not exist."
+#~ msgstr "{name} {filename!r} n'existe pas."
+
+#~ msgid "{name} {filename!r} is a file."
+#~ msgstr "{name} {filename!r} est un fichier."
+
+#~ msgid "{name} {filename!r} is a directory."
+#~ msgstr "{name} {filename!r} est un répertoire."
+
+#~ msgid "{name} {filename!r} is not readable."
+#~ msgstr "{name} {filename!r} n'est pas lisible."
+
+#~ msgid "{name} {filename!r} is not writable."
+#~ msgstr "{name} {filename!r} n'est pas accessible en écriture."
+
+#~ msgid "{name} {filename!r} is not executable."
+#~ msgstr "{name} {filename!r} n'est pas exécutable."
+
+#, python-brace-format
+#~ msgid "{len_type} values are required, but {len_value} was given."
+#~ msgid_plural "{len_type} values are required, but {len_value} were given."
+#~ msgstr[0] "{len_type} valeurs sont requises, mais {len_value} a été fournie."
+#~ msgstr[1] ""
+#~ "{len_type} valeurs sont requises, mais {len_value} ont été fournies."
+
+#~ msgid "Custom connections"
+#~ msgstr "Connexions personnalisées"
+
 #, fuzzy
-msgid "unknown error"
-msgstr "Inconnu"
+#~ msgid "Port:"
+#~ msgstr "Port"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/exceptions.py:289
-msgid "Could not open file {filename!r}: {message}"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/parser.py:199
-msgid "Argument {name!r} takes {nargs} values."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/parser.py:381
-msgid "Option {name!r} does not take a value."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/parser.py:444
-msgid "Option {name!r} requires an argument."
-msgid_plural "Option {name!r} requires {nargs} arguments."
-msgstr[0] ""
-msgstr[1] ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/shell_completion.py:332
-msgid "Shell completion is not supported for Bash versions older than 4.4."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/shell_completion.py:339
-msgid "Couldn't detect Bash version, shell completion is not supported."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/_termui_impl.py:633
 #, python-brace-format
-msgid "{editor}: Editing failed"
-msgstr ""
+#~ msgid "Placeholders: {ip} {port} {name} {type} {category} {url}"
+#~ msgstr "Espaces réservés : {ip} {port} {name} {type} {category} {url}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/_termui_impl.py:637
 #, python-brace-format
-msgid "{editor}: Editing failed: {e}"
-msgstr ""
+#~ msgid "Connect to {label}"
+#~ msgstr "Se connecter à {label}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/termui.py:173
-msgid "Repeat for confirmation"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/termui.py:189
-msgid "Error: The value you entered was invalid."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/termui.py:191
 #, python-brace-format
-msgid "Error: {e.message}"
-msgstr ""
+#~ msgid ""
+#~ "Open / double-click: optional handler per URL scheme. Leave empty to use the"
+#~ " system default (browser, file manager, etc.). Example: xdg-open {url} or "
+#~ "dolphin {url}"
+#~ msgstr ""
+#~ "Ouvrir / double-clic : gestionnaire optionnel par schéma d'URL. Laisser vide"
+#~ " pour utiliser le paramètre par défaut du système (navigateur, gestionnaire "
+#~ "de fichiers, etc.). Exemple : xdg-open {url} ou dolphin {url}"
 
-#: .venv-i18n-test/lib/python3.12/site-packages/click/termui.py:202
-msgid "Error: The two entered values do not match."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/termui.py:261
-msgid "Error: invalid input"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/termui.py:880
-msgid "Press any key to continue..."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:332
-#, python-brace-format
-msgid ""
-"Choose from:\n"
-"\t{choices}"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:369
-msgid "{value!r} is not {choice}."
-msgid_plural "{value!r} is not one of {choices}."
-msgstr[0] ""
-msgstr[1] ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:460
-msgid "{value!r} does not match the format {format}."
-msgid_plural "{value!r} does not match the formats {formats}."
-msgstr[0] ""
-msgstr[1] ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:482
-msgid "{value!r} is not a valid {number_type}."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:538
-#, python-brace-format
-msgid "{value} is not in the range {range}."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:719
-msgid "{value!r} is not a valid boolean. Recognized values: {states}"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:747
-msgid "{value!r} is not a valid UUID."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:937
-msgid "file"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:939
-msgid "directory"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:941
-msgid "path"
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:988
-msgid "{name} {filename!r} does not exist."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:997
-msgid "{name} {filename!r} is a file."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:1005
-msgid "{name} {filename!r} is a directory."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:1014
-msgid "{name} {filename!r} is not readable."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:1023
-msgid "{name} {filename!r} is not writable."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:1032
-msgid "{name} {filename!r} is not executable."
-msgstr ""
-
-#: .venv-i18n-test/lib/python3.12/site-packages/click/types.py:1099
-#, python-brace-format
-msgid "{len_type} values are required, but {len_value} was given."
-msgid_plural "{len_type} values are required, but {len_value} were given."
-msgstr[0] ""
-msgstr[1] ""
+#~ msgid "Command:"
+#~ msgstr "Commande :"
 
 #~ msgid "Show source badges"
 #~ msgstr "Afficher les badges de source"
@@ -1022,9 +1213,6 @@ msgstr[1] ""
 #~ msgid "All"
 #~ msgstr "Tous"
 
-#~ msgid "Open"
-#~ msgstr "Ouvrir"
-
 #~ msgid "SSDP details"
 #~ msgstr "Details SSDP"
 
@@ -1036,18 +1224,6 @@ msgstr[1] ""
 
 #~ msgid "Use notifications"
 #~ msgstr "Utiliser les notifications"
-
-#~ msgid "Last seen"
-#~ msgstr "Derniere apparition"
-
-#~ msgid "Serial number"
-#~ msgstr "Numéro de série"
-
-#~ msgid "MAC address"
-#~ msgstr "Adresse MAC"
-
-#~ msgid "Unique identifier"
-#~ msgstr "Identifiant unique"
 
 #~ msgid "Alternative names"
 #~ msgstr "Noms alternatifs"

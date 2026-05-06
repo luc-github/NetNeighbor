@@ -173,7 +173,9 @@ When two protocols discover the same physical device (e.g. a NAS seen via both S
 
 ### SSDP profile cache hydration
 
-When an mDNS or live SSDP device arrives, the manager pre-populates its `metadata` from the persisted SSDP profile cache (`~/.cache/netneighbor/discovery-cache.json`) **before** the live XML fetch completes:
+**Startup pre-population (`_emit_cached_devices`)** — called at the top of `start()` before any protocol thread starts. Iterates the SSDP profile cache and emits each entry as a synthetic `ssdp` device so previously-seen devices appear in the UI immediately (within ~100 ms) instead of waiting 5–15 s for live discovery to respond. Entries older than 24 h are skipped (matching the cache GC TTL). Live SSDP events overwrite these entries transparently: the live device shares the same `Device.key` (`ssdp:udn:…` when a UDN is cached, else `ssdp:{ip}:{port}`) and simply replaces the pre-populated row via the normal pipeline.
+
+**Per-device hydration** — when an mDNS or live SSDP device arrives, the manager pre-populates its `metadata` from the same profile cache **before** the live XML fetch completes:
 
 - `_hydrate_mdns_from_ssdp_profile_cache` — copies `xml_fields`, `raw_xml`, and `ssdp_location` into mDNS devices; enables the "Device data" tab and rich fields (Manufacturer, Model…) even when no SSDP device is alive
 - `_hydrate_ssdp_from_profile_cache` — same for live SSDP devices whose XML fetch is still pending or has failed

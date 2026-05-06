@@ -357,7 +357,7 @@ class NetbiosDiscovery(BaseDiscovery):
                 "ip": ip_s,
                 "port": 445,
                 "type": "computer",
-                "category": "Computers",
+                "category": _("Computers"),
                 "source": self.source,
                 "url": None,
                 "metadata": {
