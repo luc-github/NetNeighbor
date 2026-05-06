@@ -70,7 +70,8 @@ class SSDPDiscovery(BaseDiscovery):
         else:
             self._descriptor_http_min_interval = max(0.0, float(descriptor_http_min_interval_seconds))
         self._last_descriptor_http_mono: dict[str, float] = {}
-        self._xml_fetch_gate = threading.Lock()
+        self._xml_fetch_gates: dict[str, threading.Lock] = {}
+        self._xml_fetch_gates_lock = threading.Lock()
         self._rules = self._load_rules()
         self._running = False
         self._socket: socket.socket | None = None
@@ -642,7 +643,11 @@ class SSDPDiscovery(BaseDiscovery):
                 return dict(cached_fields), cached_raw
 
         host_key = _descriptor_xml_host_key(location)
-        with self._xml_fetch_gate:
+        with self._xml_fetch_gates_lock:
+            if host_key not in self._xml_fetch_gates:
+                self._xml_fetch_gates[host_key] = threading.Lock()
+            host_gate = self._xml_fetch_gates[host_key]
+        with host_gate:
             now = datetime.now(timezone.utc)
             mem2 = self._xml_cache.get(location)
             if mem2 is not None:

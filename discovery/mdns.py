@@ -31,6 +31,15 @@ except Exception:  # pragma: no cover
 
 _ENUMERATION_TIMEOUT_S = 2.5
 _ENUMERATION_REFRESH_INTERVAL_S = 240
+# How long to retain a per-service record after remove_service() when the host
+# is still alive via other services.  In practice, genuine mid-session service
+# removal (NAS disabling FTP, etc.) is extremely rare; almost all remove_service
+# callbacks while a host is online are TTL re-announcement jitter or transient
+# network hiccups.  A refresh() restarts browsers and actively re-queries, so
+# stale records that truly disappeared will be cleaned up on the next user-
+# initiated reload even if this timer hasn't fired.  Set long enough to survive
+# the worst-case zeroconf re-query window (~4 × re-query intervals ≈ 2-3 min).
+_SERVICE_REMOVE_GRACE_S = 180
 
 
 _TYPE_MAP_PATH = Path(__file__).resolve().parent.parent / "data" / "device_types.json"
@@ -87,6 +96,7 @@ class MDNSDiscovery(BaseDiscovery):
         self._type_map = self._load_mdns_type_map()
         self._enumeration_timer_id: int | None = None
         self._enumeration_busy = False
+        self._pending_remove_timers: dict[tuple[str, str], int] = {}
 
     def start(self) -> None:
         if self._running:
@@ -121,6 +131,8 @@ class MDNSDiscovery(BaseDiscovery):
             except Exception:
                 pass
             self._enumeration_timer_id = None
+        for key in list(self._pending_remove_timers):
+            self._cancel_grace_remove(key)
         self._seen_by_service.clear()
         self._host_last_endpoint.clear()
         self._browsers.clear()
@@ -134,10 +146,40 @@ class MDNSDiscovery(BaseDiscovery):
                 self._logger.debug("Error while closing zeroconf", exc_info=True)
 
     def refresh(self) -> None:
-        # Passive protocol: browsing callbacks keep state fresh.
-        if not self._running:
+        if not self._running or self._zeroconf is None:
             return
-        self._logger.debug("mDNS refresh requested (passive browse)")
+        # Cancel pending grace-remove timers before dropping the cache.
+        for key in list(self._pending_remove_timers):
+            self._cancel_grace_remove(key)
+        # Cancel running browsers.
+        for browser in self._browsers:
+            try:
+                if hasattr(browser, "cancel"):
+                    browser.cancel()
+            except Exception:
+                pass
+        self._browsers.clear()
+        # Close and reopen the Zeroconf instance to clear its internal DNS cache.
+        # This ensures the subsequent PTR queries go out without "known answer"
+        # suppression headers (RFC 6762 §7.1), so devices that stopped announcing
+        # (e.g. a NAS whose TTL expired) will respond and re-populate the device list.
+        old_zc = self._zeroconf
+        self._zeroconf = None
+        if old_zc is not None:
+            try:
+                old_zc.close()
+            except Exception:
+                self._logger.debug("mDNS refresh: error closing zeroconf", exc_info=True)
+        try:
+            self._zeroconf = Zeroconf()
+        except Exception:
+            self._logger.exception("mDNS refresh: failed to reopen zeroconf")
+            return
+        self._logger.debug("mDNS refresh: zeroconf cache cleared, sending fresh PTR queries")
+        types_to_rebrowse = list(self._browsers_started)
+        self._browsers_started.clear()
+        for service_type in types_to_rebrowse:
+            self._ensure_browser(service_type)
         self._kick_service_type_enumeration()
 
     def _service_types_to_browse_from_config(self) -> list[str]:
@@ -159,6 +201,32 @@ class MDNSDiscovery(BaseDiscovery):
             self._logger.debug("mDNS browser started for %s", normalized)
         except Exception:
             self._logger.exception("Failed to start mDNS browser for %s", normalized)
+
+    def _restart_browsers(self) -> None:
+        """Cancel all running browsers and recreate them to force fresh PTR queries.
+
+        A new ServiceBrowser sends an immediate PTR query for its type; devices
+        respond and trigger add_service callbacks — recovering any records that
+        zeroconf evicted from its cache without re-announcement.
+
+        Pending grace-remove timers are also cancelled: the fresh PTR queries
+        will either confirm the service is gone (no add_service callback) or
+        restore it (add_service fires and refreshes the record).
+        """
+        for key in list(self._pending_remove_timers):
+            self._cancel_grace_remove(key)
+        for browser in self._browsers:
+            try:
+                if hasattr(browser, "cancel"):
+                    browser.cancel()
+            except Exception:
+                pass
+        self._browsers.clear()
+        types_to_rebrowse = list(self._browsers_started)
+        self._browsers_started.clear()
+        for service_type in types_to_rebrowse:
+            self._ensure_browser(service_type)
+        self._logger.debug("mDNS browsers restarted for %d type(s)", len(types_to_rebrowse))
 
     def _enqueue_browsers_for_types(self, service_types: list[str]) -> None:
         """Register browsers on the GTK main thread (callbacks must stay GUI-safe)."""
@@ -263,6 +331,9 @@ class MDNSDiscovery(BaseDiscovery):
     def _on_service_change(self, zc, service_type: str, name: str, online: bool) -> None:
         if not self._running:
             return
+        # Service is re-announcing — cancel any pending grace-remove immediately so
+        # the UI never sees the record disappear if re-announcement arrives in time.
+        self._cancel_grace_remove((service_type, name))
         try:
             info = zc.get_service_info(service_type, name, timeout=self._service_info_timeout_ms)
         except Exception:
@@ -292,6 +363,52 @@ class MDNSDiscovery(BaseDiscovery):
         if not self._running:
             return
         key = (service_type, name)
+        host_key = self._service_host_keys.get(key, "")
+        if host_key:
+            # Check if host is still alive via other services (excluding this key).
+            still_alive = any(
+                v == host_key for k, v in self._service_host_keys.items() if k != key
+            )
+            if still_alive:
+                # Host is still up — delay the removal to absorb TTL re-announcement
+                # jitter.  If add_service fires within the grace window the timer is
+                # cancelled and the UI never sees the record disappear.
+                self._schedule_grace_remove(key, host_key)
+                return
+        # Host going fully offline (or no known host) — apply immediately.
+        self._cancel_grace_remove(key)
+        self._apply_remove(key)
+
+    def _schedule_grace_remove(self, key: tuple[str, str], host_key: str) -> None:
+        self._cancel_grace_remove(key)
+        if GLib is None:
+            self._apply_remove(key)
+            return
+
+        def _fire() -> bool:
+            self._pending_remove_timers.pop(key, None)
+            if not self._running:
+                return False
+            self._apply_remove(key)
+            return False
+
+        timer_id = GLib.timeout_add_seconds(_SERVICE_REMOVE_GRACE_S, _fire)
+        self._pending_remove_timers[key] = timer_id
+        self._logger.debug(
+            "mDNS grace remove scheduled for %s %s (host still alive, %ds delay)",
+            key[0], key[1], _SERVICE_REMOVE_GRACE_S,
+        )
+
+    def _cancel_grace_remove(self, key: tuple[str, str]) -> None:
+        timer_id = self._pending_remove_timers.pop(key, None)
+        if timer_id is not None and GLib is not None:
+            try:
+                GLib.source_remove(timer_id)
+            except Exception:
+                pass
+
+    def _apply_remove(self, key: tuple[str, str]) -> None:
+        """Commit a service removal after the optional grace delay has elapsed."""
         self._seen_by_service.pop(key, None)
         host_key = self._service_host_keys.pop(key, "")
         if host_key:
@@ -303,6 +420,7 @@ class MDNSDiscovery(BaseDiscovery):
             payload = self._aggregate_payload_for_host(host_key, online=False)
             self._emit("device", payload)
             return
+        service_type, name = key
         payload = self._build_fallback_remove_payload(service_type, name)
         self._emit("device", payload)
 

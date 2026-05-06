@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import ipaddress
 import logging
 import re
@@ -311,7 +312,8 @@ class NetbiosDiscovery(BaseDiscovery):
         with self._extra_directed_lock:
             extra_directed = list(self._extra_directed.keys())
         directed_chain = list(dict.fromkeys([*self._directed_ips, *sorted(extra_directed)]))
-        for dip in directed_chain:
+
+        def _probe_one(dip: str) -> list:
             try:
                 proc_d = subprocess.run(
                     [self._nmblookup, "-A", dip],
@@ -320,11 +322,18 @@ class NetbiosDiscovery(BaseDiscovery):
                     timeout=float(self._timeout_s),
                     check=False,
                 )
-                rows.extend(_parse_nmblookup_output((proc_d.stdout or "") + "\n" + (proc_d.stderr or "")))
+                return _parse_nmblookup_output((proc_d.stdout or "") + "\n" + (proc_d.stderr or ""))
             except subprocess.TimeoutExpired:
                 self._logger.debug("nmblookup -A %s timed out after %.1fs", dip, self._timeout_s)
             except OSError:
                 self._logger.debug("nmblookup -A %s failed", dip, exc_info=True)
+            return []
+
+        if directed_chain:
+            workers = min(8, len(directed_chain))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                for partial_rows in pool.map(_probe_one, directed_chain):
+                    rows.extend(partial_rows)
         merged = _merge_rows_prefer_ipv4(rows)
         if not merged:
             self._logger.debug(

@@ -318,15 +318,19 @@ class DiscoveryManager:
                 device.online,
             )
             return
-        if self._should_skip_loopback_shadow_duplicate(device):
-            self._device_event_logger(device.source).debug(
-                "Skipping loopback row (same device already seen on LAN IP): source=%s uid_sample=%s",
-                device.source,
-                (self._extract_uid(device.metadata) or "")[:48],
-            )
-            return
-        if sip not in {"127.0.0.1", "::1"}:
-            self._prune_loopback_shadow_rows_for_identity(device)
+        # Loopback addresses are always the local machine — never useful as
+        # network neighbours.  Drop them unconditionally.
+        try:
+            if ipaddress.ip_address(sip).is_loopback:
+                self._device_event_logger(device.source).debug(
+                    "Ignoring loopback device: source=%s ip=%s name=%s",
+                    device.source,
+                    sip,
+                    device.name,
+                )
+                return
+        except ValueError:
+            pass
         if self._should_hold_for_stable_identity(device):
             return
 
@@ -350,6 +354,7 @@ class DiscoveryManager:
             existing_key, existing = self._find_existing_ssdp_by_endpoint(device)
 
         self._hydrate_mdns_from_ssdp_profile_cache(device, existing)
+        self._hydrate_ssdp_from_profile_cache(device)
         self._schedule_anticipatory_descriptor_fetch(device)
         self._apply_field_mapping_rules(device)
         self._apply_type_override(device)
@@ -478,47 +483,6 @@ class DiscoveryManager:
             return
         nmb.suggest_directed_ip(target_v4)
 
-    def _should_skip_loopback_shadow_duplicate(self, device: Device) -> bool:
-        """Drop SSDP/mDNS rows bound to loopback when the same identity already exists on a LAN address."""
-        sip = str(device.ip).strip()
-        if sip not in {"127.0.0.1", "::1"}:
-            return False
-        uid = self._extract_uid(device.metadata)
-        if not uid:
-            return False
-        for other in self._devices.values():
-            oip = str(other.ip).strip()
-            if oip in {"", "127.0.0.1", "::1"}:
-                continue
-            try:
-                addr = ipaddress.ip_address(oip)
-            except ValueError:
-                continue
-            if addr.is_loopback:
-                continue
-            if self._extract_uid(other.metadata) == uid:
-                return True
-        return False
-
-    def _prune_loopback_shadow_rows_for_identity(self, device: Device) -> None:
-        """Remove older loopback duplicate rows when the real LAN endpoint arrives."""
-        sip = str(device.ip).strip()
-        if sip in {"", "127.0.0.1", "::1"}:
-            return
-        uid = self._extract_uid(device.metadata)
-        if not uid:
-            return
-        remove_keys: list[str] = []
-        for key, other in self._devices.items():
-            oip = str(other.ip).strip()
-            if oip not in {"127.0.0.1", "::1"}:
-                continue
-            if self._extract_uid(other.metadata) == uid:
-                remove_keys.append(key)
-        for key in remove_keys:
-            self._logger.debug("Removing loopback shadow duplicate key=%s", key[:80])
-            del self._devices[key]
-
     def _load_ssdp_profile_cache_by_ip(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
         cache_blob = load_discovery_cache()
@@ -603,11 +567,59 @@ class DiscoveryManager:
                     md_xml[key] = value
             if md_xml:
                 device.metadata["xml_fields"] = md_xml
+        # Also carry over raw XML and SSDP location so the "Device data" tab
+        # appears in details even when there is no live SSDP device.
+        if not device.metadata.get("xml"):
+            raw_xml = row.get("raw_xml")
+            if isinstance(raw_xml, str) and raw_xml.strip():
+                device.metadata["xml"] = raw_xml
+        if not device.metadata.get("location"):
+            ssdp_loc = row.get("ssdp_location")
+            if isinstance(ssdp_loc, str) and ssdp_loc.strip():
+                device.metadata["location"] = ssdp_loc
         cached_display = self._ssdp_profile_display_name(row)
         if cached_display and not self._has_effective_name_override(device, prior_row):
             # Rule 1 vs mDNS; skipped when rule 0 applies (see _has_effective_name_override).
             device.name = cached_display
         self._apply_ssdp_cache_type_to_mdns(device, row)
+
+    def _hydrate_ssdp_from_profile_cache(self, device: Device) -> None:
+        """Pre-populate empty xml_fields on a live SSDP device from the disk profile cache.
+
+        When the live XML fetch has not yet completed (or previously failed), the
+        cached xml_fields from a prior successful fetch are used as an immediate
+        starting point so the details panel is never blank.  The live fetch result
+        will overwrite these values once it arrives (higher-precedence merge path).
+        """
+        if device.source != "ssdp":
+            return
+        sip = str(device.ip).strip()
+        if not sip:
+            return
+        row = self._ssdp_profile_cache_by_ip.get(sip)
+        if not isinstance(row, dict):
+            return
+        if not isinstance(device.metadata, dict):
+            device.metadata = {}
+        cached_xml = row.get("xml_fields")
+        if not isinstance(cached_xml, dict) or not cached_xml:
+            return
+        md_xml = device.metadata.get("xml_fields")
+        if not isinstance(md_xml, dict):
+            md_xml = {}
+        for key, value in cached_xml.items():
+            if key not in md_xml and value:
+                md_xml[key] = value
+        if md_xml:
+            device.metadata["xml_fields"] = md_xml
+        if not device.metadata.get("xml"):
+            raw_xml = row.get("raw_xml")
+            if isinstance(raw_xml, str) and raw_xml.strip():
+                device.metadata["xml"] = raw_xml
+        if not device.metadata.get("location"):
+            ssdp_loc = row.get("ssdp_location")
+            if isinstance(ssdp_loc, str) and ssdp_loc.strip():
+                device.metadata["location"] = ssdp_loc
 
     def _apply_ssdp_cache_type_to_mdns(self, device: Device, row: dict) -> None:
         """Use SSDP profile-cache type hints after merging ``xml_fields`` (not only when mDNS type is unknown).
@@ -930,7 +942,7 @@ class DiscoveryManager:
             self._apply_name_override(updated)
             self._apply_location_override(updated)
             self._apply_url_override(updated)
-            self._apply_endpoint_overrides(updated)
+            self._apply_device_commands(updated)
             self._apply_custom_command_override(updated)
             self._apply_monitored_override(updated)
             self._devices[device_key] = updated

@@ -339,14 +339,21 @@ def build_mdns_payload(device: Device) -> tuple[list[tuple[str, str]], list[dict
             last_seen_text = str(device.last_seen)
     else:
         last_seen_text = _value_or_unavailable(device.last_seen)
+    # xml_fields may be hydrated from the SSDP profile cache even on mDNS-only devices.
+    xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
     fields = [
         ("IP", format_device_ip_for_details(device)),
         ("Type", format_device_type_for_details(device)),
         ("Ports", aggregate_ports_display(device)),
         ("Location", _value_or_unavailable(metadata.get("user_location"))),
         ("Last seen", last_seen_text),
+        ("Friendly name", _value_or_unavailable(xml_fields.get("friendlyName"))),
         ("Hostname", _value_or_unavailable(display_host)),
         ("MAC address", _value_or_unavailable(resolve_mac_for_device(device))),
+        ("Manufacturer", _value_or_unavailable(xml_fields.get("manufacturer"))),
+        ("Manufacturer URL", _value_or_unavailable(xml_fields.get("manufacturerURL"))),
+        ("Model", _value_or_unavailable(xml_fields.get("modelName"))),
+        ("Model URL", _value_or_unavailable(xml_fields.get("modelURL"))),
         ("Information", _value_or_unavailable(metadata.get("information"))),
     ]
 

@@ -17,38 +17,73 @@ _ICON_THEME_PREPARED = False
 
 
 def ensure_netneighbor_icon_theme_path() -> None:
-    """Allow bundled ``assets/icons/hicolor/...`` names (e.g. tray B&W) to resolve."""
+    """Register bundled ``assets/icons/`` as an extra icon theme search path."""
     global _ICON_THEME_PREPARED
     if _ICON_THEME_PREPARED:
         return
     root = Path(__file__).resolve().parent.parent / "assets" / "icons"
+    _LOG.info("Tray: icon theme path root=%s exists=%s", root, root.is_dir())
     if root.is_dir():
         Gtk.IconTheme.get_default().append_search_path(str(root))
+        _LOG.info("Tray: search paths after append: %s", Gtk.IconTheme.get_default().get_search_path())
     _ICON_THEME_PREPARED = True
 
 
-def resolve_tray_icon_name(preferred_base: str) -> str:
-    """Pick an icon that exists in the GTK theme.
+def _gtk_theme_is_dark() -> bool:
+    """Heuristic: true when the GTK theme is dark (dark panel assumed)."""
+    try:
+        settings = Gtk.Settings.get_default()
+        prefer = settings.get_property("gtk-application-prefer-dark-theme")
+        name = (settings.get_property("gtk-theme-name") or "")
+        result = bool(prefer) or "dark" in name.lower()
+        _LOG.info("Tray: gtk-theme-name=%r prefer-dark=%r → is_dark=%s", name, prefer, result)
+        return result
+    except Exception:
+        _LOG.info("Tray: _gtk_theme_is_dark exception", exc_info=True)
+        return True
 
-    Prefer bundled ``io.esp3d.netneighbor-tray`` (B&W), then *-symbolic, then app icon.
+
+def resolve_tray_icon_name(preferred_base: str) -> str:
+    """Pick a tray icon name that exists in the GTK theme.
+
+    AppIndicator renders icons as-is (no symbolic recolouring by the panel).
+    On a dark GTK theme we prefer the white symbolic icon; on a light theme we
+    prefer the coloured tray icon which is visible on light backgrounds.
     """
     ensure_netneighbor_icon_theme_path()
     theme = Gtk.IconTheme.get_default()
     base = (preferred_base or "").strip() or "io.esp3d.netneighbor-tray"
-    candidates = (
-        "io.esp3d.netneighbor-tray",
-        f"{base}-symbolic",
-        base,
-        "io.esp3d.netneighbor",
-        "network-workgroup-symbolic",
-        "network-transmit-receive-symbolic",
-    )
+    if _gtk_theme_is_dark():
+        candidates = (
+            "io.esp3d.netneighbor-tray-symbolic",
+            "io.esp3d.netneighbor-tray",
+            f"{base}-symbolic",
+            base,
+            "io.esp3d.netneighbor-symbolic",
+            "io.esp3d.netneighbor",
+            "network-workgroup-symbolic",
+            "network-transmit-receive-symbolic",
+        )
+    else:
+        candidates = (
+            "io.esp3d.netneighbor-tray",
+            "io.esp3d.netneighbor",
+            f"{base}",
+            "network-workgroup",
+            "network-workgroup-symbolic",
+            "network-transmit-receive-symbolic",
+        )
     for name in candidates:
         try:
-            if theme.has_icon(name):
+            found = theme.has_icon(name)
+            _LOG.info("Tray: has_icon(%r) = %s", name, found)
+            if found:
+                _LOG.info("Tray: resolved icon → %r", name)
                 return name
         except Exception:
+            _LOG.info("Tray: has_icon(%r) raised exception", name, exc_info=True)
             continue
+    _LOG.warning("Tray: no icon found in candidates, returning base=%r", base)
     return base
 
 

@@ -191,7 +191,6 @@ class WsddSocketDiscovery(BaseDiscovery):
                     _wsdd_exchange(self._listen, "probe", min(2.0, self._timeout_s))
                 except OSError:
                     self._logger.debug("wsdd probe failed (continuing to list)", exc_info=True)
-                time.sleep(0.35)
             text = _wsdd_exchange(self._listen, "list", self._timeout_s)
         except OSError as e:
             now = time.monotonic()
