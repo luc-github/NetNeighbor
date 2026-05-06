@@ -162,6 +162,9 @@ class MainWindow(Gtk.ApplicationWindow):
         types_item = Gtk.MenuItem.new_with_label(_("Type presets"))
         types_item.connect("activate", self._on_type_presets_activate)
         preferences_menu.append(types_item)
+        external_apps_item = Gtk.MenuItem.new_with_label(_("External applications…"))
+        external_apps_item.connect("activate", self._on_tools_external_apps_activate)
+        preferences_menu.append(external_apps_item)
         preferences_menu.append(Gtk.SeparatorMenuItem())
 
         self._close_tray_prefs_item = Gtk.CheckMenuItem.new_with_label(
@@ -199,9 +202,6 @@ class MainWindow(Gtk.ApplicationWindow):
         menubar.append(self._notifications_item)
         notifications_menu = Gtk.Menu()
         self._notifications_item.set_submenu(notifications_menu)
-        external_apps_item = Gtk.MenuItem.new_with_label(_("External applications…"))
-        external_apps_item.connect("activate", self._on_tools_external_apps_activate)
-        notifications_menu.append(external_apps_item)
         notifications_history_item = Gtk.MenuItem.new_with_label(_("Notifications history"))
         notifications_history_item.connect("activate", self._on_notifications_history_activate)
         notifications_menu.append(notifications_history_item)

@@ -144,6 +144,31 @@ def request_existing_instance_activation(app_id: str) -> bool:
         return False
 
 
+def _suppress_gdk_freeze_critical() -> None:
+    """Permanently silence the spurious Gdk-CRITICAL from GTK 3's dialog freeze/thaw bug.
+
+    GTK 3 has a long-standing bug where ``gdk_window_thaw_toplevel_updates_libgtk_only``
+    is called one extra time when nested ``Gtk.Dialog.run()`` calls are used, triggering:
+        Gdk-CRITICAL: gdk_window_thaw_toplevel_updates: assertion
+            'window->update_and_descendants_freeze_count > 0' failed
+    This is harmless (the assert just fires, no state is corrupted) but noisy.
+    Install a permanent GLib log handler that drops this one specific message.
+    """
+    _NEEDLE = "gdk_window_thaw_toplevel_updates"
+
+    def _filter(domain, level, message, _user_data):
+        if message and _NEEDLE in message:
+            return
+        GLib.log_default_handler(domain, level, message, None)
+
+    GLib.log_set_handler(
+        "Gdk",
+        GLib.LogLevelFlags.LEVEL_CRITICAL,
+        _filter,
+        None,
+    )
+
+
 class NetNeighborApplication(Gtk.Application):
     def __init__(self, *, start_minimized_to_tray: bool = False) -> None:
         self._app_id = "io.esp3d.netneighbor"
@@ -220,6 +245,14 @@ class NetNeighborApplication(Gtk.Application):
         self._instance_lock = SingleInstanceLock(self._app_id)
         self._activation_server = InstanceActivationServer(self._app_id, self._present_window)
         self._set_default_app_icon()
+        # Disable GTK's "use header bar in dialogs" setting globally so that all
+        # Gtk.Dialog instances use traditional title bars + action-area buttons.
+        # This must be done before any dialog is created.
+        try:
+            Gtk.Settings.get_default().set_property("gtk-dialogs-use-header", False)
+        except Exception:
+            pass
+        _suppress_gdk_freeze_critical()
 
     def do_activate(self) -> None:
         created = False
@@ -351,14 +384,14 @@ def _load_logging_config() -> dict:
     config_dir = Path.home() / ".config" / "netneighbor"
     config_path = config_dir / "logging.json"
     default_config = {
-        "default": "INFO",
-        "app": "INFO",
-        "device_list": "INFO",
+        "default": "NONE",
+        "app": "NONE",
+        "device_list": "NONE",
         "ssdp": "NONE",
-        "mdns": "DEBUG",
-        "wsd": "DEBUG",
-        "wsdd": "DEBUG",
-        "nmb": "DEBUG",
+        "mdns": "NONE",
+        "wsd": "NONE",
+        "wsdd": "NONE",
+        "nmb": "NONE",
     }
     try:
         config_dir.mkdir(parents=True, exist_ok=True)
