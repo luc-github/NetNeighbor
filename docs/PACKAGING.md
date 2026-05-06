@@ -63,10 +63,14 @@ Outputs:
 - App files: `/usr/share/netneighbor/`
 - Launcher: `/usr/bin/netneighbor`
 - Desktop entry: `/usr/share/applications/netneighbor.desktop`
-- Icons (**SVG scalable**, shared source [`assets/svg/netneighbor.svg`](../assets/svg/netneighbor.svg)):
-  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg`
-  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg`  
-    (same artwork; launcher vs tray icon name.)
+- Icons (**SVG scalable**):
+  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg` — app/launcher icon (source: `assets/svg/netneighbor_icon.svg`)
+  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg` — coloured tray icon for light GTK themes (source: `assets/svg/netneighbor-tray.svg`)
+  - `/usr/share/icons/hicolor/scalable/status/io.esp3d.netneighbor-tray-symbolic.svg` — white symbolic tray icon for dark GTK themes (source: `assets/svg/netneighbor-tray-symbolic.svg`)
+
+  The tray code (`ui/tray_indicator.py`) selects the icon at startup based on `gtk-theme-name`: themes containing `"dark"` or with `gtk-application-prefer-dark-theme=true` use the symbolic (white) variant; others use the coloured variant.
+
+  In dev mode (running from source) the same icons are resolved via `assets/icons/hicolor/` symlinks registered with `Gtk.IconTheme.append_search_path()`.
 
 The `.deb` embeds runtime-relevant tracked paths only (`discovery/`, `ui/`, `utils/`, `model/`, `data/`, `config/`, `assets/`, `locale/`, plus entrypoint/docs files listed in `packaging/build_deb.sh`).
 

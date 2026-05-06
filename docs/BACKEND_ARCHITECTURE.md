@@ -118,6 +118,8 @@ use `GLib.idle_add` before touching GTK.
 - Uses `zeroconf` library (passive browsing + DNS-SD enumeration)
 - Aggregates per-service payloads into per-host entries
 - URL only set when `_http._tcp` is actually advertised
+- **Grace period on removal**: `remove_service` callbacks are delayed 180 s when the host is still alive, absorbing mDNS TTL jitter that would otherwise cause false offline flaps
+- **Refresh = full Zeroconf restart**: `refresh()` closes and reopens the `Zeroconf` instance to clear its DNS cache, then recreates all `ServiceBrowser` objects. This ensures PTR queries go out without *known-answer suppression* headers (RFC 6762 §7.1), so devices that stopped announcing (TTL expired) will respond and repopulate the device list
 - See [`MDNS.md`](MDNS.md) for full details
 
 ### WS-Discovery (`discovery/wsd.py`, `discovery/wsdd_client.py`)
@@ -129,6 +131,7 @@ use `GLib.idle_add` before touching GTK.
 ### NetBIOS (`discovery/netbios.py`)
 
 - Calls `nmblookup -A <ip>` (Samba client tool) to resolve NetBIOS names
+- Directed probes run in parallel via `ThreadPoolExecutor(max_workers=8)`
 - Supplementary: adds name/workgroup context to already-discovered SSDP/WSD hosts
 - Requires `samba-client` or `samba-common-bin` to be installed
 
@@ -167,6 +170,19 @@ When two protocols discover the same physical device (e.g. a NAS seen via both S
   (default: `user_override > ssdp_live > ssdp_profile_cache > mdns`)
 - MAC address from the ARP/neighbor cache (`utils/neighbor_mac.py`) assists bundle merge
   when different protocols report slightly different IPs for the same host
+
+### SSDP profile cache hydration
+
+When an mDNS or live SSDP device arrives, the manager pre-populates its `metadata` from the persisted SSDP profile cache (`~/.cache/netneighbor/discovery-cache.json`) **before** the live XML fetch completes:
+
+- `_hydrate_mdns_from_ssdp_profile_cache` — copies `xml_fields`, `raw_xml`, and `ssdp_location` into mDNS devices; enables the "Device data" tab and rich fields (Manufacturer, Model…) even when no SSDP device is alive
+- `_hydrate_ssdp_from_profile_cache` — same for live SSDP devices whose XML fetch is still pending or has failed
+
+The live XML fetch result takes precedence and overwrites cached values once it arrives.
+
+### Loopback filtering
+
+All devices with a loopback IP address (`ipaddress.ip_address(ip).is_loopback`) are discarded unconditionally in `add_or_update_device`. This covers `127.0.0.1`, `127.x.x.x`, `::1` and any other loopback — they are always the local machine and have no value as network neighbours.
 
 ---
 

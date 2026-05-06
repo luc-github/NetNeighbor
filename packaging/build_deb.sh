@@ -85,11 +85,11 @@ sed "s/@APP_VERSION@/${VERSION}/g" "${SCRIPT_DIR}/netneighbor.desktop" > "${PKG_
 chmod 0644 "${PKG_ROOT}/usr/share/applications/netneighbor.desktop"
 # App icon (launcher, window): full-colour SVG.
 mkdir -p "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps"
-install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor_icon.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor_icon.svg"
-# Tray fallback (non-symbolic): kept for DEs that don't recolour symbolic icons.
-install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor_icon.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg"
-# Tray symbolic: monochrome icon recoloured by the DE to match panel foreground.
-# hicolor/scalable/status/ is the correct location for AppIndicator symbolic icons.
+install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor_icon.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg"
+# Tray coloured icon: used on light GTK themes (non-symbolic fallback).
+install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor-tray.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg"
+# Tray symbolic (white): used on dark GTK themes; recoloured by AppIndicator/panel.
+# hicolor/scalable/status/ is the standard location for symbolic status icons.
 _sym_svg="${PROJECT_ROOT}/assets/svg/netneighbor-tray-symbolic.svg"
 if [[ -f "${_sym_svg}" ]]; then
   mkdir -p "${PKG_ROOT}/usr/share/icons/hicolor/scalable/status"

@@ -19,7 +19,7 @@ Neighborhood experience.
 - **Open / double-click** resolves the best connection target in priority order (`http > smb > ssh > ftp > sftp > telnet`); right-click **Open ▶** submenu lists all available targets with labels when multiple are present
 - **Per-device commands** (Options tab in device details): dynamic list of connection commands — each entry sets the scheme, optional IP/port override, mode (**Override** replaces the auto-detected default; **Additional** adds an extra entry to the submenu), and optional label. Confirmation dialogs protect Remove / Clear / Reset actions.
 - **External applications** (**Tools → External applications…**): per-scheme command templates for Open (`{ip}`, `{port}`, `{name}`, `{type}`, `{category}`, `{url}`) and a global **Custom command** for the right-click menu; **Reset** restores the built-in default per scheme
-- Root app icon: **`assets/svg/netneighbor.svg`** (also wired into the hicolor theme path for tray/launcher names `io.esp3d.netneighbor` / `io.esp3d.netneighbor-tray`)
+- App icon: **`assets/svg/netneighbor_icon.svg`** (launcher/window); tray icon adapts to panel theme — white symbolic (`netneighbor-tray-symbolic.svg`) on dark panels, coloured (`netneighbor-tray.svg`) on light panels; selection is automatic at startup via `gtk-theme-name`
 - **`.deb`** packaging script: `packaging/build_deb.sh` (see [`docs/PACKAGING.md`](docs/PACKAGING.md))
 
 Developer documentation lives under [`docs/README.md`](docs/README.md).
