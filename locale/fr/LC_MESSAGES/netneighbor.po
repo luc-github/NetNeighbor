@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: NetNeighbor 0.1.0-dev\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-06 22:13+0800\n"
+"POT-Creation-Date: 2026-05-06 22:22+0800\n"
 "PO-Revision-Date: 2026-04-29 13:30+0800\n"
 "Last-Translator: Luc\n"
 "Language-Team: French\n"
@@ -591,6 +591,10 @@ msgstr "Nom"
 msgid "IP address"
 msgstr "Adresse IP"
 
+#: ui/device_details.py:175
+msgid "IPv6 (link-local)"
+msgstr "IPv6 (lien-local)"
+
 #: ui/device_details.py:208
 msgid "Overview"
 msgstr "Aperçu"
@@ -660,6 +664,10 @@ msgstr "Enregistrement"
 #: ui/device_details.py:299
 msgid "TXT records"
 msgstr "Enregistrements TXT"
+
+#: ui/device_details.py:309
+msgid "XML location"
+msgstr "Emplacement XML"
 
 #: ui/device_details.py:314
 msgid "Copy to clipboard"
@@ -736,9 +744,17 @@ msgstr "Ouvrir le dossier des icônes personnalisées"
 msgid "unavailable"
 msgstr "indisponible"
 
+#: ui/device_details.py:675
+msgid "Image from device"
+msgstr "Image de l'appareil"
+
 #: ui/device_details.py:677 ui/device_details.py:683
 msgid "none"
 msgstr "aucun"
+
+#: ui/device_details.py:678
+msgid "Selected icon"
+msgstr "Icône sélectionnée"
 
 #: ui/device_details.py:733
 msgid "Choose icon"

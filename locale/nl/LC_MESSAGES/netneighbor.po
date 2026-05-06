@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: NetNeighbor 0.8.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-06 22:13+0800\n"
+"POT-Creation-Date: 2026-05-06 22:22+0800\n"
 "PO-Revision-Date: 2026-05-05 11:49+0800\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: Dutch\n"
@@ -589,6 +589,10 @@ msgstr "Naam"
 msgid "IP address"
 msgstr "IP-adres"
 
+#: ui/device_details.py:175
+msgid "IPv6 (link-local)"
+msgstr "IPv6 (link-local)"
+
 #: ui/device_details.py:208
 msgid "Overview"
 msgstr "Overzicht"
@@ -657,6 +661,10 @@ msgstr "Record"
 #: ui/device_details.py:299
 msgid "TXT records"
 msgstr "TXT-records"
+
+#: ui/device_details.py:309
+msgid "XML location"
+msgstr "XML-locatie"
 
 #: ui/device_details.py:314
 msgid "Copy to clipboard"
@@ -733,9 +741,17 @@ msgstr "Map met aangepaste pictogrammen openen"
 msgid "unavailable"
 msgstr "niet beschikbaar"
 
+#: ui/device_details.py:675
+msgid "Image from device"
+msgstr "Afbeelding van apparaat"
+
 #: ui/device_details.py:677 ui/device_details.py:683
 msgid "none"
 msgstr "geen"
+
+#: ui/device_details.py:678
+msgid "Selected icon"
+msgstr "Geselecteerde pictogram"
 
 #: ui/device_details.py:733
 msgid "Choose icon"

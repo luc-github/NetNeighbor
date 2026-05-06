@@ -172,7 +172,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
             ip6 = ov.get("ipv6_link_local")
             ip6_s = (ip6 or "").strip() if isinstance(ip6, str) else ""
             if ip6_s:
-                i6l = Gtk.Label(label=f"{_('IPv6 (link-local)')}:", xalign=0.0)
+                i6l = Gtk.Label(label=_("IPv6 (link-local)") + ":", xalign=0.0)
                 i6l.get_style_context().add_class("dim-label")
                 i6l.set_halign(Gtk.Align.START)
                 overview_grid.attach(i6l, 0, orow, 1, 1)
@@ -306,7 +306,7 @@ class DeviceDetailsDialog(Gtk.Dialog):
             raw_box.set_margin_bottom(8)
 
             if self._raw_xml_location:
-                location_label = Gtk.Label(label=f"{_('XML location')}: {self._raw_xml_location}", xalign=0.0)
+                location_label = Gtk.Label(label=_("XML location") + ": " + self._raw_xml_location, xalign=0.0)
                 location_label.set_selectable(True)
                 location_label.set_halign(Gtk.Align.START)
                 raw_box.pack_start(location_label, False, False, 0)
@@ -672,10 +672,10 @@ class DeviceDetailsDialog(Gtk.Dialog):
         w.show()
         if mode == "provided":
             detail = self._provided_icon_display or _("unavailable")
-            w.set_text(f"{_('Image from device')}: {detail}")
+            w.set_text(_("Image from device") + ": " + detail)
             return
         label = self._selected_icon_label or _("none")
-        w.set_text(f"{_('Selected icon')}: {label}")
+        w.set_text(_("Selected icon") + ": " + label)
 
     def _select_custom_icon(self, icon_name: str | None) -> None:
         if not icon_name:

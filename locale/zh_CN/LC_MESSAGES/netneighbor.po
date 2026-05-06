@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: NetNeighbor 0.8.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-06 22:13+0800\n"
+"POT-Creation-Date: 2026-05-06 22:22+0800\n"
 "PO-Revision-Date: 2026-05-05 11:49+0800\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: Chinese Simplified\n"
@@ -575,6 +575,10 @@ msgstr "名称"
 msgid "IP address"
 msgstr "IP 地址"
 
+#: ui/device_details.py:175
+msgid "IPv6 (link-local)"
+msgstr "IPv6（链接本地）"
+
 #: ui/device_details.py:208
 msgid "Overview"
 msgstr "概述"
@@ -642,6 +646,10 @@ msgstr "记录"
 #: ui/device_details.py:299
 msgid "TXT records"
 msgstr "TXT 记录"
+
+#: ui/device_details.py:309
+msgid "XML location"
+msgstr "XML 位置"
 
 #: ui/device_details.py:314
 msgid "Copy to clipboard"
@@ -718,9 +726,17 @@ msgstr "打开自定义图标文件夹"
 msgid "unavailable"
 msgstr "不可用"
 
+#: ui/device_details.py:675
+msgid "Image from device"
+msgstr "来自设备的图像"
+
 #: ui/device_details.py:677 ui/device_details.py:683
 msgid "none"
 msgstr "无"
+
+#: ui/device_details.py:678
+msgid "Selected icon"
+msgstr "选定的图标"
 
 #: ui/device_details.py:733
 msgid "Choose icon"
