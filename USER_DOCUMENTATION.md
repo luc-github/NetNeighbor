@@ -2,37 +2,54 @@
 
 ## What is NetNeighbor?
 
-NetNeighbor shows devices that announce themselves on your local network (SSDP, mDNS/Bonjour,
-WS-Discovery, NetBIOS). It does not run a full active port scan — it listens for broadcast and
-multicast announcements and queries.
+NetNeighbor discovers and monitors devices on your local network.
+It listens for device announcements (SSDP, mDNS/Bonjour, WS-Discovery, NetBIOS) and
+displays them with icons or in a list — no active port scan required.
+
+Previously-seen devices appear instantly at startup from the local cache; live discovery
+updates them within a few seconds.
 
 One NetNeighbor instance is allowed at a time; a second launch raises the existing window.
 
+---
+
 ## Main window
+
+![Main window — icon grid view](docs/screenshots/main-grid.png)
 
 - **List view** and **icon grid** — toggle from the View menu or toolbar
 - **Sidebar**: categories grouped by device type or location (View → Arrange)
 - **Search bar**: filter by name or type
-- **F11**: toggle fullscreen (useful in icon grid)
-- **View → Reload**: force an immediate M-SEARCH refresh
+- **F11**: toggle fullscreen (useful on small screens in icon grid)
+- **View → Reload**: force an immediate refresh of all discovery protocols
+
+![View menu](docs/screenshots/menu-view.png)
+
+![Main window — list view](docs/screenshots/main-list.png)
+
+---
 
 ## Opening devices
 
 **Double-click** or right-click → **Open** launches the best connection for that device.
 
-Priority order: `HTTP → SMB → SSH → FTP → SFTP → Telnet`
+Priority order: `HTTP → HTTPS → SMB → SSH → FTP → SFTP → Telnet`
 
 For each scheme the resolution follows:
 1. **Override** command (from the device's Options tab) — replaces the auto-detected default
 2. **Detected** default (URL advertised by discovery)
 3. **Additional** command (from the device's Options tab) — adds to the submenu without replacing
-4. **Custom command** (from Tools → External applications…)
+4. **Custom command** (from Preferences → External applications…)
 5. Nothing — Open is disabled
 
 When a device has **two or more** connection targets, right-click shows **Open ▶** with a submenu
 listing all of them with labels (`HTTP`, `SSH (Admin)`, `HTTP (override)`, etc.).
 
+---
+
 ## Right-click menu
+
+![Right-click context menu](docs/screenshots/context-menu.png)
 
 | Action | Description |
 |--------|-------------|
@@ -43,15 +60,21 @@ listing all of them with labels (`HTTP`, `SSH (Admin)`, `HTTP (override)`, etc.)
 | **Rename** | Set a display name for this device |
 | **Location** | Tag the device with a room or location label |
 | **Icon** | Choose system, bundled, or custom icon |
-| **Run custom command** | Execute the global custom command (Tools → External applications…) |
+| **Run custom command** | Execute the custom command set in Preferences → External applications… |
+
+---
 
 ## Device details dialog
 
 ### Overview tab
 
+![Device details — Overview tab](docs/screenshots/device-details.png)
+
 Summary of discovered fields: IP, port, name, type, location, last seen, services.
 
 ### Options tab
+
+![Device details — Options tab](docs/screenshots/device-options.png)
 
 Per-device connection commands. Click **+ Add command** to add a row:
 
@@ -71,20 +94,13 @@ Available placeholders for the custom command field: `{ip}  {port}  {name}  {typ
 
 Raw fields received from each discovery protocol. **SSDP details** includes parsed XML when available.
 
-## Tools → External applications…
+---
 
-Override the command used to open devices **per scheme** (HTTP, HTTPS, SMB, FTP, SSH, Telnet, SFTP).
-Leave a field empty to use the system default (`xdg-open` for HTTP/HTTPS, file manager for SMB/FTP/SFTP,
-terminal for SSH/Telnet).
+## Preferences
 
-Placeholders: `{url}`, `{ip}`, `{port}`, `{name}`, `{type}`, `{category}`
+Open with **View → Preferences**.
 
-**Reset** restores the built-in default for that scheme (confirmation required).
-
-**Custom command** at the bottom sets the command run by **right-click → Run custom command** — useful
-for port scans, terminal launchers, etc. Same placeholders apply.
-
-## View → Preferences
+### General options
 
 | Setting | Description |
 |---------|-------------|
@@ -93,13 +109,66 @@ for port scans, terminal launchers, etc. Same placeholders apply.
 | **Start minimized to tray** | Start hidden to the panel; open from the tray icon |
 | **Start NetNeighbor when logging in** | Add/remove a session autostart entry (`~/.config/autostart/`) |
 
+### Location presets
+
+![Location presets dialog](docs/screenshots/location-presets.png)
+
+**Preferences → Location presets…** manages the list of location labels available in the
+right-click → Location menu.
+
+| Button | Action |
+|--------|--------|
+| **Add** | Create a new location label |
+| **Rename** | Edit the selected label |
+| **Remove** | Delete the selected label (confirmation required) |
+| **Restore defaults** | Reset the list to the built-in defaults |
+
+Labels are stored in `~/.config/netneighbor/ui_prefs.json`.
+
+### Type presets
+
+![Type presets dialog](docs/screenshots/type-presets.png)
+
+**Preferences → Type presets…** manages the list of device types available in the
+right-click → Type menu. Each entry has a **Label** (display name) and a **Type ID**
+(internal slug used for icon lookup).
+
+| Button | Action |
+|--------|--------|
+| **Add** | Create a new type entry (label + slug) |
+| **Rename** | Edit the selected entry |
+| **Remove** | Delete the selected entry (confirmation required) |
+| **Restore defaults** | Reset to the 14 built-in device types |
+
+### External applications
+
+![External applications dialog](docs/screenshots/external-applications.png)
+
+**Preferences → External applications…** overrides the command used to open devices
+**per scheme** (HTTP, HTTPS, SMB, FTP, SSH, Telnet, SFTP).
+Leave a field empty to use the system default (`xdg-open` for HTTP/HTTPS, file manager
+for SMB/FTP/SFTP, terminal for SSH/Telnet).
+
+Placeholders: `{url}`, `{ip}`, `{port}`, `{name}`, `{type}`, `{category}`
+
+**Reset** restores the built-in default for that scheme (confirmation required).
+
+**Custom command** at the bottom sets the command run by **right-click → Run custom command** —
+useful for port scans, terminal launchers, etc. Same placeholders apply.
+
+---
+
 ## System tray
+
+![System tray menu](docs/screenshots/tray-menu.png)
 
 When the tray icon is active, the main window uses a **client-side title bar** with Maximize and
 Close buttons. Minimize-to-tray is available from the tray icon menu or by closing the window with
 **Close to tray** enabled.
 
 Tray menu: **Open** / **Minimize to tray** / **Quit**
+
+---
 
 ## Autodetection is heuristic
 
@@ -112,6 +181,8 @@ Corrections:
    applied after discovery.
 2. **User rule overlays**: JSON files in `~/.config/netneighbor/` extend mDNS and SSDP matching
    (see [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md)).
+
+---
 
 ## Troubleshooting
 

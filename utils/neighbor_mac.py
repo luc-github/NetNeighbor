@@ -1,3 +1,7 @@
+# File neighbor_mac.py for NetNeighbor version 1.0.0
+# Internal version : 1.0.0 date: 2026-05-07 11:44
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Resolve MAC from kernel neighbor caches (ARP / IPv6 ND) — no privileged probe.
 
 Reads ``/proc/net/arp`` and ``ip neigh show``. Entries appear after recent LAN traffic;

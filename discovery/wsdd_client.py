@@ -1,3 +1,7 @@
+# File wsdd_client.py for NetNeighbor version 1.0.0
+# Internal version : 1.0.0 date: 2026-05-07 11:44
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Poll the local `wsdd` control socket (``-l``) for WSD discovery cache — often includes Windows computer names.
 
 Requires `wsdd` (christgau/wsdd) running with client/discovery mode (``-D``) and a listen socket, e.g.:

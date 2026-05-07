@@ -23,12 +23,13 @@ echo "== NetNeighbor release =="
 echo "version=${VERSION} arch=${ARCH}"
 
 echo "-- clean previous artifacts"
-# Remove old .deb, .tar.gz, checksums and build staging dirs so no stale
-# artifacts can accidentally be installed or mixed with the new build.
+# Remove old .deb, .tar.gz, .AppImage, checksums and build staging dirs so
+# no stale artifacts can accidentally be installed or mixed with the new build.
 rm -f  "${DIST_DIR}"/netneighbor_*.deb \
        "${DIST_DIR}"/netneighbor-*.tar.gz \
+       "${DIST_DIR}"/NetNeighbor-*.AppImage \
        "${DIST_DIR}"/SHA256SUMS-*.txt
-rm -rf "${DIST_DIR}/deb-build" "${DIST_DIR}/tarball-stage"
+rm -rf "${DIST_DIR}/deb-build" "${DIST_DIR}/tarball-stage" "${DIST_DIR}/appimage-build"
 echo "   dist/ cleaned"
 
 echo "-- sanity checks"
@@ -39,14 +40,23 @@ python3 -m py_compile \
   "${PROJECT_ROOT}/utils/app_version.py"
 bash -n "${SCRIPT_DIR}/build_deb.sh"
 bash -n "${SCRIPT_DIR}/build_tarball.sh"
+bash -n "${SCRIPT_DIR}/build_appimage.sh"
 bash -n "${SCRIPT_DIR}/install-user-desktop.sh"
 
 echo "-- build artifacts"
-"${SCRIPT_DIR}/build_deb.sh" "${VERSION}" "${ARCH}"
-"${SCRIPT_DIR}/build_tarball.sh" "${VERSION}"
+"${SCRIPT_DIR}/build_deb.sh"      "${VERSION}" "${ARCH}"
+"${SCRIPT_DIR}/build_tarball.sh"  "${VERSION}"
+APPIMAGE_ARCH="$(uname -m)"
+if "${SCRIPT_DIR}/build_appimage.sh" "${VERSION}" "${APPIMAGE_ARCH}"; then
+  _appimage_built=1
+else
+  echo "   WARNING: AppImage build skipped (appimagetool not found — install from https://github.com/AppImage/AppImageKit/releases)"
+  _appimage_built=0
+fi
 
 DEB_PATH="${DIST_DIR}/netneighbor_${VERSION}_${ARCH}.deb"
 TAR_PATH="${DIST_DIR}/netneighbor-${VERSION}.tar.gz"
+APPIMAGE_PATH="${DIST_DIR}/NetNeighbor-${VERSION}-${APPIMAGE_ARCH}.AppImage"
 
 if [[ ! -f "${DEB_PATH}" ]]; then
   echo "Missing built deb: ${DEB_PATH}" >&2
@@ -54,6 +64,10 @@ if [[ ! -f "${DEB_PATH}" ]]; then
 fi
 if [[ ! -f "${TAR_PATH}" ]]; then
   echo "Missing built tarball: ${TAR_PATH}" >&2
+  exit 1
+fi
+if [[ "${_appimage_built}" -eq 1 && ! -f "${APPIMAGE_PATH}" ]]; then
+  echo "Missing built AppImage: ${APPIMAGE_PATH}" >&2
   exit 1
 fi
 
@@ -103,9 +117,11 @@ if [[ ! -f "${desktop_file}" ]]; then
   echo "Missing desktop file in deb payload" >&2
   exit 1
 fi
-desktop_version="$(awk -F= '$1=="Version"{print $2; exit}' "${desktop_file}")"
-if [[ "${desktop_version}" != "${VERSION}" ]]; then
-  echo ".desktop Version mismatch: got=${desktop_version} expected=${VERSION}" >&2
+# Version= in a .desktop file is the Desktop Entry spec version (always "1.0"),
+# not the app version.  Verify Name= instead to confirm the file is ours.
+desktop_name="$(awk -F= '$1=="Name"{print $2; exit}' "${desktop_file}")"
+if [[ "${desktop_name}" != "NetNeighbor" ]]; then
+  echo ".desktop Name mismatch: got=${desktop_name} expected=NetNeighbor" >&2
   exit 1
 fi
 
@@ -114,10 +130,16 @@ checksum_file="${DIST_DIR}/SHA256SUMS-${VERSION}.txt"
 (
   cd "${DIST_DIR}"
   sha256sum "netneighbor_${VERSION}_${ARCH}.deb" "netneighbor-${VERSION}.tar.gz"
+  if [[ "${_appimage_built}" -eq 1 ]]; then
+    sha256sum "NetNeighbor-${VERSION}-${APPIMAGE_ARCH}.AppImage"
+  fi
 ) > "${checksum_file}"
 
 echo "Release artifacts ready:"
 echo "  ${DEB_PATH}"
 echo "  ${TAR_PATH}"
+if [[ "${_appimage_built}" -eq 1 ]]; then
+  echo "  ${APPIMAGE_PATH}"
+fi
 echo "  ${checksum_file}"
-echo "Verified: Version=${deb_version} Installed-Size=${deb_size} desktop-Version=${desktop_version}"
+echo "Verified: Version=${deb_version} Installed-Size=${deb_size} desktop-Name=${desktop_name}"

@@ -1,79 +1,66 @@
 # NetNeighbor
 
-NetNeighbor is a Linux desktop application that replicates and extends the Windows Network
-Neighborhood experience.
+NetNeighbor is a Linux desktop application that discovers and monitors devices on your
+local network — a modern equivalent of the Windows Network Neighborhood experience.
 
-**Current release:** **0.9.0**
+**Current release: 1.0.0**
 
-## Current state
+![NetNeighbor main window](docs/screenshots/overview-hero.png)
 
-- GTK 3 application (single-instance lock, optional demo mode; second launch raises the existing window)
-- **SSDP** discovery (multicast listen, M-SEARCH refresh, XML descriptors, offline / TTL handling)
-- **mDNS** discovery with `zeroconf` (service browse, host-level aggregation, TXT/services details)
-- **WSD** (WS-Discovery) via PyPI `WSDiscovery` — Windows-compatible hosts and printers on UDP 3702
-- **NetBIOS** browse via `nmblookup` (Samba **client** tools) and optional **wsdd** cache — see runtime notes below
-- Discovery manager with in-memory device cache, cross-protocol merge rules (**MAC** from neighbor cache assists bundle merge), user overrides; details can show **IPv4 from ARP/neigh** when discovery only listed IPv6 for the same MAC; **instant startup** — previously-seen devices from the SSDP profile cache appear immediately at launch (< 100 ms) before live discovery completes
-- Main window: list + icon grid, categories, details dialogs, notifications (optional), **View → Preferences** persisted in `~/.config/netneighbor/ui_prefs.json`
-- **System tray** (Ayatana/AppIndicator or Gtk.StatusIcon fallback): **Open** / **Minimize to tray** / **Quit**, keep running when closing the window, optional **start minimized**, optional **session autostart**. Autostart `Exec=` adds **`--start-minimized-to-tray`** only in `~/.config/autostart/` — not in the menu launcher — see [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
-- When tray is active: client-side title bar **Maximize + Close** (window minimization to tray is via tray menu or close-with-tray; **F11** toggles fullscreen)
-- **Open / double-click** resolves the best connection target in priority order (`http > smb > ssh > ftp > sftp > telnet`); right-click **Open ▶** submenu lists all available targets with labels when multiple are present
-- **Per-device commands** (Options tab in device details): dynamic list of connection commands — each entry sets the scheme, optional IP/port override, mode (**Override** replaces the auto-detected default; **Additional** adds an extra entry to the submenu), and optional label. Confirmation dialogs protect Remove / Clear / Reset actions.
-- **External applications** (**Tools → External applications…**): per-scheme command templates for Open (`{ip}`, `{port}`, `{name}`, `{type}`, `{category}`, `{url}`) and a global **Custom command** for the right-click menu; **Reset** restores the built-in default per scheme
-- App icon: **`assets/svg/netneighbor_icon.svg`** (launcher/window); tray icon adapts to panel theme — white symbolic (`netneighbor-tray-symbolic.svg`) on dark panels, coloured (`netneighbor-tray.svg`) on light panels; selection is automatic at startup via `gtk-theme-name`
-- **`.deb`** packaging script: `packaging/build_deb.sh` (see [`docs/PACKAGING.md`](docs/PACKAGING.md))
+## Features
 
-Developer documentation lives under [`docs/README.md`](docs/README.md).
-User documentation lives in [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
+- **Automatic discovery** — SSDP, mDNS/Bonjour, WS-Discovery, NetBIOS; no active port scan
+- **Instant startup** — previously-seen devices appear from cache in < 100 ms
+- **List and icon grid** views with sidebar categories (by type or location)
+- **Open devices** in one click — HTTP, HTTPS, SMB, SSH, FTP, SFTP, Telnet with configurable priority
+- **Per-device overrides** — custom name, type, location, icon, and connection commands
+- **System tray** — minimize to tray, start minimized, session autostart
+- **Localised** — French, Spanish, German, Italian, Dutch, Japanese, Chinese (Simplified/Traditional)
+- **Packaged** as `.deb` (Ubuntu/Mint/Debian), `.AppImage`, and tarball
 
-## Autodetection (limits) and corrections
+## Download
 
-Device **names**, **types**, and related hints come from passive discovery (SSDP, mDNS, and cached
-profiles on disk). Heuristics reflect what your LAN advertises; they are **not infallible** and may
-differ on another network or firmware revision.
+Latest release: [GitHub Releases](https://github.com/luc-github/NetNeighbor/releases)
 
-When the UI does not match reality, NetNeighbor provides:
-
-1. **Per-device overrides** — display **name**, **type**, **location**, and **icon** choices (stored in
-   user preferences) are applied **after** discovery and override protocol-derived values for that
-   device identity.
-
-2. **User rule overlays** — optional pattern rules under `~/.config/netneighbor/` (mDNS and SSDP)
-   adjust classification and labels for recurring equipment. Rules that prove stable and broadly useful
-   can be **contributed upstream** as bundled defaults so they apply for everyone.
-
-Merge ordering between discovery inputs (`discovery.json`, including `merge.information_precedence`) is
-described for contributors in [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md).
+Available formats: `.deb` · `.AppImage` · `.tar.gz`
 
 ## Requirements
 
-- Linux desktop with GTK3 runtime
+- Linux desktop with GTK 3
 - Python 3.10+
-- `python3-gi` and GTK bindings installed from distro packages
 
-### Linux Mint / Ubuntu / Debian prerequisites
-
-Install GTK/PyGObject and Cairo from system packages:
+### Ubuntu / Linux Mint / Debian
 
 ```bash
-sudo apt update
-sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 libcairo2-dev pkg-config
+sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0
+sudo apt install -y samba-common-bin                             # NetBIOS names
+sudo apt install -y gir1.2-ayatanaappindicator3-0.1             # system tray
 ```
 
-NetBIOS name resolution and system tray support:
+These dependencies are installed automatically when using the `.deb` package.
 
+## Install
+
+**`.deb` package (recommended):**
 ```bash
-sudo apt install -y samba-common-bin
-sudo apt install -y gir1.2-ayatanaappindicator3-0.1   # typical on Mint/Ubuntu
-# or, on some setups: gir1.2-appindicator3-0.1
+sudo dpkg -i netneighbor_1.0.0_amd64.deb
 ```
 
-These are included automatically when installing the `.deb` package. NetNeighbor does **not** require Samba server daemons (`smbd` / `nmbd`) — only the **`nmblookup`** client from `samba-common-bin`.
+**`.AppImage`:**
+```bash
+chmod +x NetNeighbor-1.0.0-x86_64.AppImage
+./NetNeighbor-1.0.0-x86_64.AppImage
+```
 
-Python dependencies installed in the virtual environment:
-- `zeroconf`
-- `WSDiscovery` (optional; graceful degradation if absent)
+**Tarball:**
+```bash
+tar -xzf netneighbor-1.0.0.tar.gz
+cd netneighbor-1.0.0
+bash install-user-desktop.sh   # optional: add menu shortcut
+bash run.sh
+```
 
-## Run (development)
+## Run from source
 
 ```bash
 python -m venv .venv --system-site-packages
@@ -82,47 +69,50 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Demo data is enabled by default to help with visual mockups. Disable it with:
-
+Demo data is enabled by default. Disable with:
 ```bash
 NETNEIGHBOR_DEMO=0 python main.py
 ```
 
-## Translations (i18n)
+## Documentation
 
-Translation catalogs are available under `locale/`:
+User documentation: [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md)
+
+Developer documentation: [`docs/README.md`](docs/README.md)
+
+## Translations
 
 | Language | Code | Status |
 |----------|------|--------|
-| French | `fr` | Partial (~150 untranslated strings) |
-| Italian | `it` | Ready for translation |
-| Spanish | `es` | Ready for translation |
-| German | `de` | Ready for translation |
-| Dutch | `nl` | Ready for translation |
-| Traditional Chinese (Taiwan) | `zh_TW` | Ready for translation |
-| Simplified Chinese | `zh_CN` | Ready for translation |
-| Japanese | `ja` | Ready for translation |
+| French | `fr` | Complete |
+| Italian | `it` | Complete |
+| Spanish | `es` | Complete |
+| German | `de` | Complete |
+| Dutch | `nl` | Complete |
+| Traditional Chinese | `zh_TW` | Complete |
+| Simplified Chinese | `zh_CN` | Complete |
+| Japanese | `ja` | Complete |
 
-Compile translations after edits:
-
+Compile after editing a `.po` file:
 ```bash
 msgfmt locale/fr/LC_MESSAGES/netneighbor.po -o locale/fr/LC_MESSAGES/netneighbor.mo
 ```
 
-Run app in French for testing:
-
+Test in a specific language:
 ```bash
 LANG=fr_FR.UTF-8 python main.py
 ```
 
-Full translation workflow (new language, POT merge/update, runtime checks):
-[`docs/I18N.md`](docs/I18N.md).
+Full i18n workflow: [`docs/I18N.md`](docs/I18N.md)
 
-Only one NetNeighbor instance is allowed at a time on Linux to avoid discovery conflicts.
-A second launch asks the first instance to bring its window to the foreground.
+## Autodetection and corrections
+
+Device names and types are inferred from protocol announcements — they are best-effort.
+Use right-click → **Type / Rename / Location / Icon** for per-device corrections.
+Community rule overlays: [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md).
 
 ## Pending work
 
-See [`docs/TODO.md`](docs/TODO.md) for known items and future ideas.
+[`docs/TODO.md`](docs/TODO.md)
 
-Contribution and maintenance reminders: [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md), user overlays: [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md).
+Contribution and maintenance notes: [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md)

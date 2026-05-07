@@ -1,3 +1,7 @@
+# File main_window.py for NetNeighbor version 1.0.0
+# Internal version : 1.0.0 date: 2026-05-07 11:44
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Main application window."""
 
 import gi
@@ -1081,7 +1085,7 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.set_program_name("NetNeighbor")
         dialog.set_version(get_app_version())
         dialog.set_authors(["Luc"])
-        dialog.set_comments(_("Linux network neighborhood for SSDP/mDNS discovery."))
+        dialog.set_comments(_("Discover and monitor devices on your local network."))
         dialog.add_credit_section(
             _("Python libraries"),
             [

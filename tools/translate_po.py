@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+# File translate_po.py for NetNeighbor version 1.0.0
+# Internal version : 1.0.0 date: 2026-05-07 11:44
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Translate untranslated entries in a .po file using the Anthropic API.
 
 Usage:

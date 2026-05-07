@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# appimagetool binary (downloaded locally, not committed)
+tools/appimagetool-*.AppImage
+
+# AppImage build staging
+dist/appimage-build/
+
+# Screenshots (user-generated, not committed to repo)
+docs/screenshots/*.png
+docs/screenshots/*.jpg
+docs/screenshots/*.webp
+!docs/screenshots/.gitkeep

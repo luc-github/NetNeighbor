@@ -454,8 +454,8 @@ msgid "Close"
 msgstr "Cerrar"
 
 #: ui/main_window.py:1084
-msgid "Linux network neighborhood for SSDP/mDNS discovery."
-msgstr "Vecindario de red Linux para descubrimiento SSDP/mDNS."
+msgid "Discover and monitor devices on your local network."
+msgstr "Descubra y monitoree dispositivos en su red local."
 
 #: ui/main_window.py:1086
 msgid "Python libraries"

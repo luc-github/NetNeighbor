@@ -1,10 +1,18 @@
 [Desktop Entry]
 Type=Application
-Version=@APP_VERSION@
+Version=1.0
 Name=NetNeighbor
-Comment=Linux network neighborhood for SSDP/mDNS discovery
+Comment=Discover and monitor devices on your local network
+Comment[de]=Geräte im lokalen Netzwerk entdecken und überwachen
+Comment[es]=Descubra y monitoree dispositivos en su red local
+Comment[fr]=Découvrez et surveillez les appareils de votre réseau local
+Comment[it]=Scopri e monitora i dispositivi sulla tua rete locale
+Comment[ja]=ローカルネットワーク上のデバイスを検出して監視します
+Comment[nl]=Apparaten in uw lokale netwerk ontdekken en bewaken
+Comment[zh_CN]=发现并监控本地网络上的设备
+Comment[zh_TW]=探索並監控本地網路上的裝置
 Exec=netneighbor
 Icon=io.esp3d.netneighbor
 Terminal=false
-Categories=Network;Utility;GTK;
+Categories=Network;Monitor;
 StartupNotify=true

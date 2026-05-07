@@ -1,3 +1,7 @@
+# File manager.py for NetNeighbor version 1.0.0
+# Internal version : 1.0.0 date: 2026-05-07 11:44
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Orchestrates all protocol providers and keeps a simple device cache."""
 
 from collections.abc import Callable

@@ -147,10 +147,10 @@ Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE_KB}
 Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, python3-zeroconf, samba-common-bin, gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1
 Maintainer: Luc LEBOSSE (luc@esp3d.io)
-Description: Linux network neighborhood for LAN device discovery
- NetNeighbor is a GTK desktop application for local network discovery
- using SSDP, mDNS, WS-Discovery and NetBIOS, with list/icon views,
- device details, per-device connection commands, and system tray support.
+Description: Discover and monitor devices on your local network
+ NetNeighbor is a GTK desktop application that automatically discovers
+ all devices on your local network, displays them with icons or in a list,
+ and lets you monitor, connect to, and manage them. Supports system tray.
  NetBIOS names use nmblookup from samba-common-bin (Samba server daemons
  are not required). System tray uses Ayatana or GNOME AppIndicator.
 EOF

@@ -443,8 +443,8 @@ msgid "Close"
 msgstr "关闭"
 
 #: ui/main_window.py:1084
-msgid "Linux network neighborhood for SSDP/mDNS discovery."
-msgstr "用于 SSDP/mDNS 发现的 Linux 网络邻域。"
+msgid "Discover and monitor devices on your local network."
+msgstr "发现并监控本地网络上的设备。"
 
 #: ui/main_window.py:1086
 msgid "Python libraries"

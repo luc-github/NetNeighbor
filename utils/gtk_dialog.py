@@ -1,3 +1,7 @@
+# File gtk_dialog.py for NetNeighbor version 1.0.0
+# Internal version : 1.0.0 date: 2026-05-07 11:44
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """GTK dialog helpers — consistent WM decorations across themes."""
 
 from __future__ import annotations
