@@ -22,6 +22,15 @@ fi
 echo "== NetNeighbor release =="
 echo "version=${VERSION} arch=${ARCH}"
 
+echo "-- clean previous artifacts"
+# Remove old .deb, .tar.gz, checksums and build staging dirs so no stale
+# artifacts can accidentally be installed or mixed with the new build.
+rm -f  "${DIST_DIR}"/netneighbor_*.deb \
+       "${DIST_DIR}"/netneighbor-*.tar.gz \
+       "${DIST_DIR}"/SHA256SUMS-*.txt
+rm -rf "${DIST_DIR}/deb-build" "${DIST_DIR}/tarball-stage"
+echo "   dist/ cleaned"
+
 echo "-- sanity checks"
 python3 -m py_compile \
   "${PROJECT_ROOT}/app.py" \
@@ -73,6 +82,20 @@ runtime_version="$(sed -n '1p' "${runtime_version_file}" | tr -d '\r' | sed -e '
 if [[ "${runtime_version}" != "${VERSION}" ]]; then
   echo "Embedded runtime VERSION mismatch: got=${runtime_version} expected=${VERSION}" >&2
   exit 1
+fi
+
+# Spot-check: verify the packaged source matches the local working tree.
+# Compares a checksum of a key file between the deb payload and the source tree.
+_mw_pkg="${tmp_extract}/usr/share/netneighbor/ui/main_window.py"
+_mw_src="${PROJECT_ROOT}/ui/main_window.py"
+if [[ -f "${_mw_pkg}" && -f "${_mw_src}" ]]; then
+  _sum_pkg="$(md5sum "${_mw_pkg}" | awk '{print $1}')"
+  _sum_src="$(md5sum "${_mw_src}" | awk '{print $1}')"
+  if [[ "${_sum_pkg}" != "${_sum_src}" ]]; then
+    echo "FATAL: packaged ui/main_window.py differs from the local source." >&2
+    echo "       The deb does not reflect the current working tree." >&2
+    exit 1
+  fi
 fi
 
 desktop_file="${tmp_extract}/usr/share/applications/netneighbor.desktop"

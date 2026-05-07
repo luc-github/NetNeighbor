@@ -38,26 +38,53 @@ cat > "${PKG_ROOT}/DEBIAN/postinst" <<'EOF'
 set -e
 # Older packages shipped a 64px bitmap under 256x256, which breaks hicolor lookups.
 rm -f /usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png || true
+# Remove any __pycache__ directories left over from a previous installation.
+# apt-remove only removes files listed in the package manifest; __pycache__ dirs
+# are created at runtime by Python and survive uninstall, causing stale bytecode
+# to be loaded on the next run.
+find /usr/share/netneighbor -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+# Precompile all sources so the app starts without a write to /usr/share at runtime.
+python3 -m compileall -q /usr/share/netneighbor 2>/dev/null || true
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications || true
 fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -q /usr/share/icons/hicolor || true
 fi
+EOF
+
+cat > "${PKG_ROOT}/DEBIAN/prerm" <<'EOF'
+#!/usr/bin/env bash
+set -e
+# On remove or upgrade: clean __pycache__ dirs created at runtime by Python
+# (postinst compileall + first run).  dpkg only removes files it installed;
+# these directories were created after installation so they must be cleaned here.
+case "$1" in
+  remove|upgrade|deconfigure)
+    find /usr/share/netneighbor -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    ;;
+esac
 EOF
 
 cat > "${PKG_ROOT}/DEBIAN/postrm" <<'EOF'
 #!/usr/bin/env bash
 set -e
-if command -v update-desktop-database >/dev/null 2>&1; then
-  update-desktop-database /usr/share/applications || true
-fi
-if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-  gtk-update-icon-cache -q /usr/share/icons/hicolor || true
-fi
+case "$1" in
+  remove|purge)
+    # Final cleanup: remove any __pycache__ that appeared between prerm and now,
+    # then remove the install directory if it is now empty.
+    find /usr/share/netneighbor -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    rmdir --ignore-fail-on-non-empty /usr/share/netneighbor 2>/dev/null || true
+    if command -v update-desktop-database >/dev/null 2>&1; then
+      update-desktop-database /usr/share/applications || true
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+      gtk-update-icon-cache -q /usr/share/icons/hicolor || true
+    fi
+    ;;
+esac
 EOF
 
-chmod 0755 "${PKG_ROOT}/DEBIAN/postinst" "${PKG_ROOT}/DEBIAN/postrm"
 
 # Copy application sources directly from the working tree.
 # This ensures local modifications (committed or not) are always included.
@@ -69,6 +96,11 @@ done
 
 # Remove dev artifacts that must not land in the package.
 find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) -exec rm -rf {} + 2>/dev/null || true
+# Remove the assets/icons/hicolor subtree: it contains relative symlinks
+# (../../../../svg/...) that are valid in the source tree but broken once
+# installed under /usr/share/netneighbor/.  The actual hicolor icons are
+# installed explicitly to /usr/share/icons/hicolor/ by the lines below.
+rm -rf "${APP_ROOT}/assets/icons/hicolor"
 
 # Compile .po → .mo for any catalog missing or older than its source.
 if command -v msgfmt >/dev/null 2>&1; then
@@ -98,7 +130,12 @@ fi
 
 find "${PKG_ROOT}" -type d -exec chmod 0755 {} \;
 find "${PKG_ROOT}" -type f -exec chmod 0644 {} \;
-chmod 0755 "${PKG_ROOT}/usr/bin/netneighbor" "${PKG_ROOT}/DEBIAN/postinst" "${PKG_ROOT}/DEBIAN/postrm"
+# Restore executable bit on all maintainer scripts and the launcher.
+chmod 0755 \
+  "${PKG_ROOT}/usr/bin/netneighbor" \
+  "${PKG_ROOT}/DEBIAN/postinst" \
+  "${PKG_ROOT}/DEBIAN/prerm" \
+  "${PKG_ROOT}/DEBIAN/postrm"
 
 INSTALLED_SIZE_KB="$(du -sk "${PKG_ROOT}/usr" | awk '{print $1}')"
 cat > "${PKG_ROOT}/DEBIAN/control" <<EOF

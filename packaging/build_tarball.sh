@@ -27,10 +27,30 @@ ROOT_DIR="${STAGE_DIR}/${ROOT_NAME}"
 rm -rf "${STAGE_DIR}"
 mkdir -p "${ROOT_DIR}" "${DIST_DIR}"
 
-git -C "${PROJECT_ROOT}" archive --format=tar HEAD | tar -xf - -C "${ROOT_DIR}"
-# Ensure local VERSION is embedded even if not yet committed in git archive.
-if [[ -f "${PROJECT_ROOT}/VERSION" ]]; then
-  install -m 0644 "${PROJECT_ROOT}/VERSION" "${ROOT_DIR}/VERSION"
+# Copy application sources directly from the working tree so that local
+# modifications (committed or not) are always included — same approach as
+# build_deb.sh.  Using "git archive HEAD" would silently exclude any change
+# not yet committed, making test builds impossible.
+for path in app.py main.py i18n.py requirements.txt \
+            discovery model ui utils data config assets locale \
+            LICENSE README.md USER_DOCUMENTATION.md VERSION; do
+  if [[ -e "${PROJECT_ROOT}/${path}" ]]; then
+    cp -a "${PROJECT_ROOT}/${path}" "${ROOT_DIR}/"
+  fi
+done
+
+# Remove dev artifacts that must not land in the tarball.
+find "${ROOT_DIR}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) \
+  -exec rm -rf {} + 2>/dev/null || true
+
+# Compile .po → .mo for any catalog missing or older than its source.
+if command -v msgfmt >/dev/null 2>&1; then
+  find "${ROOT_DIR}/locale" -name "*.po" | while read -r _po; do
+    _mo="${_po%.po}.mo"
+    if [[ ! -f "${_mo}" ]] || [[ "${_po}" -nt "${_mo}" ]]; then
+      msgfmt "${_po}" -o "${_mo}" || true
+    fi
+  done
 fi
 
 cat > "${ROOT_DIR}/run.sh" <<'EOF'
