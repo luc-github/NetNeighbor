@@ -2,24 +2,21 @@
 
 Known items and ideas for future work. No priority order.
 
-## Translations
-
-- Fill in `.po` files for: Italian, Spanish, German, Dutch, Traditional Chinese (zh_TW),
-  Simplified Chinese (zh_CN), Japanese
-- French catalog still has ~150 untranslated strings
-- Compile `.mo` files and test layout (especially CJK line wrapping)
-
-## Packaging
-
-- AppImage packaging (optional, tracked in `docs/PACKAGING.md`)
-
 ## Discovery
 
 - SFTP service detection via mDNS (`_sftp-ssh._tcp`)
 - Optional WSD multicast interface selection (multi-homed hosts)
-- NetBIOS: improve when `nmblookup` is not installed (show a hint in UI)
+- NetBIOS: show a hint in the UI when `nmblookup` is not installed
+- **Performance** — cache pre-population at startup (emit cached SSDP devices before
+  live discovery completes, so the window is populated in < 100 ms)
+- **Performance** — NetBIOS directed probes: run in parallel with `ThreadPoolExecutor`
+  instead of sequential `nmblookup -A` calls (see `docs/MAINTENANCE.md`)
+- **Performance** — SSDP XML fetches: per-host lock instead of single global lock
+  (allows concurrent descriptor fetches at startup)
+- **Performance** — wsdd_client: remove hardcoded 0.35 s sleep between probe and list
 
 ## UI
+
 - Context menu "Open" submenu: keyboard navigation improvement
 - Per-device command label shown in tooltip when hovering a device tile
 - Notifications history: persist across sessions (currently session-only)
