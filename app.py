@@ -12,7 +12,6 @@ import socket
 import threading
 import tempfile
 import time
-import json
 
 import gi
 
@@ -21,7 +20,9 @@ from gi.repository import GLib, Gtk
 
 from discovery.manager import DiscoveryManager
 from i18n import setup_i18n
-from utils.discovery_config import load_discovery_protocol_config, normalize_information_precedence_list
+from utils.app_logging import setup_logging as _setup_logging
+from utils.discovery_config import discovery_manager_kwargs, load_discovery_protocol_config
+from utils.scheduling import gtk_idle_schedule
 from ui.icons import resolve_app_icon_path
 from ui.main_window import MainWindow
 
@@ -180,65 +181,12 @@ class NetNeighborApplication(Gtk.Application):
         setup_i18n()
         super().__init__(application_id=self._app_id)
         proto_cfg = load_discovery_protocol_config()
-        mdns_cfg = proto_cfg.get("mdns")
-        ssdp_cfg = proto_cfg.get("ssdp")
-        wsd_cfg = proto_cfg.get("wsd")
-        nmb_cfg = proto_cfg.get("nmb")
-        wsdd_cfg = proto_cfg.get("wsdd")
-        if not isinstance(mdns_cfg, dict):
-            mdns_cfg = {}
-        if not isinstance(ssdp_cfg, dict):
-            ssdp_cfg = {}
-        if not isinstance(wsd_cfg, dict):
-            wsd_cfg = {}
-        if not isinstance(nmb_cfg, dict):
-            nmb_cfg = {}
-        if not isinstance(wsdd_cfg, dict):
-            wsdd_cfg = {}
-        mdns_q = mdns_cfg.get("query") if isinstance(mdns_cfg.get("query"), dict) else {}
-        ssdp_q = ssdp_cfg.get("query") if isinstance(ssdp_cfg.get("query"), dict) else {}
-        wsd_q = wsd_cfg.get("query") if isinstance(wsd_cfg.get("query"), dict) else {}
-        nmb_q = nmb_cfg.get("query") if isinstance(nmb_cfg.get("query"), dict) else {}
-        wx_q = wsdd_cfg.get("query") if isinstance(wsdd_cfg.get("query"), dict) else {}
         merge_cfg = proto_cfg.get("merge") if isinstance(proto_cfg.get("merge"), dict) else {}
-        protocol_order = merge_cfg.get("protocol_order")
-        order_list: list[str] | None = None
-        if isinstance(protocol_order, list) and protocol_order:
-            order_list = [str(x).strip().lower() for x in protocol_order if isinstance(x, str) and str(x).strip()]
-            order_list = list(dict.fromkeys(order_list))
-        ipc = merge_cfg.get("information_precedence")
-        information_precedence = normalize_information_precedence_list(ipc if isinstance(ipc, list) else None)
-        wsdd_listen = wx_q.get("listen") if isinstance(wx_q.get("listen"), str) else ""
-        wsdd_listen = str(wsdd_listen).strip()
-        enable_wsdd_socket = bool(wsdd_cfg.get("enabled", False)) and bool(wsdd_listen)
         show_ip_in_device_list = bool(merge_cfg.get("show_ip_in_device_list", True))
-        self._manager = DiscoveryManager(
-            enable_ssdp=bool(ssdp_cfg.get("enabled", True)),
-            enable_mdns=bool(mdns_cfg.get("enabled", True)),
-            enable_ssdp_rules=bool(ssdp_cfg.get("rules", True)),
-            enable_mdns_rules=bool(mdns_cfg.get("rules", True)),
-            ssdp_query_interval_seconds=ssdp_q.get("interval_seconds"),
-            ssdp_mx_seconds=ssdp_q.get("mx_seconds"),
-            ssdp_descriptor_http_min_interval_seconds=ssdp_q.get("descriptor_http_min_interval_seconds"),
-            mdns_enumeration_timeout_seconds=mdns_q.get("enumeration_timeout_seconds"),
-            mdns_enumeration_interval_seconds=mdns_q.get("enumeration_interval_seconds"),
-            mdns_service_info_timeout_ms=mdns_q.get("service_info_timeout_ms"),
-            enable_wsd=bool(wsd_cfg.get("enabled", True)),
-            wsd_interval_seconds=wsd_q.get("interval_seconds"),
-            wsd_timeout_seconds=wsd_q.get("timeout_seconds"),
-            enable_wsdd_socket=enable_wsdd_socket,
-            wsdd_listen=wsdd_listen or None,
-            wsdd_interval_seconds=wx_q.get("interval_seconds"),
-            wsdd_socket_timeout_seconds=wx_q.get("socket_timeout_seconds"),
-            wsdd_probe_each_poll=bool(wx_q.get("probe_each_poll", True)),
-            enable_nmb=bool(nmb_cfg.get("enabled", True)),
-            nmb_interval_seconds=nmb_q.get("interval_seconds"),
-            nmb_timeout_seconds=nmb_q.get("timeout_seconds"),
-            nmb_argv=nmb_q.get("argv") if isinstance(nmb_q.get("argv"), list) else None,
-            nmb_directed_ips=nmb_q.get("directed_ips") if isinstance(nmb_q.get("directed_ips"), list) else None,
-            protocol_merge_order=order_list,
-            information_precedence=information_precedence,
-        )
+        dm_kw = discovery_manager_kwargs(proto_cfg)
+        dm_kw["schedule_on_main_thread"] = gtk_idle_schedule
+        self._manager = DiscoveryManager(**dm_kw)
+        information_precedence = dm_kw["information_precedence"]
         startup_refresh_seconds = proto_cfg.get("startup_refresh_seconds")
         if not isinstance(startup_refresh_seconds, list) or not startup_refresh_seconds:
             startup_refresh_seconds = [15, 30, 60, 120, 300, 600]
@@ -339,99 +287,3 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         app._activation_server.stop()
         app._instance_lock.release()
-
-
-def _setup_logging() -> None:
-    env_level_name = os.getenv("NETNEIGHBOR_LOG_LEVEL")
-    config = _load_logging_config()
-    default_level_name = str(config.get("default", "INFO")).upper()
-    if env_level_name:
-        default_level_name = env_level_name.upper()
-    level = _to_level(default_level_name, logging.INFO)
-    log_dir = Path.home() / ".cache" / "netneighbor"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "netneighbor.log"
-
-    root_logger = logging.getLogger()
-    if root_logger.handlers:
-        root_logger.setLevel(level)
-        _apply_named_log_levels(config)
-        return
-
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-
-    root_logger.setLevel(level)
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(stream_handler)
-    _apply_named_log_levels(config)
-    logging.getLogger(__name__).info("Logging initialized at %s (%s)", default_level_name, log_file)
-
-
-_LOG_LEVEL_OFF = 100  # above CRITICAL (50): suppress all standard levels
-
-
-def _to_level(level_name: str, fallback: int) -> int:
-    normalized = str(level_name).strip().upper()
-    if normalized in {"NONE", "OFF", "DISABLED", "SILENT"}:
-        return _LOG_LEVEL_OFF
-    resolved = getattr(logging, normalized, None)
-    if isinstance(resolved, int):
-        return resolved
-    return fallback
-
-
-def _load_logging_config() -> dict:
-    config_dir = Path.home() / ".config" / "netneighbor"
-    config_path = config_dir / "logging.json"
-    default_config = {
-        "default": "NONE",
-        "app": "NONE",
-        "device_list": "NONE",
-        "ssdp": "NONE",
-        "mdns": "NONE",
-        "wsd": "NONE",
-        "wsdd": "NONE",
-        "nmb": "NONE",
-    }
-    try:
-        config_dir.mkdir(parents=True, exist_ok=True)
-        if not config_path.exists():
-            config_path.write_text(json.dumps(default_config, indent=2, sort_keys=True), encoding="utf-8")
-            return dict(default_config)
-        parsed = json.loads(config_path.read_text(encoding="utf-8"))
-        if not isinstance(parsed, dict):
-            return dict(default_config)
-        merged = dict(default_config)
-        merged.update(parsed)
-        return merged
-    except (OSError, json.JSONDecodeError):
-        return dict(default_config)
-
-
-def _apply_named_log_levels(config: dict) -> None:
-    app_level = _to_level(str(config.get("app", config.get("default", "INFO"))), logging.INFO)
-    ssdp_level = _to_level(str(config.get("ssdp", config.get("default", "INFO"))), logging.INFO)
-    mdns_level = _to_level(str(config.get("mdns", config.get("default", "INFO"))), logging.INFO)
-    wsd_level = _to_level(str(config.get("wsd", config.get("default", "INFO"))), logging.INFO)
-    wsdd_level = _to_level(str(config.get("wsdd", config.get("default", "INFO"))), logging.INFO)
-    nmb_level = _to_level(str(config.get("nmb", config.get("default", "INFO"))), logging.INFO)
-    device_list_level = _to_level(str(config.get("device_list", config.get("default", "INFO"))), logging.INFO)
-
-    for logger_name in ("app", "ui", "utils", "discovery.manager", "model"):
-        logging.getLogger(logger_name).setLevel(app_level)
-    logging.getLogger("discovery.ssdp").setLevel(ssdp_level)
-    logging.getLogger("discovery.mdns").setLevel(mdns_level)
-    logging.getLogger("discovery.wsd").setLevel(wsd_level)
-    logging.getLogger("discovery.wsdd_client").setLevel(wsdd_level)
-    logging.getLogger("discovery.netbios").setLevel(nmb_level)
-    # Manager-side messages tied to a protocol (device add/update, SSDP merge) use child loggers.
-    logging.getLogger("discovery.manager.ssdp").setLevel(ssdp_level)
-    logging.getLogger("discovery.manager.mdns").setLevel(mdns_level)
-    logging.getLogger("discovery.manager.wsd").setLevel(wsd_level)
-    logging.getLogger("discovery.manager.wsdd").setLevel(wsdd_level)
-    logging.getLogger("discovery.manager.nmb").setLevel(nmb_level)
-    logging.getLogger("ui.device_list").setLevel(device_list_level)

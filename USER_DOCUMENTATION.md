@@ -59,7 +59,7 @@ listing all of them with labels (`HTTP`, `SSH (Admin)`, `HTTP (override)`, etc.)
 | **Type** | Override the auto-detected device type |
 | **Rename** | Set a display name for this device |
 | **Location** | Tag the device with a room or location label |
-| **Icon** | Choose system, bundled, or custom icon |
+| **Icon** | Choose an icon from the app pack or a custom PNG |
 | **Run custom command** | Execute the custom command set in Preferences → External applications… |
 
 ---
@@ -177,8 +177,7 @@ may not match every device or firmware revision.
 
 Corrections:
 
-1. **Per-device overrides**: right-click → Type / Rename / Location / Icon — stored in preferences,
-   applied after discovery.
+1. **Per-device overrides**: GTK — right-click → Type / Rename / Location / Icon (Details). **Qt (NetNeighbor 2.0)** — right-click a device tile (icon view), a grouped section tile, or a table row (Name column) → **Choose icon…** / **Use default icon**; same preference keys as GTK.
 2. **User rule overlays**: JSON files in `~/.config/netneighbor/` extend mDNS and SSDP matching
    (see [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md)).
 

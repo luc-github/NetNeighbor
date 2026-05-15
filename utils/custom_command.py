@@ -2,7 +2,7 @@
 # Internal version : 1.0.0 date: 2026-05-07 11:44
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
-"""User-defined external command per device (placeholders: {ip}, {port}, {name}, {type}, {category}, {url})."""
+"""User-defined external command per device (placeholders: {ip}, {ip_raw}, {port}, {name}, {type}, {category}, {url})."""
 
 from __future__ import annotations
 
@@ -13,10 +13,12 @@ import subprocess
 import threading
 from collections.abc import Callable
 
+from utils.scheduling import ScheduleMainFn
+
 _LOG = logging.getLogger(__name__)
 
 _PLACEHOLDER_RE = re.compile(r"\{([a-z_]+)\}")
-_KNOWN = frozenset({"ip", "port", "name", "type", "category", "url"})
+_KNOWN = frozenset({"ip", "ip_raw", "port", "name", "type", "category", "url"})
 
 
 def build_argv_from_template(
@@ -30,9 +32,10 @@ def build_argv_from_template(
     url: str = "",
 ) -> list[str] | None:
     """
-    Substitute placeholders with **shell-quoted** values, then ``shlex.split`` the result.
+    Substitute placeholders, then ``shlex.split`` the result.
 
-    Returns ``None`` if *template* is empty/whitespace or parsing fails (unknown placeholder, empty argv).
+    ``{ip}``, ``{port}``, etc. are **shell-quoted**. ``{ip_raw}`` inserts the IP/hostname
+    as-is (for templates such as Windows UNC paths where quoting would break ``\\\\``).
     """
     raw = (template or "").strip()
     if not raw:
@@ -46,6 +49,7 @@ def build_argv_from_template(
 
     values = {
         "ip": ip,
+        "ip_raw": ip,
         "port": str(int(port)),
         "name": name,
         "type": type_,
@@ -53,9 +57,8 @@ def build_argv_from_template(
         "url": url,
     }
     substituted = raw
-    for key in _KNOWN:
-        if key not in values:
-            continue
+    substituted = substituted.replace("{ip_raw}", str(values["ip_raw"]))
+    for key in ("ip", "port", "name", "type", "category", "url"):
         substituted = substituted.replace("{" + key + "}", shlex.quote(str(values[key])))
 
     if "{" in substituted:
@@ -72,8 +75,13 @@ def build_argv_from_template(
     return argv
 
 
-def spawn_custom_command_detached(argv: list[str], *, on_error: Callable[[str], None]) -> None:
-    """Run *argv* in a background thread; call ``on_error(str)`` from the GTK idle thread on failure."""
+def spawn_custom_command_detached(
+    argv: list[str],
+    *,
+    on_error: Callable[[str], None],
+    schedule_on_main: ScheduleMainFn | None = None,
+) -> None:
+    """Run *argv* in a background thread; marshal ``on_error`` to the UI thread when *schedule_on_main* is set."""
 
     def _run() -> None:
         try:
@@ -84,11 +92,9 @@ def spawn_custom_command_detached(argv: list[str], *, on_error: Callable[[str], 
             def _fail() -> None:
                 on_error(str(e))
 
-            try:
-                from gi.repository import GLib
-
-                GLib.idle_add(_fail)
-            except Exception:
-                on_error(str(e))
+            if schedule_on_main is not None:
+                schedule_on_main(_fail)
+            else:
+                _fail()
 
     threading.Thread(target=_run, daemon=True).start()

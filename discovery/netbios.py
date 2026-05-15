@@ -12,6 +12,7 @@ import logging
 import re
 import shutil
 import subprocess
+import sys
 import threading
 from collections import OrderedDict, defaultdict
 from collections.abc import Sequence
@@ -20,6 +21,26 @@ from discovery.base import BaseDiscovery
 
 _DEFAULT_INTERVAL_S = 180.0
 _DEFAULT_TIMEOUT_S = 15.0
+
+
+def _subprocess_no_window_kwargs() -> dict[str, object]:
+    """Avoid flashing console windows when ``nmblookup`` runs on Windows."""
+    if sys.platform != "win32":
+        return {}
+    out: dict[str, object] = {}
+    flag = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if flag:
+        out["creationflags"] = flag
+    # Some CUI builds still create a brief host window; STARTUPINFO reinforces hide.
+    if hasattr(subprocess, "STARTUPINFO"):
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        out["startupinfo"] = si
+    return out
+
+
+_NMB_SUBPROCESS_KW = _subprocess_no_window_kwargs()
 
 # ``Looking up status of 192.168.1.10`` / IPv6
 _STATUS_OF_RE = re.compile(r"^Looking up status of\s+(\S+)\s*$", re.IGNORECASE)
@@ -304,6 +325,7 @@ class NetbiosDiscovery(BaseDiscovery):
                 text=True,
                 timeout=float(self._timeout_s),
                 check=False,
+                **_NMB_SUBPROCESS_KW,
             )
         except subprocess.TimeoutExpired:
             self._logger.debug("nmblookup timed out after %.1fs", self._timeout_s)
@@ -325,6 +347,7 @@ class NetbiosDiscovery(BaseDiscovery):
                     text=True,
                     timeout=float(self._timeout_s),
                     check=False,
+                    **_NMB_SUBPROCESS_KW,
                 )
                 return _parse_nmblookup_output((proc_d.stdout or "") + "\n" + (proc_d.stderr or ""))
             except subprocess.TimeoutExpired:

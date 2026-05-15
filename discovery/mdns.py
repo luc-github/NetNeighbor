@@ -14,6 +14,7 @@ import threading
 
 from discovery.base import BaseDiscovery
 from utils.mdns_rules import cached_mdns_rules, evaluate_type_rules
+from utils.scheduling import ScheduleMainFn
 from utils.user_config_overlay import USER_DEVICE_TYPES_JSON, merge_device_types_trees, optional_user_json
 
 try:
@@ -27,11 +28,6 @@ try:
     from zeroconf import ZeroconfServiceTypes
 except Exception:  # pragma: no cover - older zeroconf builds
     ZeroconfServiceTypes = None
-
-try:
-    from gi.repository import GLib
-except Exception:  # pragma: no cover
-    GLib = None
 
 _ENUMERATION_TIMEOUT_S = 2.5
 _ENUMERATION_REFRESH_INTERVAL_S = 240
@@ -71,6 +67,7 @@ class MDNSDiscovery(BaseDiscovery):
         enumeration_timeout_seconds: float | None = None,
         enumeration_interval_seconds: int | None = None,
         service_info_timeout_ms: int | None = None,
+        schedule_on_main_thread: ScheduleMainFn | None = None,
     ) -> None:
         super().__init__(source="mdns")
         self._logger = logging.getLogger(__name__)
@@ -98,9 +95,12 @@ class MDNSDiscovery(BaseDiscovery):
         self._service_host_keys: dict[tuple[str, str], str] = {}
         self._host_last_endpoint: dict[str, tuple[str, int]] = {}
         self._type_map = self._load_mdns_type_map()
-        self._enumeration_timer_id: int | None = None
+        self._schedule_main: ScheduleMainFn = (
+            schedule_on_main_thread if schedule_on_main_thread is not None else (lambda fn: fn())
+        )
+        self._enumeration_timer: threading.Timer | None = None
         self._enumeration_busy = False
-        self._pending_remove_timers: dict[tuple[str, str], int] = {}
+        self._pending_remove_timers: dict[tuple[str, str], threading.Timer] = {}
 
     def start(self) -> None:
         if self._running:
@@ -129,12 +129,12 @@ class MDNSDiscovery(BaseDiscovery):
             return
         self._running = False
         self._enumeration_busy = False
-        if GLib is not None and self._enumeration_timer_id is not None:
+        if self._enumeration_timer is not None:
             try:
-                GLib.source_remove(self._enumeration_timer_id)
+                self._enumeration_timer.cancel()
             except Exception:
                 pass
-            self._enumeration_timer_id = None
+            self._enumeration_timer = None
         for key in list(self._pending_remove_timers):
             self._cancel_grace_remove(key)
         self._seen_by_service.clear()
@@ -233,20 +233,15 @@ class MDNSDiscovery(BaseDiscovery):
         self._logger.debug("mDNS browsers restarted for %d type(s)", len(types_to_rebrowse))
 
     def _enqueue_browsers_for_types(self, service_types: list[str]) -> None:
-        """Register browsers on the GTK main thread (callbacks must stay GUI-safe)."""
+        """Register browsers on the UI main thread via ``schedule_on_main_thread`` when provided."""
 
-        def apply_pending() -> bool:
+        def apply_pending() -> None:
             if not self._running or self._zeroconf is None:
-                return False
+                return
             for service_type in service_types:
                 self._ensure_browser(service_type)
-            return False
 
-        if GLib is not None:
-            GLib.idle_add(apply_pending)
-        else:
-            self._logger.warning("GLib not available; starting enumerated mDNS browsers inline (thread may be unsafe)")
-            apply_pending()
+        self._schedule_main(apply_pending)
 
     def _kick_service_type_enumeration(self) -> None:
         """DNS-SD: discover which service types are advertised on the LAN (beyond config file)."""
@@ -290,18 +285,25 @@ class MDNSDiscovery(BaseDiscovery):
         threading.Thread(target=worker, name="NetNeighbor-mdns-enumerate", daemon=True).start()
 
     def _schedule_enumeration_timer(self) -> None:
-        if GLib is None:
+        if self._enumeration_timer is not None:
             return
 
-        def on_timer() -> bool:
+        def on_timer_fire() -> None:
+            self._enumeration_timer = None
             if not self._running or self._zeroconf is None:
-                self._enumeration_timer_id = None
-                return False
-            self._kick_service_type_enumeration()
-            return True
+                return
 
-        if self._enumeration_timer_id is None:
-            self._enumeration_timer_id = GLib.timeout_add_seconds(self._enumeration_interval_s, on_timer)
+            def kick() -> None:
+                self._kick_service_type_enumeration()
+
+            self._schedule_main(kick)
+            if self._running:
+                self._schedule_enumeration_timer()
+
+        timer = threading.Timer(float(self._enumeration_interval_s), on_timer_fire)
+        timer.daemon = True
+        self._enumeration_timer = timer
+        timer.start()
 
     def _normalize_service_type(self, service: str) -> str:
         value = (service or "").strip().lower()
@@ -383,31 +385,32 @@ class MDNSDiscovery(BaseDiscovery):
         self._cancel_grace_remove(key)
         self._apply_remove(key)
 
-    def _schedule_grace_remove(self, key: tuple[str, str], host_key: str) -> None:
+    def _schedule_grace_remove(self, key: tuple[str, str], _host_key: str) -> None:
         self._cancel_grace_remove(key)
-        if GLib is None:
-            self._apply_remove(key)
-            return
 
-        def _fire() -> bool:
+        def apply_remove() -> None:
             self._pending_remove_timers.pop(key, None)
             if not self._running:
-                return False
+                return
             self._apply_remove(key)
-            return False
 
-        timer_id = GLib.timeout_add_seconds(_SERVICE_REMOVE_GRACE_S, _fire)
-        self._pending_remove_timers[key] = timer_id
+        def _fire() -> None:
+            self._schedule_main(apply_remove)
+
+        timer = threading.Timer(float(_SERVICE_REMOVE_GRACE_S), _fire)
+        timer.daemon = True
+        self._pending_remove_timers[key] = timer
+        timer.start()
         self._logger.debug(
             "mDNS grace remove scheduled for %s %s (host still alive, %ds delay)",
             key[0], key[1], _SERVICE_REMOVE_GRACE_S,
         )
 
     def _cancel_grace_remove(self, key: tuple[str, str]) -> None:
-        timer_id = self._pending_remove_timers.pop(key, None)
-        if timer_id is not None and GLib is not None:
+        timer = self._pending_remove_timers.pop(key, None)
+        if timer is not None:
             try:
-                GLib.source_remove(timer_id)
+                timer.cancel()
             except Exception:
                 pass
 

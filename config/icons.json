@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "comment": "Per device-type slug: ordered list of PNG basenames WITHOUT the “.png” suffix (e.g. “printer” → bundled-freedesktop/64x64/printer.png). Same stem for each discovered NxN folder under assets/icons/bundled-freedesktop/. User overlay may write either stem or full “stem.png”. No system icons.",
+  "types": {
+    "3dprinter": ["network-3dprinter"],
+    "camera": ["network-webcam"],
+    "cnc": ["network-minicnc"],
+    "computer": ["network-desktop-pc", "network-gaming-pc", "network-laptop-wifi"],
+    "esp32": ["network-touchscreen-panel"],
+    "homeappliance": ["network-home-appliance"],
+    "http": ["network-cloud-server"],
+    "mediaserver": ["network-media-server"],
+    "multifunction_printer": ["network-mfp-v2"],
+    "nas": ["network-nas"],
+    "networkprinter": ["network-printer"],
+    "printer": ["network-scanner"],
+    "router": ["network-home-server-tower"],
+    "scanner": ["network-scanner"],
+    "smartdevice": ["network-mesh-node"],
+    "smartspeaker": ["network-smart-speaker"],
+    "smarttv": ["network-smarttv"],
+    "unknown": ["network-unknown-device-v4"]
+  }
+}

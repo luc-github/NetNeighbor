@@ -15,6 +15,7 @@ _LOG = logging.getLogger(__name__)
 
 USER_CONFIG_DIR = Path.home() / ".config" / "netneighbor"
 USER_DEVICE_TYPES_JSON = USER_CONFIG_DIR / "device_types.json"
+USER_ICONS_JSON = USER_CONFIG_DIR / "icons.json"
 USER_SSDP_RULES_JSON = USER_CONFIG_DIR / "ssdp_rules.json"
 USER_MDNS_RULES_JSON = USER_CONFIG_DIR / "mdns_rules.json"
 

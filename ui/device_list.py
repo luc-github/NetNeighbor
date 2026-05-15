@@ -27,7 +27,8 @@ from collections.abc import Callable
 
 from model.device import Device
 from ui.device_details import DeviceDetailsDialog
-from ui.icons import resolve_icon_path
+from ui.icons import iter_icon_picker_entries, resolve_bundled_freedesktop_icon, resolve_icon_path
+from utils.type_icon_config import type_icon_basenames_for_slug
 from utils.location_label import is_plausible_room_location
 from utils.discovery_config import (
     information_precedence_rank,
@@ -39,6 +40,7 @@ from utils.neighbor_mac import lookup_mac_from_neighbor_cache
 from utils.gtk_dialog import prepare_gtk_dialog
 from utils.connect_launcher import launch_connect_for_uri
 from utils.custom_command import build_argv_from_template, spawn_custom_command_detached
+from utils.scheduling import gtk_idle_schedule
 from utils.double_click_open import resolve_connect_target, resolve_all_connect_targets
 from utils.details_payload import (
     aggregate_ports_display,
@@ -827,7 +829,7 @@ class DeviceList(Gtk.Box):
                 _("Could not start the command: {error}").format(error=msg),
             )
 
-        spawn_custom_command_detached(argv, on_error=_on_err)
+        spawn_custom_command_detached(argv, on_error=_on_err, schedule_on_main=gtk_idle_schedule)
 
     def _show_command_error(self, message: str) -> None:
         parent = self._parent_window
@@ -1674,37 +1676,20 @@ class DeviceList(Gtk.Box):
                 )
 
         _logger.debug(
-            "Icon: GTK theme fallback ip=%s port=%s type=%s icon_mode=%s name=%r",
+            "Icon: bundled-freedesktop type fallback ip=%s port=%s type=%s icon_mode=%s name=%r",
             device.ip,
             device.port,
             device.type,
             icon_mode,
             device.name,
         )
-        theme = Gtk.IconTheme.get_default()
-        fallback_by_type = {
-            "esp32": ["cpu", "application-x-firmware", "network-wireless"],
-            "router": ["network-wireless-router", "network-server", "network-workgroup"],
-            "mediaserver": ["multimedia-player", "folder-videos", "network-server"],
-            "printer": ["printer-network", "printer", "network-server"],
-            "networkprinter": ["printer-network", "printer", "network-server"],
-            "multifunction_printer": ["printer-network", "printer", "scanner"],
-            "smartspeaker": ["audio-speakers", "multimedia-player", "network-server"],
-            "smarttv": ["video-display", "multimedia-player", "network-server"],
-            "smartdevice": ["applications-system", "network-server", "computer"],
-            "camera": ["camera-web", "camera-photo", "network-server"],
-            "homeappliance": ["applications-utilities", "network-server", "computer"],
-            "cnc": ["applications-engineering", "applications-system", "network-server"],
-            "3dprinter": ["printer-3d", "printer-network", "printer"],
-            "nas": ["drive-harddisk", "folder-remote", "network-server"],
-            "computer": ["computer", "network-workgroup", "video-display"],
-            "http": ["applications-internet", "web-browser", "network-server"],
-            "unknown": ["network-workgroup", "network-server", "computer", "folder"],
-        }
-        fallback_names = fallback_by_type.get(device.type, fallback_by_type["unknown"])
-        for icon_name in fallback_names:
+        slug = (device.type or "unknown").strip().lower()
+        for icon_name in type_icon_basenames_for_slug(slug):
+            p = resolve_bundled_freedesktop_icon(icon_name)
+            if p is None:
+                continue
             try:
-                return theme.load_icon(icon_name, 64, 0)
+                return GdkPixbuf.Pixbuf.new_from_file_at_size(str(p), 64, 64)
             except Exception:
                 continue
         return GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 64, 64)
@@ -1732,38 +1717,16 @@ class DeviceList(Gtk.Box):
     def _load_icon_choices(self, preferred_type: str | None = None) -> list[tuple[str, str, GdkPixbuf.Pixbuf]]:
         choices: list[tuple[str, str, GdkPixbuf.Pixbuf]] = []
         try:
-            if self._builtin_icons_dir.exists():
-                for icon_path in sorted(self._builtin_icons_dir.glob("*.png")):
-                    if icon_path.name == "logo.png":
-                        continue
-                    try:
-                        preview = GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), 64, 64)
-                    except Exception:
-                        continue
-                    icon_id = f"builtin:{icon_path.name}"
-                    label = f"{icon_path.name} ({_('Built-in')})"
-                    choices.append((icon_id, label, preview))
-            if not self._custom_icons_dir.exists():
-                return choices
-            for icon_path in sorted(self._custom_icons_dir.glob("*.png")):
+            for icon_id, label, path in iter_icon_picker_entries(preferred_type):
+                if path is None or not path.is_file():
+                    continue
                 try:
-                    preview = GdkPixbuf.Pixbuf.new_from_file_at_size(str(icon_path), 64, 64)
+                    preview = GdkPixbuf.Pixbuf.new_from_file_at_size(str(path), 64, 64)
                 except Exception:
                     continue
-                icon_id = f"custom:{icon_path.name}"
-                label = f"{icon_path.name} ({_('Custom')})"
                 choices.append((icon_id, label, preview))
         except Exception:
             return choices
-        preferred_token = f"{(preferred_type or '').strip().lower()}.png"
-        if preferred_token:
-            def _choice_sort_key(item: tuple[str, str, GdkPixbuf.Pixbuf]) -> tuple[int, str]:
-                _icon_id, label, _preview = item
-                label_low = label.lower()
-                is_preferred = 0 if preferred_token in label_low else 1
-                return (is_preferred, label_low)
-
-            choices.sort(key=_choice_sort_key)
         return choices
 
     def _resolve_icon_id_to_path(self, icon_id: str) -> Path:
@@ -1772,6 +1735,11 @@ class DeviceList(Gtk.Box):
         if ":" in icon_id:
             source, name = icon_id.split(":", 1)
             name = name.strip()
+            if source == "bundled":
+                p = resolve_bundled_freedesktop_icon(Path(name).stem)
+                if p is not None:
+                    return p
+                return self._builtin_icons_dir / "__nn_missing_icon__.png"
             if source == "builtin":
                 return self._builtin_icons_dir / name
             if source == "custom":

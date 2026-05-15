@@ -1082,29 +1082,35 @@ class MainWindow(Gtk.ApplicationWindow):
                 dialog.set_logo(logo)
             except Exception:
                 _LOG.debug("Could not load About dialog logo from %s", logo_path, exc_info=True)
-        dialog.set_program_name("NetNeighbor")
+        from utils.about_content import (
+            GITHUB_PROJECT_URL,
+            about_comments,
+            about_copyright_line,
+            about_program_name,
+            about_website_label,
+            icon_credit_entries,
+            python_library_credit_entries,
+        )
+
+        dialog.set_program_name(about_program_name())
         dialog.set_version(get_app_version())
         dialog.set_authors(["Luc"])
-        dialog.set_comments(_("Discover and monitor devices on your local network."))
+        dialog.set_comments(about_comments())
         dialog.add_credit_section(
             _("Python libraries"),
             [
-                "PyGObject — GTK 3 bindings  https://pygobject.gnome.org",
-                "zeroconf — mDNS/DNS-SD discovery  https://github.com/python-zeroconf/python-zeroconf",
-                "WSDiscovery — WS-Discovery (Windows devices)  https://github.com/andreikop/python-ws-discovery",
+                f"{name} — {desc}  {url}"
+                for name, desc, url in python_library_credit_entries(gtk_ui=True)
             ],
         )
         dialog.add_credit_section(
             _("Icons"),
-            [
-                "Custom app icons: Luc LEBOSSE",
-                "System icons: active GTK icon theme",
-            ],
+            [desc for desc, _url in icon_credit_entries()],
         )
-        dialog.set_website("https://github.com/luc-github/NetNeighbor")
-        dialog.set_website_label(_("GitHub Project"))
+        dialog.set_website(GITHUB_PROJECT_URL)
+        dialog.set_website_label(about_website_label())
         dialog.set_license_type(Gtk.License.LGPL_3_0)
-        dialog.set_copyright("Copyright (C) Luc LEBOSSE")
+        dialog.set_copyright(about_copyright_line().replace("©", "(C)"))
         dialog.connect("response", self._on_about_response)
         dialog.run()
         dialog.destroy()

@@ -14,6 +14,7 @@ import ipaddress
 import logging
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 _LOG = logging.getLogger(__name__)
@@ -119,6 +120,8 @@ def _parse_ip_neigh_stdout(stdout: str, want_ip: str) -> str | None:
 
 
 def _run_ip_neigh(args: list[str]) -> str:
+    if sys.platform == "win32" or sys.platform == "darwin":
+        return ""
     try:
         proc = subprocess.run(
             ["ip", *args],
@@ -136,6 +139,8 @@ def _run_ip_neigh(args: list[str]) -> str:
 
 def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
     """Return MAC if present in kernel ARP / IPv6 neighbor tables (Linux)."""
+    if sys.platform == "win32" or sys.platform == "darwin":
+        return None
     if not ip_raw:
         return None
     raw = str(ip_raw).strip()

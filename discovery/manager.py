@@ -23,12 +23,15 @@ from utils.discovery_cache import load_discovery_cache
 from utils.discovery_config import normalize_information_precedence_list
 from utils.discovery_identity import uuid_urn_if_present
 from utils.location_label import is_plausible_room_location
+from utils.scheduling import ScheduleMainFn
 
 AnticipatoryDescriptorSource = Literal["ssdp_profile_cache", "mdns_txt"]
 
 PresenceTransitionKind = Literal["online", "offline"]
 PresenceTransitionHook = Callable[[Device, PresenceTransitionKind], None]
 _IDENTITY_HOLD_SECONDS = 3.0
+# Coalesce burst ``_notify()`` calls (mDNS / merge can fire many times per 100 ms window).
+_NOTIFY_DEBOUNCE_SECONDS = 0.08
 
 
 def _descriptor_url_with_ip(descriptor_template: str, ip_s: str) -> str | None:
@@ -156,6 +159,7 @@ class DiscoveryManager:
         nmb_directed_ips: list[str] | None = None,
         protocol_merge_order: list[str] | None = None,
         information_precedence: list[str] | None = None,
+        schedule_on_main_thread: ScheduleMainFn | None = None,
     ) -> None:
         self._logger = logging.getLogger(__name__)
         self._ssdp_logger = logging.getLogger(f"{__name__}.ssdp")
@@ -172,6 +176,9 @@ class DiscoveryManager:
             list(information_precedence)
             if information_precedence
             else normalize_information_precedence_list(None)
+        )
+        self._schedule_on_main_thread: ScheduleMainFn = (
+            schedule_on_main_thread if schedule_on_main_thread is not None else (lambda fn: fn())
         )
         self._logger.debug("merge.information_precedence (manager) = %s", self._information_precedence)
         protocols: list[BaseDiscovery] = []
@@ -191,6 +198,7 @@ class DiscoveryManager:
                     enumeration_timeout_seconds=mdns_enumeration_timeout_seconds,
                     enumeration_interval_seconds=mdns_enumeration_interval_seconds,
                     service_info_timeout_ms=mdns_service_info_timeout_ms,
+                    schedule_on_main_thread=self._schedule_on_main_thread,
                 )
             )
         if enable_wsd:
@@ -231,6 +239,9 @@ class DiscoveryManager:
         self._devices: dict[str, Device] = {}
         self._arrival_sequence = 0
         self._listeners: list[Callable[[list[Device]], None]] = []
+        self._notify_debounce_lock = threading.Lock()
+        self._notify_debounce_timer: threading.Timer | None = None
+        self._stopped: bool = False
         self._presence_hooks: list[PresenceTransitionHook] = []
         self._type_overrides: dict[str, str] = {}
         self._name_overrides: dict[str, str] = {}
@@ -262,8 +273,8 @@ class DiscoveryManager:
 
         Fires only on transitions: newly online (including back from offline), or offline from
         online. Silent for first-seen rows that are already offline (e.g. restored monitored
-        ghosts). Plugins should treat callbacks as potentially running on a discovery thread —
-        marshal to the UI thread before touching GTK.
+        ghosts).         Plugins should treat callbacks as potentially running on a discovery thread —
+        marshal to the UI thread before touching GUI toolkit APIs.
 
         Reserved for future automation / plugins; core code does not register hooks today.
         """
@@ -280,6 +291,7 @@ class DiscoveryManager:
         return sorted(self._devices.values(), key=lambda device: (device.category, device.name.lower()))
 
     def start(self) -> None:
+        self._stopped = False
         self._logger.info("Starting discovery protocols: %s", [p.source for p in self._protocols])
         self._emit_cached_devices()
         if not self._protocols:
@@ -289,6 +301,11 @@ class DiscoveryManager:
             protocol.start()
 
     def stop(self) -> None:
+        self._stopped = True
+        with self._notify_debounce_lock:
+            if self._notify_debounce_timer is not None:
+                self._notify_debounce_timer.cancel()
+                self._notify_debounce_timer = None
         self._logger.info("Stopping discovery protocols")
         for protocol in self._protocols:
             protocol.stop()
@@ -931,7 +948,7 @@ class DiscoveryManager:
             if not xml_fields and not raw_xml:
                 return
 
-            def apply_on_idle() -> bool:
+            def apply_on_idle() -> None:
                 self._apply_prefetched_descriptor(
                     k,
                     url_new,
@@ -939,20 +956,8 @@ class DiscoveryManager:
                     raw_xml,
                     url_source=url_source,
                 )
-                return False
 
-            try:
-                from gi.repository import GLib
-
-                GLib.idle_add(apply_on_idle)
-            except Exception:
-                self._apply_prefetched_descriptor(
-                    k,
-                    url_new,
-                    xml_fields or {},
-                    raw_xml,
-                    url_source=url_source,
-                )
+            self._schedule_on_main_thread(apply_on_idle)
 
         threading.Thread(target=worker, name="NetNeighbor-anticipatory-xml", daemon=True).start()
 
@@ -2515,6 +2520,30 @@ class DiscoveryManager:
         self._notify()
 
     def _notify(self) -> None:
+        if not self._listeners:
+            return
+        self._logger.debug(
+            "Publishing %d devices to %d listeners (debounce %.0fms)",
+            len(self._devices),
+            len(self._listeners),
+            _NOTIFY_DEBOUNCE_SECONDS * 1000.0,
+        )
+        with self._notify_debounce_lock:
+            if self._notify_debounce_timer is not None:
+                self._notify_debounce_timer.cancel()
+                self._notify_debounce_timer = None
+            self._notify_debounce_timer = threading.Timer(
+                _NOTIFY_DEBOUNCE_SECONDS,
+                self._notify_emit_debounced,
+            )
+            self._notify_debounce_timer.daemon = True
+            self._notify_debounce_timer.start()
+
+    def _notify_emit_debounced(self) -> None:
+        if self._stopped:
+            return
+        with self._notify_debounce_lock:
+            self._notify_debounce_timer = None
         snapshot = self.devices
         self._logger.debug("Publishing %d devices to %d listeners", len(snapshot), len(self._listeners))
         for listener in self._listeners:

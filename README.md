@@ -69,6 +69,14 @@ pip install -r requirements.txt
 python main.py
 ```
 
+
+* Windows
+```bash
+.\.venv\Scripts\activate.bat
+python.exe -m pip install -r requirements-qt.txt
+python.exe app_qt.py
+```
+
 Demo data is enabled by default. Disable with:
 ```bash
 NETNEIGHBOR_DEMO=0 python main.py

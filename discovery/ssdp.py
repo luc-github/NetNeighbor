@@ -12,6 +12,7 @@ import json
 import logging
 from pathlib import Path
 import socket
+import sys
 import threading
 import time
 from urllib.error import URLError
@@ -160,10 +161,12 @@ class SSDPDiscovery(BaseDiscovery):
     def _create_socket(self) -> socket.socket:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        except OSError:
-            pass
+        # SO_REUSEPORT is not defined on Windows; optional on POSIX for sharing UDP port 1900.
+        if sys.platform != "win32" and hasattr(socket, "SO_REUSEPORT"):
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
         sock.settimeout(0.2)
         try:
             sock.bind(("", 1900))

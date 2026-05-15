@@ -612,3 +612,66 @@ def load_discovery_protocol_config() -> dict[str, object]:
         }
     except (OSError, json.JSONDecodeError):
         return copy.deepcopy(defaults)
+
+
+def discovery_manager_kwargs(proto_cfg: dict[str, object]) -> dict[str, object]:
+    """Build keyword arguments for ``discovery.manager.DiscoveryManager`` from merged protocol config."""
+    mdns_cfg = proto_cfg.get("mdns")
+    ssdp_cfg = proto_cfg.get("ssdp")
+    wsd_cfg = proto_cfg.get("wsd")
+    nmb_cfg = proto_cfg.get("nmb")
+    wsdd_cfg = proto_cfg.get("wsdd")
+    if not isinstance(mdns_cfg, dict):
+        mdns_cfg = {}
+    if not isinstance(ssdp_cfg, dict):
+        ssdp_cfg = {}
+    if not isinstance(wsd_cfg, dict):
+        wsd_cfg = {}
+    if not isinstance(nmb_cfg, dict):
+        nmb_cfg = {}
+    if not isinstance(wsdd_cfg, dict):
+        wsdd_cfg = {}
+    mdns_q = mdns_cfg.get("query") if isinstance(mdns_cfg.get("query"), dict) else {}
+    ssdp_q = ssdp_cfg.get("query") if isinstance(ssdp_cfg.get("query"), dict) else {}
+    wsd_q = wsd_cfg.get("query") if isinstance(wsd_cfg.get("query"), dict) else {}
+    nmb_q = nmb_cfg.get("query") if isinstance(nmb_cfg.get("query"), dict) else {}
+    wx_q = wsdd_cfg.get("query") if isinstance(wsdd_cfg.get("query"), dict) else {}
+    merge_cfg = proto_cfg.get("merge") if isinstance(proto_cfg.get("merge"), dict) else {}
+    protocol_order = merge_cfg.get("protocol_order")
+    order_list: list[str] | None = None
+    if isinstance(protocol_order, list) and protocol_order:
+        order_list = [str(x).strip().lower() for x in protocol_order if isinstance(x, str) and str(x).strip()]
+        order_list = list(dict.fromkeys(order_list))
+    ipc = merge_cfg.get("information_precedence")
+    information_precedence = normalize_information_precedence_list(ipc if isinstance(ipc, list) else None)
+    wsdd_listen = wx_q.get("listen") if isinstance(wx_q.get("listen"), str) else ""
+    wsdd_listen = str(wsdd_listen).strip()
+    enable_wsdd_socket = bool(wsdd_cfg.get("enabled", False)) and bool(wsdd_listen)
+
+    return {
+        "enable_ssdp": bool(ssdp_cfg.get("enabled", True)),
+        "enable_mdns": bool(mdns_cfg.get("enabled", True)),
+        "enable_ssdp_rules": bool(ssdp_cfg.get("rules", True)),
+        "enable_mdns_rules": bool(mdns_cfg.get("rules", True)),
+        "ssdp_query_interval_seconds": ssdp_q.get("interval_seconds"),
+        "ssdp_mx_seconds": ssdp_q.get("mx_seconds"),
+        "ssdp_descriptor_http_min_interval_seconds": ssdp_q.get("descriptor_http_min_interval_seconds"),
+        "mdns_enumeration_timeout_seconds": mdns_q.get("enumeration_timeout_seconds"),
+        "mdns_enumeration_interval_seconds": mdns_q.get("enumeration_interval_seconds"),
+        "mdns_service_info_timeout_ms": mdns_q.get("service_info_timeout_ms"),
+        "enable_wsd": bool(wsd_cfg.get("enabled", True)),
+        "wsd_interval_seconds": wsd_q.get("interval_seconds"),
+        "wsd_timeout_seconds": wsd_q.get("timeout_seconds"),
+        "enable_wsdd_socket": enable_wsdd_socket,
+        "wsdd_listen": wsdd_listen or None,
+        "wsdd_interval_seconds": wx_q.get("interval_seconds"),
+        "wsdd_socket_timeout_seconds": wx_q.get("socket_timeout_seconds"),
+        "wsdd_probe_each_poll": bool(wx_q.get("probe_each_poll", True)),
+        "enable_nmb": bool(nmb_cfg.get("enabled", True)),
+        "nmb_interval_seconds": nmb_q.get("interval_seconds"),
+        "nmb_timeout_seconds": nmb_q.get("timeout_seconds"),
+        "nmb_argv": nmb_q.get("argv") if isinstance(nmb_q.get("argv"), list) else None,
+        "nmb_directed_ips": nmb_q.get("directed_ips") if isinstance(nmb_q.get("directed_ips"), list) else None,
+        "protocol_merge_order": order_list,
+        "information_precedence": information_precedence,
+    }

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse
@@ -17,6 +18,8 @@ from utils.custom_command import build_argv_from_template, spawn_custom_command_
 
 _LOG = logging.getLogger(__name__)
 _SCHEME_ORDER = ("http", "https", "smb", "ftp", "ssh", "telnet", "sftp")
+
+_SKIP_JSON_KEYS = frozenset({"version", "comment", "schema"})
 
 _HARDCODED_DEFAULTS: dict[str, str] = {
     "http": "xdg-open http://{ip}",
@@ -29,17 +32,60 @@ _HARDCODED_DEFAULTS: dict[str, str] = {
 }
 
 
+def _platform_branch_key() -> str:
+    p = sys.platform
+    if p == "win32":
+        return "win32"
+    if p == "darwin":
+        return "darwin"
+    return "linux"
+
+
+def _coerce_scheme_map(obj: object) -> dict[str, str]:
+    if not isinstance(obj, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in obj.items():
+        if not isinstance(k, str) or k in _SKIP_JSON_KEYS:
+            continue
+        if isinstance(v, str) and v.strip():
+            out[k] = v
+    return out
+
+
+def _json_has_os_branches(data: dict) -> bool:
+    for k in ("linux", "darwin", "win32"):
+        v = data.get(k)
+        if isinstance(v, dict) and v:
+            return True
+    return False
+
+
+def _merge_templates_from_json_doc(data: dict) -> dict[str, str]:
+    """Extract scheme→template from either per-OS branches or legacy flat mapping."""
+    if _json_has_os_branches(data):
+        merged: dict[str, str] = {}
+        linux_b = data.get("linux")
+        if isinstance(linux_b, dict):
+            merged.update(_coerce_scheme_map(linux_b))
+        plat = data.get(_platform_branch_key())
+        if isinstance(plat, dict):
+            merged.update(_coerce_scheme_map(plat))
+        return merged
+    return _coerce_scheme_map(data)
+
+
 def _load_json_defaults() -> dict[str, str]:
     json_path = Path(__file__).resolve().parent.parent / "config" / "default_commands.json"
     try:
         with json_path.open(encoding="utf-8") as fh:
             data = json.load(fh)
-        if not isinstance(data, dict):
-            return {}
-        return {k: str(v) for k, v in data.items() if isinstance(k, str)}
     except Exception:
         _LOG.debug("Could not load %s; using hardcoded defaults", json_path)
         return {}
+    if not isinstance(data, dict):
+        return {}
+    return _merge_templates_from_json_doc(data)
 
 
 def default_connect_command_templates() -> dict[str, str]:

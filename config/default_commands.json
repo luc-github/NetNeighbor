@@ -1,9 +1,31 @@
 {
-  "http": "xdg-open http://{ip}",
-  "https": "xdg-open https://{ip}",
-  "smb": "nemo smb://{ip}",
-  "ftp": "nemo ftp://{ip}",
-  "ssh": "x-terminal-emulator -e ssh -p {port} {ip}",
-  "telnet": "x-terminal-emulator -e nc {ip} {port}",
-  "sftp": "nemo sftp://{ip}"
+  "version": 2,
+  "comment": "Per-OS defaults for Tools / External applications (scheme to command). Placeholders: {ip} {ip_raw} {port} {name} {type} {category} {url}. Use {ip_raw} where shell quoting breaks UNC (Windows SMB). A flat legacy file (scheme strings only) is still read as Linux-only overrides.",
+  "linux": {
+    "http": "xdg-open http://{ip}",
+    "https": "xdg-open https://{ip}",
+    "smb": "nemo smb://{ip}",
+    "ftp": "nemo ftp://{ip}",
+    "ssh": "x-terminal-emulator -e ssh -p {port} {ip}",
+    "telnet": "x-terminal-emulator -e nc {ip} {port}",
+    "sftp": "nemo sftp://{ip}"
+  },
+  "darwin": {
+    "http": "open http://{ip}",
+    "https": "open https://{ip}",
+    "smb": "open smb://{ip}",
+    "ftp": "open ftp://{ip}",
+    "ssh": "open ssh://{ip}:{port}",
+    "telnet": "open telnet://{ip}:{port}",
+    "sftp": "open sftp://{ip}"
+  },
+  "win32": {
+    "http": "cmd.exe /c start \"\" http://{ip}",
+    "https": "cmd.exe /c start \"\" https://{ip}",
+    "smb": "explorer \\\\\\\\{ip_raw}",
+    "ftp": "explorer ftp://{ip}",
+    "ssh": "cmd.exe /c start ssh -p {port} {ip}",
+    "telnet": "cmd.exe /c start telnet {ip} {port}",
+    "sftp": "explorer sftp://{ip}"
+  }
 }
