@@ -10,10 +10,54 @@ from PySide6.QtCore import QEvent, QObject, QSize, Qt
 from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import QListWidget
 
+# Must match ``ICON_MODE_LIST_QSS`` (1px border + 2px padding on each side).
+_ITEM_BORDER_PX = 1
+_ITEM_PADDING_PX = 2
+_ITEM_INSET_LR = 2 * (_ITEM_BORDER_PX + _ITEM_PADDING_PX)
+_ITEM_EXTRA_PAD = 4
+
 # Shared by flat icon list and Type / Location section lists.
 LONG_NAME_WRAP_MIN_WIDTH_FACTOR = 3
-LONG_NAME_WRAP_MAX_LINES = 4
-SHORT_WRAP_MAX_LINES = 2
+
+
+def format_icon_tile_label(name: str) -> str:
+    """Break long SSDP-style titles at `` - `` so each segment fits narrow icon cells."""
+    n = (name or "").strip()
+    if len(n) < 16 or " - " not in n:
+        return n
+    return n.replace(" - ", "\n")
+
+
+def _label_max_horizontal_advance(fm: QFontMetrics, lbl: str) -> int:
+    lines = (lbl or "").split("\n") or ["—"]
+    return max(fm.horizontalAdvance(line) if line.strip() else fm.horizontalAdvance("—") for line in lines)
+
+
+def icon_mode_label_font(list_widget: QListWidget) -> QFont:
+    """Match ``font-size: smaller`` from ``ICON_MODE_LIST_QSS`` when measuring labels."""
+    font = QFont(list_widget.font())
+    pt = font.pointSizeF()
+    if pt > 0:
+        font.setPointSizeF(max(1.0, pt * 0.85))
+    return font
+
+
+def _text_block_height(
+    fm: QFontMetrics,
+    labels: list[str],
+    inner_width: int,
+    *,
+    use_wrap: bool,
+) -> int:
+    inner_w = max(32, inner_width - _ITEM_INSET_LR)
+    max_h = fm.height()
+    flags = Qt.TextFlag.TextWordWrap if use_wrap else Qt.TextFlag.TextSingleLine
+    for lbl in labels or ["—"]:
+        rect = fm.boundingRect(0, 0, inner_w, 10_000, flags, lbl)
+        max_h = max(max_h, rect.height())
+    # No artificial line cap: a previous min(..., wrap_lines * lineSpacing) underestimated
+    # wrapped height vs. QFontMetrics and clipped the last lines under icons.
+    return max_h
 
 
 def compute_icon_mode_cell_size(
@@ -40,21 +84,23 @@ def compute_icon_mode_cell_size(
     long_name_min_w = min_w * LONG_NAME_WRAP_MIN_WIDTH_FACTOR
 
     fm = QFontMetrics(font)
-    line_h = fm.height()
     if labels:
-        text_w = max(fm.horizontalAdvance(lbl) for lbl in labels)
+        text_w = max(_label_max_horizontal_advance(fm, lbl) for lbl in labels)
     else:
         text_w = fm.horizontalAdvance("—")
 
     has_long_names = text_w > min_w
-    text_inner_min = text_w + horizontal_pad * 2
+    text_inner_min = text_w + horizontal_pad * 2 + _ITEM_INSET_LR
 
-    max_cell_w = max(min_w, iw + horizontal_pad * 2, text_inner_min)
-    compact_cell_h = ih + line_h + label_gap + horizontal_pad
+    max_cell_w = max(min_w, iw + horizontal_pad * 2 + _ITEM_INSET_LR, text_inner_min)
 
     count = len(labels)
     if count <= 0:
-        return QSize(min_w, compact_cell_h), False
+        return QSize(
+            min_w,
+            ih + label_gap + fm.height() + horizontal_pad + _ITEM_INSET_LR + _ITEM_EXTRA_PAD,
+            False,
+        )
 
     vp = max(min_w, viewport_width)
     gaps_one_row = list_spacing * max(0, count - 1)
@@ -78,12 +124,13 @@ def compute_icon_mode_cell_size(
         cell_w = max(cell_w, long_name_min_w)
 
     use_wrap = cell_w < text_inner_min
-
-    if use_wrap:
-        wrap_lines = LONG_NAME_WRAP_MAX_LINES if has_long_names else SHORT_WRAP_MAX_LINES
-        cell_h = ih + wrap_lines * line_h + label_gap + horizontal_pad
-    else:
-        cell_h = compact_cell_h
+    text_h = _text_block_height(
+        fm,
+        labels,
+        cell_w - horizontal_pad * 2,
+        use_wrap=use_wrap,
+    )
+    cell_h = ih + label_gap + text_h + horizontal_pad + _ITEM_INSET_LR + _ITEM_EXTRA_PAD
 
     return QSize(cell_w, cell_h), use_wrap
 
@@ -94,12 +141,32 @@ def icon_list_spacing_for_cell(icon_size: QSize) -> int:
     return max(8, min(36, h // 4))
 
 
+def icon_list_content_height(
+    list_widget: QListWidget,
+    grid_cell: QSize,
+    *,
+    item_count: int | None = None,
+) -> int:
+    """Pixel height for an icon-mode list grid (grouped sections — not full viewport)."""
+    count = item_count if item_count is not None else list_widget.count()
+    if count <= 0:
+        return 0
+    vp_w = max(1, list_widget.viewport().width())
+    cw = max(1, grid_cell.width())
+    ch = max(1, grid_cell.height())
+    spacing = list_widget.spacing()
+    cols = max(1, (vp_w + spacing) // (cw + spacing))
+    rows = (count + cols - 1) // cols
+    return rows * ch + max(0, rows - 1) * spacing + 4
+
+
 def apply_icon_mode_list_layout(
     list_widget: QListWidget,
     icon_size: QSize,
     labels: list[str],
     *,
     set_min_height: bool = False,
+    compact_height: bool = False,
     fallback_viewport_width: int = 0,
 ) -> None:
     """Apply spacing, grid size, and word-wrap for an icon-mode list."""
@@ -114,15 +181,22 @@ def apply_icon_mode_list_layout(
         vp_w,
         icon_size,
         labels,
-        list_widget.font(),
+        icon_mode_label_font(list_widget),
         list_spacing=list_widget.spacing(),
     )
     list_widget.setWordWrap(use_wrap)
     list_widget.setGridSize(cell)
-    if set_min_height:
+    list_widget.setMinimumHeight(0)
+    list_widget.setMaximumHeight(16777215)
+    list_widget.doItemsLayout()
+    if compact_height:
+        hint_h = list_widget.sizeHint().height()
+        content_h = max(hint_h, icon_list_content_height(list_widget, cell))
+        if content_h > 0:
+            list_widget.setFixedHeight(content_h)
+    elif set_min_height:
         ih = icon_size.height()
         list_widget.setMinimumHeight(max(96, cell.height(), ih + 56))
-    list_widget.doItemsLayout()
 
 
 class IconListViewportResizeFilter(QObject):

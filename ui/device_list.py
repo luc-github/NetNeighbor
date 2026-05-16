@@ -35,7 +35,7 @@ from utils.discovery_config import (
     information_precedence_role_for_device_source,
     normalize_information_precedence_list,
 )
-from utils.discovery_identity import uuid_urn_if_present
+from utils.discovery_identity import upnp_identity_from_udn, upnp_identity_from_usn, uuid_urn_if_present
 from utils.neighbor_mac import lookup_mac_from_neighbor_cache
 from utils.gtk_dialog import prepare_gtk_dialog
 from utils.connect_launcher import launch_connect_for_uri
@@ -2279,10 +2279,7 @@ class DeviceList(Gtk.Box):
 
         usn = metadata.get("usn")
         if isinstance(usn, str) and usn.strip():
-            u = uuid_urn_if_present(usn)
-            if u:
-                return u
-            return usn.strip().lower().split("::", 1)[0]
+            return upnp_identity_from_usn(usn)
 
         wsd_epr = metadata.get("wsd_epr")
         if isinstance(wsd_epr, str) and wsd_epr.strip():
@@ -2297,9 +2294,9 @@ class DeviceList(Gtk.Box):
 
         udn_raw = xml_fields.get("UDN")
         if isinstance(udn_raw, str) and udn_raw.strip():
-            u = uuid_urn_if_present(udn_raw)
-            if u:
-                return u
+            hit = upnp_identity_from_udn(udn_raw)
+            if hit:
+                return hit
 
         candidates = [
             xml_fields.get("UDN"),

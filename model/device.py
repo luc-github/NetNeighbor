@@ -28,14 +28,21 @@ class Device:
         metadata = self.metadata if isinstance(self.metadata, dict) else {}
         if self.source == "ssdp":
             xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
-            udn = xml_fields.get("UDN") or metadata.get("udn")
-            if isinstance(udn, str) and udn.strip():
-                return f"ssdp:udn:{udn.strip().lower()}"
+            # Prefer SSDP USN (unique per advertisement) over XML UDN — bundled descriptors
+            # (e.g. Sonos group XML) can repeat the same UDN across different speakers.
             usn = metadata.get("usn")
             if isinstance(usn, str) and usn.strip():
                 usn_base = usn.strip().lower().split("::", 1)[0]
                 if usn_base:
                     return f"ssdp:usn:{usn_base}"
+            # Profile-cache bootstrap rows often have no USN on disk; never collapse by duplicate UDN.
+            if metadata.get("from_ssdp_cache"):
+                ip_s = str(self.ip).strip()
+                if ip_s and ip_s not in {"", "0.0.0.0"}:
+                    return f"ssdp:cache:{ip_s}:{int(self.port)}"
+            udn = xml_fields.get("UDN") or metadata.get("udn")
+            if isinstance(udn, str) and udn.strip():
+                return f"ssdp:udn:{udn.strip().lower()}"
             mac = (
                 xml_fields.get("mac")
                 or metadata.get("mac")

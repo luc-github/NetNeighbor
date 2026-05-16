@@ -18,6 +18,9 @@ ICON_SIZE_PRESET_PIXELS: dict[str, int] = {
 
 DEFAULT_ICON_SIZE_PRESET = "medium"
 
+# Reference edge length for device-provided icons and bundled pickers (medium preset).
+DEVICE_ICON_REFERENCE_PX = ICON_SIZE_PRESET_PIXELS[DEFAULT_ICON_SIZE_PRESET]
+
 
 def normalize_icon_size_preset(raw: object) -> str:
     if isinstance(raw, str) and raw in ICON_SIZE_PRESET_PIXELS:

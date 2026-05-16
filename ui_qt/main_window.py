@@ -40,8 +40,17 @@ from ui_qt.grouped_icon_sections import build_grouped_icon_scroll
 from ui_qt.icon_grid_layout import (
     IconListViewportResizeFilter,
     apply_icon_mode_list_layout,
+    format_icon_tile_label,
     labels_from_icon_list,
 )
+from ui_qt.device_actions import (
+    bundle_custom_command,
+    launch_open_uri,
+    prompt_rename_device,
+    run_custom_command_for_bundle,
+)
+from ui_qt.device_context_menu import show_device_context_menu
+from ui_qt.device_details_dialog import DeviceIconSettings, show_device_details_dialog
 from ui_qt.icon_picker_dialog import pick_device_icon_id
 from ui_qt.no_focus_item_delegate import NoFocusItemDelegate
 from utils.app_version import get_app_version
@@ -51,13 +60,24 @@ from utils.device_bundles import (
     apply_bundle_category_filter,
     build_device_bundles,
     bundle_location_label,
+    bundle_snapshot_ui_fingerprint,
+)
+from utils.connect_launcher import normalize_connect_templates
+from utils.device_details_view import build_device_details_view_model
+from utils.device_remote_icon import (
+    bundle_has_device_icon_source,
+    bundle_provided_icon_display,
 )
 from utils.discovery_config import normalize_information_precedence_list
+from utils.double_click_open import resolve_all_connect_targets
+from utils.location_label import normalize_location_options
 from utils.icon_view_prefs import (
+    DEVICE_ICON_REFERENCE_PX,
     ICON_SIZE_PRESET_PIXELS,
     icon_size_preset_to_qsize,
     normalize_icon_size_preset,
 )
+from ui_qt.remote_icon_cache import QtRemoteIconCache
 from utils.qt_device_icons import qt_icon_for_device_type
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 
@@ -172,6 +192,27 @@ class NetNeighborMainWindow(QMainWindow):
                     continue
                 self._custom_icon_overrides[(ip, port)] = icon_name.strip()
 
+        self._location_options: list[str] = []
+        raw_locs = prefs.get("location_options")
+        if isinstance(raw_locs, list):
+            self._location_options = normalize_location_options(
+                [str(v).strip() for v in raw_locs if isinstance(v, str) and str(v).strip()]
+            )
+        self._type_options: list[tuple[str, str]] = []
+        raw_types = prefs.get("type_options")
+        if isinstance(raw_types, list):
+            for entry in raw_types:
+                if not isinstance(entry, dict):
+                    continue
+                label = entry.get("label")
+                slug = entry.get("slug")
+                if isinstance(label, str) and isinstance(slug, str) and slug.strip():
+                    self._type_options.append((label, slug.strip().lower()))
+        self._connect_command_templates = normalize_connect_templates(
+            prefs.get("connect_command_templates")
+        )
+        self._custom_command_template = str(prefs.get("custom_command_template", "") or "")
+
         self._last_devices: list[Device] = []
         self._bundles: list[DeviceBundle] = []
         self._sidebar_signature: tuple | None = None
@@ -189,6 +230,9 @@ class NetNeighborMainWindow(QMainWindow):
         self._view_refresh_timer = QTimer(self)
         self._view_refresh_timer.setSingleShot(True)
         self._view_refresh_timer.timeout.connect(self._refresh_device_widgets)
+
+        self._remote_icon_cache = QtRemoteIconCache(self)
+        self._remote_icon_cache.icons_ready.connect(self._on_remote_icons_ready)
 
         ver = get_app_version()
         self.setWindowTitle(_("NetNeighbor {}").format(ver))
@@ -275,7 +319,9 @@ class NetNeighborMainWindow(QMainWindow):
         self._icon_list.setLayoutMode(QListView.LayoutMode.Batched)
         self._icon_list.setBatchSize(32)
         self._icon_list.setStyleSheet(ICON_MODE_LIST_QSS)
-        self._icon_list.setItemDelegate(NoFocusItemDelegate(self._icon_list))
+        self._icon_list.setItemDelegate(
+            NoFocusItemDelegate(self._icon_list, elide_none=True)
+        )
         self._icon_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._icon_list.customContextMenuRequested.connect(self._on_icon_list_context_menu)
         self._flat_icon_viewport_filter = IconListViewportResizeFilter(
@@ -842,16 +888,18 @@ class NetNeighborMainWindow(QMainWindow):
             self._first_device_ui_flush_done = True
 
     def _apply_devices_snapshot(self, devices: list[Device]) -> None:
-        """Apply a device list to bundles, sidebar, and main views."""
-        fp = (tuple(self._information_precedence), _device_snapshot_ui_fingerprint(devices))
-        if fp == self._last_snapshot_fp:
-            _LOG.debug("_apply_devices_snapshot: noop (same UI fingerprint) n=%s", len(devices))
-            return
-        self._last_snapshot_fp = fp
-        _LOG.debug("_apply_devices_snapshot: n=%s", len(devices))
-        self._last_devices = list(devices)
-        self._bundles = build_device_bundles(self._last_devices, self._information_precedence)
+        """Apply a device list to bundles, sidebar, and main views (always merge like GTK)."""
+        device_list = list(devices)
+        self._last_devices = device_list
+        self._bundles = build_device_bundles(device_list, self._information_precedence)
+        self._last_snapshot_fp = (
+            tuple(self._information_precedence),
+            _device_snapshot_ui_fingerprint(device_list),
+            bundle_snapshot_ui_fingerprint(self._bundles),
+        )
+        _LOG.debug("_apply_devices_snapshot: n=%s", len(device_list))
         self._rebuild_sidebar()
+        self._last_device_view_sig = None
         self._schedule_view_refresh()
 
     def _filtered_bundles(self) -> list[DeviceBundle]:
@@ -955,7 +1003,7 @@ class NetNeighborMainWindow(QMainWindow):
         if bundle is None:
             return
         gpos = self._icon_list.viewport().mapToGlobal(pos)
-        self._show_device_icon_menu(gpos, bundle)
+        self._show_device_context_menu(gpos, bundle)
 
     def _on_table_context_menu(self, pos: QPoint) -> None:
         idx = self._table.indexAt(pos)
@@ -969,42 +1017,173 @@ class NetNeighborMainWindow(QMainWindow):
         if bundle is None:
             return
         gpos = self._table.viewport().mapToGlobal(pos)
-        self._show_device_icon_menu(gpos, bundle)
+        self._show_device_context_menu(gpos, bundle)
 
     def _on_grouped_icon_context_menu(self, global_pos: QPoint, bundle: DeviceBundle) -> None:
-        self._show_device_icon_menu(global_pos, bundle)
+        self._show_device_context_menu(global_pos, bundle)
 
-    def _show_device_icon_menu(self, global_pos: QPoint, bundle: DeviceBundle) -> None:
+    def _bundle_connect_targets(self, bundle: DeviceBundle) -> list[tuple[str, str]]:
+        return resolve_all_connect_targets(
+            bundle_ip=bundle.ip,
+            primary_type=bundle.primary.type or "",
+            devices=bundle.devices,
+        )
+
+    def _show_device_context_menu(self, global_pos: QPoint, bundle: DeviceBundle) -> None:
+        has_cmd = bool(
+            bundle_custom_command(bundle) or (self._custom_command_template or "").strip()
+        )
+        show_device_context_menu(
+            self,
+            global_pos,
+            bundle,
+            connect_targets=self._bundle_connect_targets(bundle),
+            location_options=self._location_options,
+            type_options=self._type_options,
+            has_custom_command=has_cmd,
+            on_open_uri=lambda uri: launch_open_uri(
+                self,
+                bundle,
+                uri,
+                connect_templates=self._connect_command_templates,
+                global_custom_command=self._custom_command_template,
+            ),
+            on_custom_command=lambda: run_custom_command_for_bundle(
+                self,
+                bundle,
+                global_template=self._custom_command_template,
+                connect_templates=self._connect_command_templates,
+            ),
+            on_details=lambda: self._open_device_details(bundle),
+            on_options=lambda: self._open_device_details(bundle, initial_tab="options"),
+            on_monitor=lambda monitored: self._set_bundle_monitored(bundle, monitored),
+            on_rename=lambda: self._rename_bundle(bundle),
+            on_location=lambda loc: self._set_bundle_location(bundle, loc),
+            on_type=lambda slug: self._set_bundle_type(bundle, slug),
+        )
+
+    def _normalized_icon_mode(self, bundle: DeviceBundle) -> str:
+        raw = self._icon_source_overrides.get((bundle.ip, bundle.port), "provided")
+        if raw == "auto":
+            return "provided"
+        if raw in {"provided", "system", "custom"}:
+            return raw
+        return "provided"
+
+    def _apply_bundle_icon_settings(
+        self, bundle: DeviceBundle, mode: str, custom_icon_id: str | None
+    ) -> None:
         ep = (bundle.ip, bundle.port)
-        menu = QMenu(self)
-        act_pick = menu.addAction(_("Choose icon…"))
-        act_reset = menu.addAction(_("Use default icon"))
-        chosen = menu.exec(global_pos)
-        if chosen == act_pick:
-            cur = (
-                self._custom_icon_overrides.get(ep)
-                if self._icon_source_overrides.get(ep, "provided") == "custom"
-                else None
-            )
-            nid = pick_device_icon_id(
-                self, preferred_type=bundle.primary.type, current_id=cur
-            )
-            if nid:
-                self._icon_source_overrides[ep] = "custom"
-                self._custom_icon_overrides[ep] = nid
+        current = self._normalized_icon_mode(bundle)
+        if mode == current:
+            if mode != "custom":
+                if ep in self._custom_icon_overrides:
+                    self._custom_icon_overrides.pop(ep, None)
+                    self._persist_ui_prefs()
+                    self._last_device_view_sig = None
+                    self._refresh_device_widgets()
+                return
+            prev = self._custom_icon_overrides.get(ep)
+            if custom_icon_id and prev != custom_icon_id:
+                self._custom_icon_overrides[ep] = custom_icon_id
                 self._persist_ui_prefs()
                 self._last_device_view_sig = None
                 self._refresh_device_widgets()
-        elif chosen == act_reset:
-            self._icon_source_overrides[ep] = "provided"
+            return
+        self._icon_source_overrides[ep] = mode
+        if mode == "custom":
+            if custom_icon_id:
+                self._custom_icon_overrides[ep] = custom_icon_id
+        else:
             self._custom_icon_overrides.pop(ep, None)
-            self._persist_ui_prefs()
-            self._last_device_view_sig = None
-            self._refresh_device_widgets()
+        self._persist_ui_prefs()
+        self._last_device_view_sig = None
+        self._refresh_device_widgets()
+
+    def _open_device_details(
+        self, bundle: DeviceBundle, *, initial_tab: str | None = None
+    ) -> None:
+        model = build_device_details_view_model(
+            bundle, no_location_label=self._no_location_label()
+        )
+        ep = (bundle.ip, bundle.port)
+        mode = self._normalized_icon_mode(bundle)
+        custom_id = self._custom_icon_overrides.get(ep) if mode == "custom" else None
+
+        def _pick_custom() -> str | None:
+            cur = self._custom_icon_overrides.get(ep) if mode == "custom" else None
+            return pick_device_icon_id(
+                self, preferred_type=bundle.primary.type, current_id=cur
+            )
+
+        icon_settings = DeviceIconSettings(
+            icon_mode=mode,
+            has_device_icon_source=bundle_has_device_icon_source(bundle),
+            provided_icon_display=bundle_provided_icon_display(bundle),
+            selected_custom_icon_id=custom_id,
+            on_apply=lambda m, cid: self._apply_bundle_icon_settings(bundle, m, cid),
+            on_pick_custom=_pick_custom,
+        )
+
+        show_device_details_dialog(
+            self,
+            model,
+            initial_tab=initial_tab,
+            icon_settings=icon_settings,
+        )
+
+    def _set_bundle_monitored(self, bundle: DeviceBundle, monitored: bool) -> None:
+        if self._discovery_manager is None:
+            return
+        for device in bundle.devices:
+            self._discovery_manager.set_device_monitored(device.key, monitored)
+
+    def _rename_bundle(self, bundle: DeviceBundle) -> None:
+        if self._discovery_manager is None:
+            return
+        result = prompt_rename_device(self, bundle.name)
+        if result is False:
+            return
+        for device in bundle.devices:
+            self._discovery_manager.set_device_name_override(
+                device.source, device.ip, device.port, result
+            )
+        self._persist_ui_prefs()
+
+    def _set_bundle_location(self, bundle: DeviceBundle, location: str | None) -> None:
+        if self._discovery_manager is None:
+            return
+        for device in bundle.devices:
+            self._discovery_manager.set_device_location_override(
+                device.source, device.ip, device.port, location
+            )
+        self._persist_ui_prefs()
+        self._sidebar_signature = None
+        self._rebuild_sidebar()
+        self._last_device_view_sig = None
+        self._refresh_device_widgets()
+
+    def _set_bundle_type(self, bundle: DeviceBundle, device_type: str | None) -> None:
+        if self._discovery_manager is None:
+            return
+        self._discovery_manager.set_device_type_override(
+            bundle.primary.source, bundle.primary.ip, bundle.primary.port, device_type
+        )
+        self._persist_ui_prefs()
+        self._sidebar_signature = None
+        self._rebuild_sidebar()
+        self._last_device_view_sig = None
+        self._refresh_device_widgets()
 
     def _icon_for_bundle(self, bundle: DeviceBundle) -> QIcon:
         ep = (bundle.ip, bundle.port)
-        if self._icon_source_overrides.get(ep, "provided") == "custom":
+        mode = self._normalized_icon_mode(bundle)
+        px = ICON_SIZE_PRESET_PIXELS.get(
+            normalize_icon_size_preset(self._icon_size_preset),
+            DEVICE_ICON_REFERENCE_PX,
+        )
+
+        if mode == "custom":
             cid = self._custom_icon_overrides.get(ep)
             if cid:
                 p = resolve_persisted_icon_id_to_path(cid)
@@ -1012,15 +1191,63 @@ class NetNeighborMainWindow(QMainWindow):
                     ic = QIcon(str(p))
                     if not ic.isNull():
                         return ic
-        asset = resolve_asset_icon_file(bundle.primary.icon)
-        if asset is not None:
-            return QIcon(str(asset))
-        return qt_icon_for_device_type(
+            mode = "provided"
+
+        if mode == "provided":
+            for dev in (
+                bundle.ssdp_device,
+                bundle.wsdd_device,
+                bundle.wsd_device,
+                bundle.nmb_device,
+                bundle.mdns_device,
+            ):
+                if dev is None:
+                    continue
+                remote = self._remote_icon_cache.icon_for_bundle_device(
+                    bundle, dev, px
+                )
+                if remote is not None and not remote.isNull():
+                    return remote
+
+        return self._default_icon_for_bundle(bundle)
+
+    def _default_icon_for_bundle(self, bundle: DeviceBundle) -> QIcon:
+        """Type icons from the 48px-based asset pack; avoid upscaling tiny device PNGs."""
+        ic = qt_icon_for_device_type(
             bundle.primary.type,
             self.style(),
             self,
             icon_size_preset=self._icon_size_preset,
         )
+        if not ic.isNull():
+            return ic
+        asset = resolve_asset_icon_file(bundle.primary.icon)
+        if asset is not None:
+            return QIcon(str(asset))
+        return ic
+
+    def _on_remote_icons_ready(self) -> None:
+        self._resync_device_icons()
+
+    def _resync_device_icons(self) -> None:
+        if self._view_mode != "icons":
+            return
+        if self._icon_sort_mode == "appearance":
+            self._resync_flat_icon_list_pixmaps()
+            return
+        layout = self._grouped_icons_layout
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            scroll = item.widget()
+            if scroll is None:
+                continue
+            sections = getattr(scroll, "_icon_group_sections", None)
+            if not isinstance(sections, list):
+                continue
+            for section in sections:
+                section.resync_icons(self._icon_for_bundle)
 
     def _apply_list_table_sort_for_arrange_mode(self) -> None:
         """List view: match View → Arrange to sorting by IP / Type / Location column (like header clicks)."""
@@ -1117,7 +1344,7 @@ class NetNeighborMainWindow(QMainWindow):
         def _fill() -> None:
             self._icon_list.clear()
             for bundle in rows:
-                name = _safe_str(bundle.primary.name)
+                name = format_icon_tile_label(_safe_str(bundle.primary.name))
                 it = QListWidgetItem(self._icon_for_bundle(bundle), name)
                 it.setData(self._BUNDLE_KEY_ROLE, bundle.primary.key)
                 it.setToolTip(self._bundle_tooltip(bundle))
@@ -1141,7 +1368,7 @@ class NetNeighborMainWindow(QMainWindow):
                 if bundle is None:
                     continue
                 it.setIcon(self._icon_for_bundle(bundle))
-                name = _safe_str(bundle.primary.name)
+                name = format_icon_tile_label(_safe_str(bundle.primary.name))
                 if it.text() != name:
                     it.setText(name)
                 it.setToolTip(self._bundle_tooltip(bundle))
@@ -1250,6 +1477,7 @@ def _device_snapshot_ui_fingerprint(devices: Iterable[Device]) -> tuple:
         rows.append(
             (
                 d.key,
+                (d.source or "").strip().lower(),
                 (d.name or "").strip(),
                 (d.ip or "").strip(),
                 int(d.port or 0),

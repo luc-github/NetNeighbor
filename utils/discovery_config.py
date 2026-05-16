@@ -7,11 +7,12 @@
 from __future__ import annotations
 
 import copy
+import ipaddress
 import json
 from pathlib import Path
 from typing import Any, Sequence
 
-_DEFAULT_STARTUP_REFRESH = [15, 30, 60, 120, 300, 600]
+_DEFAULT_STARTUP_REFRESH = [5, 15, 30, 60, 120, 300, 600]
 
 # mDNS: enumeration and per-service resolution (see discovery/mdns.py).
 _DEFAULT_MDNS_QUERY = {
@@ -26,6 +27,8 @@ _DEFAULT_SSDP_QUERY = {
     # Minimum seconds between HTTP GETs for descriptor URLs with the same host IP (or same hostname);
     # avoids duplicate fetches when anticipatory + SSDP LOCATION arrive close together. 0 = off.
     "descriptor_http_min_interval_seconds": 5.0,
+    # Optional IPv4 list: send unicast M-SEARCH to each :1900 (helps when UDP 1900 is not bound / NOTIFY missed).
+    "msearch_directed_ips": [],
 }
 # WSD: WS-Discovery probe interval and per-probe wait (discovery/wsd.py); requires PyPI ``WSDiscovery``.
 _DEFAULT_WSD_QUERY = {
@@ -233,7 +236,7 @@ def _parse_startup_refresh(value: object) -> list[int] | None:
                 delay = int(item)
             except (TypeError, ValueError):
                 continue
-            if 1 <= delay <= 300 and delay not in cleaned:
+            if 1 <= delay <= 86400 and delay not in cleaned:
                 cleaned.append(delay)
         return cleaned or None
     if isinstance(value, str):
@@ -244,14 +247,14 @@ def _parse_startup_refresh(value: object) -> list[int] | None:
                 delay = int(part)
             except ValueError:
                 continue
-            if 1 <= delay <= 300 and delay not in cleaned:
+            if 1 <= delay <= 86400 and delay not in cleaned:
                 cleaned.append(delay)
         return cleaned or None
     try:
         delay = int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
-    if 1 <= delay <= 300:
+    if 1 <= delay <= 86400:
         return [delay]
     return None
 
@@ -324,6 +327,21 @@ def _merge_query_into(out_proto: dict[str, Any], parsed_block: object, protocol:
                 120.0,
             )
             base_q["descriptor_http_min_interval_seconds"] = v
+        if "msearch_directed_ips" in pq:
+            raw_ips = pq.get("msearch_directed_ips")
+            ips: list[str] = []
+            if isinstance(raw_ips, list):
+                for x in raw_ips:
+                    if not isinstance(x, str) or not x.strip():
+                        continue
+                    s = x.strip()
+                    try:
+                        addr = ipaddress.ip_address(s)
+                    except ValueError:
+                        continue
+                    if isinstance(addr, ipaddress.IPv4Address):
+                        ips.append(addr.compressed)
+            base_q["msearch_directed_ips"] = ips
     elif protocol == "wsd":
         if "interval_seconds" in pq:
             base_q["interval_seconds"] = _clamp_float(
@@ -523,6 +541,10 @@ def _disk_repr(cfg: dict[str, Any]) -> dict[str, Any]:
                         _DEFAULT_SSDP_QUERY["descriptor_http_min_interval_seconds"],
                     )
                 ),
+                "msearch_directed_ips": list(
+                    sq.get("msearch_directed_ips", _DEFAULT_SSDP_QUERY["msearch_directed_ips"])
+                    or []
+                ),
             },
         },
         "wsd": {
@@ -581,7 +603,9 @@ def load_discovery_protocol_config() -> dict[str, object]:
     ``query``: ``interval_seconds``, ``timeout_seconds``), optional ``merge.protocol_order``
     (ordered ``source`` ids: ``ssdp``, ``wsd``, ``mdns``, …), optional ``merge.information_precedence``
     (roles ``user_override``, ``ssdp_live``, ``wsd_live``, ``ssdp_profile_cache``, ``mdns``), and root
-    ``startup_refresh_seconds``. Malformed or missing file
+    ``startup_refresh_seconds``. Use ``"mdns": { "enabled": false }`` to disable mDNS (SSDP-only
+    experiments); file lives at ``~/.config/netneighbor/discovery.json`` (under the user home on
+    all OS, e.g. ``%USERPROFILE%/.config/netneighbor/discovery.json`` on Windows). Malformed or missing file
     yields defaults; defaults are written only when the file does not exist.
 
     The default ``merge.information_precedence`` places ``user_override`` first (strongest); the manager
@@ -648,6 +672,19 @@ def discovery_manager_kwargs(proto_cfg: dict[str, object]) -> dict[str, object]:
     wsdd_listen = str(wsdd_listen).strip()
     enable_wsdd_socket = bool(wsdd_cfg.get("enabled", False)) and bool(wsdd_listen)
 
+    ssdp_msearch_directed_ips: list[str] = []
+    raw_directed = ssdp_q.get("msearch_directed_ips")
+    if isinstance(raw_directed, list):
+        for x in raw_directed:
+            if not isinstance(x, str) or not x.strip():
+                continue
+            try:
+                addr = ipaddress.ip_address(x.strip())
+            except ValueError:
+                continue
+            if isinstance(addr, ipaddress.IPv4Address):
+                ssdp_msearch_directed_ips.append(addr.compressed)
+
     return {
         "enable_ssdp": bool(ssdp_cfg.get("enabled", True)),
         "enable_mdns": bool(mdns_cfg.get("enabled", True)),
@@ -656,6 +693,7 @@ def discovery_manager_kwargs(proto_cfg: dict[str, object]) -> dict[str, object]:
         "ssdp_query_interval_seconds": ssdp_q.get("interval_seconds"),
         "ssdp_mx_seconds": ssdp_q.get("mx_seconds"),
         "ssdp_descriptor_http_min_interval_seconds": ssdp_q.get("descriptor_http_min_interval_seconds"),
+        "ssdp_msearch_directed_ips": ssdp_msearch_directed_ips,
         "mdns_enumeration_timeout_seconds": mdns_q.get("enumeration_timeout_seconds"),
         "mdns_enumeration_interval_seconds": mdns_q.get("enumeration_interval_seconds"),
         "mdns_service_info_timeout_ms": mdns_q.get("service_info_timeout_ms"),

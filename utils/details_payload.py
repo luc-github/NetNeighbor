@@ -309,6 +309,16 @@ def _detail_field_usable(text: object) -> bool:
     return bool(stripped and stripped != "unavailable")
 
 
+def detail_field_value_visible(value: object) -> bool:
+    """True if a details row should be shown in the UI."""
+    return _detail_field_usable(value)
+
+
+def filter_visible_detail_fields(fields: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Drop empty or ``unavailable`` rows (GTK details dialog behaviour)."""
+    return [(k, v) for k, v in fields if detail_field_value_visible(v)]
+
+
 def _txt_pairs_from_service_dict(svc: dict[str, Any]) -> list[tuple[str, str]]:
     pairs_raw = svc.get("txt_records")
     pairs: list[tuple[str, str]] = []

@@ -15,7 +15,7 @@ from utils.discovery_config import (
     information_precedence_rank,
     information_precedence_role_for_device_source,
 )
-from utils.discovery_identity import uuid_urn_if_present
+from utils.discovery_identity import upnp_identity_from_udn, upnp_identity_from_usn, uuid_urn_if_present
 from utils.location_label import is_plausible_room_location
 from utils.neighbor_mac import lookup_mac_from_neighbor_cache
 
@@ -169,10 +169,7 @@ def extract_uid(metadata: dict) -> str:
 
     usn = metadata.get("usn")
     if isinstance(usn, str) and usn.strip():
-        u = uuid_urn_if_present(usn)
-        if u:
-            return u
-        return usn.strip().lower().split("::", 1)[0]
+        return upnp_identity_from_usn(usn)
 
     wsd_epr = metadata.get("wsd_epr")
     if isinstance(wsd_epr, str) and wsd_epr.strip():
@@ -187,9 +184,9 @@ def extract_uid(metadata: dict) -> str:
 
     udn_raw = xml_fields.get("UDN")
     if isinstance(udn_raw, str) and udn_raw.strip():
-        u = uuid_urn_if_present(udn_raw)
-        if u:
-            return u
+        hit = upnp_identity_from_udn(udn_raw)
+        if hit:
+            return hit
 
     candidates = [
         xml_fields.get("UDN"),
@@ -324,6 +321,30 @@ def build_device_bundles(
         bundle.ip = bundle.primary.ip
         bundle.port = int(bundle.primary.port)
     return ordered
+
+
+def bundle_snapshot_ui_fingerprint(bundles: Sequence[DeviceBundle]) -> tuple:
+    """Fingerprint of merged bundles (protocol attachment + primary row) for Qt UI refresh."""
+    rows: list[tuple] = []
+    for b in sorted(bundles, key=lambda x: (str(x.ip), int(x.port or 0), x.primary.key)):
+        p = b.primary
+        rows.append(
+            (
+                str(b.ip).strip(),
+                int(b.port or 0),
+                p.key,
+                (p.source or "").strip().lower(),
+                (p.name or "").strip(),
+                (p.type or "unknown").strip().lower(),
+                bool(p.online),
+                b.ssdp_device is not None,
+                b.mdns_device is not None,
+                b.wsd_device is not None,
+                b.wsdd_device is not None,
+                b.nmb_device is not None,
+            )
+        )
+    return tuple(rows)
 
 
 def apply_bundle_category_filter(

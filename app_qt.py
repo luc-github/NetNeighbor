@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.qt_diag_toplevels:
         os.environ["NETNEIGHBOR_DEBUG_TOPLEVEL"] = "1"
 
+    from PySide6.QtCore import QTimer
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
@@ -48,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(log_name="app_qt")
     setup_i18n()
     _log = logging.getLogger("app_qt")
+    _log.info("NetNeighbor Qt bootstrap (logging to ~/.cache/netneighbor/netneighbor.log)")
 
     app = QApplication(argv)
     if args.qt_fusion_style:
@@ -111,13 +113,32 @@ def main(argv: list[str] | None = None) -> int:
     window.show()
 
     if os.environ.get("NETNEIGHBOR_DEBUG_TOPLEVEL"):
-        from PySide6.QtCore import QTimer
-
         from ui_qt.main_window import _debug_log_extra_top_level_widgets
 
         QTimer.singleShot(2500, lambda: _debug_log_extra_top_level_widgets("idle 2.5s after show"))
 
+    startup_refresh_seconds = proto_cfg.get("startup_refresh_seconds")
+    if not isinstance(startup_refresh_seconds, list) or not startup_refresh_seconds:
+        startup_refresh_seconds = [15, 30, 60, 120, 300, 600]
+    startup_refresh_seconds = [int(v) for v in startup_refresh_seconds]
+
+    def _run_startup_refresh_once(delay_seconds: int) -> None:
+        try:
+            _log.info("Startup discovery refresh (+%ss from launch)", delay_seconds)
+            manager.refresh()
+        except Exception:
+            _log.debug("Startup auto-refresh failed at +%ss", delay_seconds, exc_info=True)
+
     manager.start()
+    # Same as GTK ``MainWindow._start_discovery_protocols``: wake probes once threads run,
+    # then repeat M-SEARCH / other polls at ``startup_refresh_seconds`` from discovery.json.
+    try:
+        manager.refresh()
+    except Exception:
+        _log.debug("Post-start discovery refresh failed", exc_info=True)
+    for delay in startup_refresh_seconds:
+        if delay > 0:
+            QTimer.singleShot(delay * 1000, lambda d=delay: _run_startup_refresh_once(d))
     try:
         return int(app.exec())
     finally:

@@ -21,7 +21,7 @@ from discovery.wsd import WSDiscovery, is_synthetic_wsd_display_name
 from model.device import Device
 from utils.discovery_cache import load_discovery_cache
 from utils.discovery_config import normalize_information_precedence_list
-from utils.discovery_identity import uuid_urn_if_present
+from utils.discovery_identity import upnp_identity_from_udn, upnp_identity_from_usn, uuid_urn_if_present
 from utils.location_label import is_plausible_room_location
 from utils.scheduling import ScheduleMainFn
 
@@ -141,6 +141,7 @@ class DiscoveryManager:
         ssdp_query_interval_seconds: int | None = None,
         ssdp_mx_seconds: int | None = None,
         ssdp_descriptor_http_min_interval_seconds: float | None = None,
+        ssdp_msearch_directed_ips: list[str] | None = None,
         mdns_enumeration_timeout_seconds: float | None = None,
         mdns_enumeration_interval_seconds: int | None = None,
         mdns_service_info_timeout_ms: int | None = None,
@@ -189,6 +190,8 @@ class DiscoveryManager:
                     query_interval_seconds=ssdp_query_interval_seconds,
                     mx_seconds=ssdp_mx_seconds,
                     descriptor_http_min_interval_seconds=ssdp_descriptor_http_min_interval_seconds,
+                    msearch_directed_ips=ssdp_msearch_directed_ips,
+                    ephemeral_msearch_probe_ips=self._ssdp_probe_ips_from_mdns_without_ssdp,
                 )
             )
         if enable_mdns:
@@ -253,7 +256,11 @@ class DiscoveryManager:
         self._monitored_overrides: dict[str, bool] = {}
         self._last_seen_overrides: dict[str, str] = {}
         self._identity_pending: dict[str, tuple[datetime, Device]] = {}
-        self._ssdp_profile_cache_by_ip: dict[str, dict] = self._load_ssdp_profile_cache_by_ip()
+        self._ssdp_profile_cache_by_ip: dict[str, dict]
+        self._ssdp_profile_cache_emit_rows: list[tuple[str, dict]]
+        self._ssdp_profile_cache_by_ip, self._ssdp_profile_cache_emit_rows = (
+            self._load_ssdp_profile_cache_by_ip()
+        )
         self._demo_mode = demo_mode
         self._location_prefs_need_reapply = False
         self._location_prefs_dirty_callback: Callable[[], None] | None = None
@@ -315,6 +322,42 @@ class DiscoveryManager:
         self._logger.debug("Manual refresh requested")
         for protocol in self._protocols:
             protocol.refresh()
+
+    def _ssdp_probe_ips_from_mdns_without_ssdp(self) -> list[str]:
+        """IPv4 addresses with live mDNS rows but no SSDP row (unicast M-SEARCH fills NOTIFY gaps)."""
+        ssdp_ips: set[str] = set()
+        for d in self._devices.values():
+            if d.source == "ssdp" and d.online:
+                sip = str(d.ip).strip()
+                if not sip:
+                    continue
+                try:
+                    addr = ipaddress.ip_address(sip)
+                except ValueError:
+                    ssdp_ips.add(sip)
+                    continue
+                ssdp_ips.add(addr.compressed)
+        seen: set[str] = set()
+        out: list[str] = []
+        for d in self._devices.values():
+            if d.source != "mdns" or not d.online:
+                continue
+            sip = str(d.ip).strip()
+            if not sip:
+                continue
+            try:
+                addr = ipaddress.ip_address(sip)
+            except ValueError:
+                continue
+            if not isinstance(addr, ipaddress.IPv4Address) or addr.is_loopback:
+                continue
+            canon = addr.compressed
+            if canon in ssdp_ips:
+                continue
+            if canon not in seen:
+                seen.add(canon)
+                out.append(canon)
+        return out
 
     def _device_event_logger(self, source: str) -> logging.Logger:
         if source == "ssdp":
@@ -505,15 +548,27 @@ class DiscoveryManager:
             return
         nmb.suggest_directed_ip(target_v4)
 
-    def _load_ssdp_profile_cache_by_ip(self) -> dict[str, dict]:
-        out: dict[str, dict] = {}
+    def _load_ssdp_profile_cache_by_ip(self) -> tuple[dict[str, dict], list[tuple[str, dict]]]:
+        """Build SSDP profile cache indexes from disk.
+
+        Returns ``(by_location_host, emit_rows)``:
+
+        - ``by_location_host``: last row per LOCATION hostname — used for ``.get(ip)`` hydration
+          (legacy behaviour).
+        - ``emit_rows``: **every** cache entry that resolves a hostname, in iteration order — used
+          to pre-populate the device store at startup.  Multiple UPnP rows often share the same
+          LOCATION host (e.g. coordinator URL); indexing only by host would drop the others and the
+          UI would show a single device until live SSDP re-fills, with apparent IP ``replacement``.
+        """
+        by_host: dict[str, dict] = {}
+        emit_rows: list[tuple[str, dict]] = []
         cache_blob = load_discovery_cache()
         raw = cache_blob.get("ssdp_profile_cache")
         if not isinstance(raw, dict):
-            return out
+            return by_host, emit_rows
         entries = raw.get("entries")
         if not isinstance(entries, dict):
-            return out
+            return by_host, emit_rows
         for _key, row in entries.items():
             if not isinstance(row, dict):
                 continue
@@ -543,8 +598,10 @@ class DiscoveryManager:
                     break
             if not host:
                 continue
-            out[host] = dict(row)
-        return out
+            row_copy = dict(row)
+            emit_rows.append((host, row_copy))
+            by_host[host] = row_copy
+        return by_host, emit_rows
 
     def _emit_cached_devices(self) -> None:
         """Pre-populate the device store from the SSDP profile disk cache before protocols start.
@@ -561,7 +618,7 @@ class DiscoveryManager:
         _CACHE_MAX_AGE_S = 86_400  # 24 h
         now = datetime.now(timezone.utc)
         emitted = 0
-        for sip, row in self._ssdp_profile_cache_by_ip.items():
+        for sip, row in self._ssdp_profile_cache_emit_rows:
             if not isinstance(row, dict):
                 continue
             # TTL guard — skip entries not updated in the last 24 h.
@@ -603,6 +660,9 @@ class DiscoveryManager:
                 metadata["xml"] = raw_xml
             if isinstance(ssdp_loc, str) and ssdp_loc.strip():
                 metadata["location"] = ssdp_loc.strip()
+            usn_row = row.get("usn")
+            if isinstance(usn_row, str) and usn_row.strip():
+                metadata["usn"] = usn_row.strip()
             url = row.get("url")
             device = Device(
                 name=name,
@@ -617,7 +677,11 @@ class DiscoveryManager:
             )
             self.add_or_update_device(device)
             emitted += 1
-        self._logger.info("_emit_cached_devices: pre-populated %d device(s) from SSDP profile cache", emitted)
+        self._logger.info(
+            "_emit_cached_devices: pre-populated %d device(s) from %d SSDP profile cache row(s)",
+            emitted,
+            len(self._ssdp_profile_cache_emit_rows),
+        )
 
     def _ssdp_profile_display_name(self, row: dict) -> str:
         """Best-effort human label from persisted SSDP profile (disk cache)."""
@@ -894,7 +958,9 @@ class DiscoveryManager:
         2. ``mdns_txt``: only when (1) has no usable ``ssdp_location`` — TXT may advertise the descriptor
            before SSDP has run / populated cache.
         """
-        self._ssdp_profile_cache_by_ip = self._load_ssdp_profile_cache_by_ip()
+        self._ssdp_profile_cache_by_ip, self._ssdp_profile_cache_emit_rows = (
+            self._load_ssdp_profile_cache_by_ip()
+        )
         row = self._ssdp_profile_cache_by_ip.get(sip)
         loc = row.get("ssdp_location") if isinstance(row, dict) else None
         loc_s = loc.strip() if isinstance(loc, str) and loc.strip() else ""
@@ -1736,6 +1802,13 @@ class DiscoveryManager:
             score += 1
         if isinstance(xml_fields.get("modelName"), str) and xml_fields.get("modelName", "").strip():
             score += 1
+        # Penalise generic placeholder names where friendlyName == modelName.
+        # Manufacturers sometimes leave both fields identical (e.g. "Mediatek_MTXXXX"),
+        # which is less useful than a user-visible name from a co-hosted DIAL service.
+        friendly = str(xml_fields.get("friendlyName", "")).strip()
+        model = str(xml_fields.get("modelName", "")).strip()
+        if friendly and model and friendly.lower() == model.lower():
+            score -= 3
         return score
 
     def _pick_ssdp_name(self, old_name: str, new_name: str, old_meta: dict, new_meta: dict) -> str:
@@ -2348,10 +2421,7 @@ class DiscoveryManager:
         txt_fields = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
         usn = metadata.get("usn")
         if isinstance(usn, str) and usn.strip():
-            u = uuid_urn_if_present(usn)
-            if u:
-                return u
-            return usn.strip().lower().split("::", 1)[0]
+            return upnp_identity_from_usn(usn)
         wsd_epr = metadata.get("wsd_epr")
         if isinstance(wsd_epr, str) and wsd_epr.strip():
             u = uuid_urn_if_present(wsd_epr)
@@ -2364,9 +2434,9 @@ class DiscoveryManager:
                 return u
         udn_raw = xml_fields.get("UDN")
         if isinstance(udn_raw, str) and udn_raw.strip():
-            u = uuid_urn_if_present(udn_raw)
-            if u:
-                return u
+            hit = upnp_identity_from_udn(udn_raw)
+            if hit:
+                return hit
         candidates = [
             xml_fields.get("UDN"),
             metadata.get("udn"),

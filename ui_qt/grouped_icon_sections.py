@@ -27,6 +27,7 @@ from utils.details_payload import format_device_type_for_details
 from .icon_grid_layout import (
     IconListViewportResizeFilter,
     apply_icon_mode_list_layout,
+    format_icon_tile_label,
     icon_list_spacing_for_cell,
 )
 from .icon_list_qss import ICON_MODE_LIST_QSS
@@ -104,7 +105,7 @@ class IconGroupSection(QFrame):
         self._list.setLayoutMode(QListView.LayoutMode.Batched)
         self._list.setBatchSize(32)
         self._list.setStyleSheet(ICON_MODE_LIST_QSS)
-        self._list.setItemDelegate(NoFocusItemDelegate(self._list))
+        self._list.setItemDelegate(NoFocusItemDelegate(self._list, elide_none=True))
         self._viewport_resize_filter = IconListViewportResizeFilter(
             self._relayout_icon_grid, self
         )
@@ -121,7 +122,8 @@ class IconGroupSection(QFrame):
         try:
             for bundle in bundles:
                 d = bundle.primary
-                name = (d.name or "").strip() or "-"
+                raw = (d.name or "").strip() or "-"
+                name = format_icon_tile_label(raw)
                 self._item_labels.append(name)
                 it = QListWidgetItem(icon_for_bundle(bundle), name)
                 it.setToolTip(tooltip_for_bundle(bundle))
@@ -160,9 +162,17 @@ class IconGroupSection(QFrame):
             self._list,
             self._icon_size,
             self._item_labels,
-            set_min_height=True,
+            compact_height=True,
             fallback_viewport_width=fallback,
         )
+
+    def resync_icons(self, icon_for_bundle: Callable[[DeviceBundle], object]) -> None:
+        for row, bundle in enumerate(self._bundles_for_items):
+            it = self._list.item(row)
+            if it is None:
+                continue
+            it.setIcon(icon_for_bundle(bundle))
+        self._relayout_icon_grid()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

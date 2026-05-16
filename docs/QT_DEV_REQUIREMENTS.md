@@ -45,7 +45,7 @@ Pas de paquets système obligatoires au-delà de Python + redist si besoin : **P
 | Élément | Détail |
 |--------|--------|
 | **Python** | `python3` 3.10+ ; paquets `python3-venv` (Debian/Ubuntu : `sudo apt install python3-venv python3-pip`). |
-| **Bibliothèques Qt / X11 / Wayland** | Les roues **PySide6** embarquent Qt, mais le chargeur dynamique peut still nécessiter des libs système pour afficher une fenêtre. Si au lancement vous voyez une erreur du type *Could not load Qt platform plugin* ou *libxcb* : installer les paquets usuels pour Qt6 desktop, par exemple sur **Debian/Ubuntu** : `sudo apt install libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libegl1 libdbus-1-3` (liste indicative ; ajuster selon le message d’erreur exact). |
+| **Bibliothèques Qt / X11 / Wayland** | Les roues **PySide6** embarquent Qt, mais le chargeur dynamique nécessite encore des libs système pour **`libqxcb.so`**. Sous **Linux Mint / Cinnamon / Ubuntu**, si le lancement échoue avec *Could not load the Qt platform plugin "xcb"* ou *libxcb-cursor*, installer au minimum **`libxcb-cursor0`** (souvent le premier manquant), puis au besoin : `sudo apt install libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libegl1 libdbus-1-3`. Pour d’autres messages, utiliser `QT_DEBUG_PLUGINS=1`. |
 | **Wayland** | Sous session Wayland, Qt choisit généralement le bon backend ; en cas de souci, tester avec `QT_QPA_PLATFORM=xcb` pour forcer XWayland si besoin. |
 | **Notifications / tray** | Dépend du bureau (DBus, extensions). À valider sur votre distro / session (X11 vs Wayland). |
 | **WSL** | Pour une GUI Qt depuis WSL2 : **WSLg** (Windows 11) ou serveur X sur l’hôte ; sans ça, pas de fenêtre native. |

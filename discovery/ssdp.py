@@ -6,12 +6,16 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 from datetime import datetime, timedelta, timezone
 import ipaddress
 import json
 import logging
 from pathlib import Path
+import queue
+import select
 import socket
+import struct
 import sys
 import threading
 import time
@@ -19,12 +23,22 @@ from urllib.error import URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import urlopen
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 
 from discovery.base import BaseDiscovery
 from utils.discovery_cache import load_discovery_cache, save_discovery_cache
 from utils.user_config_overlay import merge_ssdp_rules_overlays
 
 _SSDP_ADDR = ("239.255.255.250", 1900)
+# Multicast M-SEARCH targets; unicast directed searches use the same ST list.
+_SSDP_SEARCH_ST: tuple[str, ...] = (
+    "ssdp:all",
+    "upnp:rootdevice",
+    "urn:dial-multiscreen-org:service:dial:1",
+    "urn:schemas-upnp-org:device:MediaRenderer:1",
+    "urn:schemas-upnp-org:device:MediaServer:1",
+    "urn:schemas-upnp-org:device:MediaPlayer:1",
+)
 _DEFAULT_TIMEOUT_SECONDS = 180
 _REFRESH_INTERVAL_SECONDS = 60
 _MAX_TIMEOUT_SECONDS = 3600
@@ -35,12 +49,114 @@ _XML_CACHE_MEMORY_TTL_SECONDS = 60
 _XML_CACHE_DISK_TTL_SECONDS = 1800
 _PROFILE_CACHE_DISK_TTL_SECONDS = 86400
 _CACHE_FLUSH_INTERVAL_SECONDS = 3.0
+# Recv thread only enqueues; HTTP/XML runs on workers so M-SEARCH bursts are not dropped.
+# Windows tends toward slower LAN HTTP and larger SSDP bursts per device (many ST values), so
+# use more workers and a deeper queue than POSIX — same code path, OS-tuned defaults.
+_RX_QUEUE_MAXSIZE = 4096 if sys.platform == "win32" else 2048
+_RX_WORKER_COUNT = 4 if sys.platform == "win32" else 2
+# Drop near-duplicate SSDP replies (same USN + LOCATION) from the same host within this window.
+# One device often answers each M-SEARCH for several ST targets; dedup avoids serial XML fetches.
+_RX_DEDUP_WINDOW_S = 0.65
+_RX_DEDUP_PRUNE_AGE_S = 5.0
+_RX_DEDUP_MAX_KEYS = 2000
+
+
+def _resolve_ssdp_device_ip(parsed_hostname: str | None, packet_source_ip: str) -> str:
+    """Use numeric IP from LOCATION when present; else the SSDP packet source (not DNS names)."""
+    fb = str(packet_source_ip).strip()
+    if not parsed_hostname or not str(parsed_hostname).strip():
+        return fb if fb else "0.0.0.0"
+    host = str(parsed_hostname).strip()
+    inner = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+    try:
+        addr = ipaddress.ip_address(inner)
+        return addr.compressed
+    except ValueError:
+        pass
+    if fb and fb not in {"0.0.0.0", "::"}:
+        return fb
+    return host
+
+
+# Exclude host-only / hypervisor switches from SSDP multicast join & send — they are not the LAN
+# where UPnP devices live, and on Windows they can starve or mis-order stack behavior vs. real NICs.
+_SSDP_MULTICAST_SKIP_SUBNETS: tuple[ipaddress.IPv4Network, ...] = (
+    ipaddress.ip_network("192.168.56.0/24"),  # VirtualBox host-only
+    ipaddress.ip_network("192.168.53.0/24"),  # common Hyper-V / third-party virtual NIC
+    ipaddress.ip_network("192.168.122.0/24"),  # libvirt virbr0
+    ipaddress.ip_network("192.168.137.0/24"),  # Windows ICS / hotspot host
+)
+
+
+def _local_ipv4_multicast_ifaces() -> list[str]:
+    """Local IPv4 addresses for SSDP multicast join and per-interface M-SEARCH (multi-homed hosts).
+
+    On Windows, a single INADDR_ANY membership plus default multicast route often leaves LAN
+    traffic on a virtual adapter (Hyper-V/WSL); explicit joins and ``IP_MULTICAST_IF`` steer
+    discovery toward the real subnet.
+
+    Virtual host-only subnets (VirtualBox, Hyper-V internal, etc.) are skipped so M-SEARCH
+    multicast is not pinned to adapters that do not reach household UPnP devices.
+    """
+    preferred: str | None = None
+    found: set[str] = set()
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            probe.connect(("203.0.113.1", 9))
+            ip = probe.getsockname()[0]
+            if ip:
+                preferred = ip
+                found.add(ip)
+        finally:
+            probe.close()
+    except OSError:
+        pass
+    try:
+        for res in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET, socket.SOCK_DGRAM):
+            ip = res[4][0]
+            if ip:
+                found.add(ip)
+    except OSError:
+        pass
+    out: list[str] = []
+    for ip in sorted(found):
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if not isinstance(a, ipaddress.IPv4Address) or a.is_loopback:
+            continue
+        if a.is_multicast or a.is_unspecified:
+            continue
+        if a.is_link_local:
+            continue  # SSDP discovery targets routed LAN; skip 169.254 noise
+        out.append(a.compressed)
+
+    def _in_skip_net(ip_s: str) -> bool:
+        try:
+            addr = ipaddress.ip_address(ip_s)
+        except ValueError:
+            return True
+        return any(addr in net for net in _SSDP_MULTICAST_SKIP_SUBNETS)
+
+    filtered = [x for x in out if not _in_skip_net(x)]
+    if not filtered:
+        filtered = list(out)
+
+    if preferred and preferred in filtered:
+        rest = sorted(x for x in filtered if x != preferred)
+        return [preferred, *rest]
+    return sorted(filtered)
 
 
 def _descriptor_xml_host_key(location: str) -> str:
-    """Group descriptor HTTP traffic by remote host: canonical IP literal or lowercase hostname.
+    """Host:port part of SSDP descriptor URLs for throttle/coalesce bucketing.
 
-    All XML GETs whose LOCATION URL resolves to the same IP share one min-interval bucket.
+    Including the port prevents cross-port XML substitution: a device that serves
+    genuinely different descriptors on different ports (e.g. DIAL on :8008 and
+    tvdevice on :56790) must not have its XML coalesced — they hold different
+    friendlyName values and merging them produces wrong device names.
     """
     p = urlparse((location or "").strip())
     raw = (p.hostname or "").strip()
@@ -49,9 +165,30 @@ def _descriptor_xml_host_key(location: str) -> str:
     inner = raw[1:-1] if raw.startswith("[") and raw.endswith("]") else raw
     try:
         addr = ipaddress.ip_address(inner)
-        return addr.compressed
+        host = addr.compressed
     except ValueError:
-        return raw.lower()
+        host = raw.lower()
+    port = p.port
+    if port:
+        return f"{host}:{port}"
+    return host
+
+
+def _sonos_device_description_alternate_url(location: str | None) -> str | None:
+    """Map Sonos ``group_description.xml`` LOCATION to sibling ``device_description.xml``.
+
+    Group XML is small and often lacks ``roomName`` / icon list; the device descriptor has them.
+    Without a follow-up fetch, the UI waits for a later NOTIFY or refresh — often tens of seconds.
+    """
+    if not location:
+        return None
+    s = location.strip()
+    lower = s.lower()
+    needle = "group_description.xml"
+    pos = lower.find(needle)
+    if pos < 0:
+        return None
+    return f"{s[:pos]}device_description.xml{s[pos + len(needle) :]}"
 
 
 class SSDPDiscovery(BaseDiscovery):
@@ -61,6 +198,8 @@ class SSDPDiscovery(BaseDiscovery):
         query_interval_seconds: int | None = None,
         mx_seconds: int | None = None,
         descriptor_http_min_interval_seconds: float | None = None,
+        msearch_directed_ips: list[str] | None = None,
+        ephemeral_msearch_probe_ips: Callable[[], list[str]] | None = None,
     ) -> None:
         super().__init__(source="ssdp")
         self._logger = logging.getLogger(__name__)
@@ -79,8 +218,11 @@ class SSDPDiscovery(BaseDiscovery):
         self._xml_fetch_gates_lock = threading.Lock()
         self._rules = self._load_rules()
         self._running = False
-        self._socket: socket.socket | None = None
+        self._send_socket: socket.socket | None = None
+        self._recv_socket: socket.socket | None = None
         self._listen_thread: threading.Thread | None = None
+        self._rx_queue: queue.Queue[tuple[str, str]] = queue.Queue(maxsize=_RX_QUEUE_MAXSIZE)
+        self._rx_worker_threads: list[threading.Thread] = []
         self._gc_thread: threading.Thread | None = None
         self._refresh_thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -91,16 +233,92 @@ class SSDPDiscovery(BaseDiscovery):
         self._cache_dirty = False
         self._last_cache_flush_monotonic = 0.0
         self._stop_event = threading.Event()
+        self._msearch_directed_ips: list[str] = []
+        if msearch_directed_ips:
+            for raw in msearch_directed_ips:
+                if not isinstance(raw, str) or not raw.strip():
+                    continue
+                try:
+                    addr = ipaddress.ip_address(raw.strip())
+                except ValueError:
+                    continue
+                if isinstance(addr, ipaddress.IPv4Address):
+                    self._msearch_directed_ips.append(addr.compressed)
+        self._ephemeral_probe_resolver = ephemeral_msearch_probe_ips
+        self._multicast_if_ipv4s: list[str] = []
+        self._rx_dedup: dict[str, float] = {}
+        self._rx_dedup_lock = threading.Lock()
+        # Separate thread pool for XML/HTTP enrichment so rx workers are never blocked.
+        _xml_workers = 6 if sys.platform == "win32" else 3
+        self._xml_enrich_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=_xml_workers, thread_name_prefix="ssdp-xml"
+        )
+
+    def _should_skip_recent_duplicate_ssdp(self, headers: dict[str, str], src_ip: str) -> bool:
+        loc = (headers.get("LOCATION") or "").strip()
+        usn = (headers.get("USN") or "").strip()
+        if not loc or not usn:
+            return False
+        key = f"{src_ip}\0{usn}\0{loc}"
+        now = time.monotonic()
+        with self._rx_dedup_lock:
+            if len(self._rx_dedup) > _RX_DEDUP_MAX_KEYS:
+                cutoff = now - _RX_DEDUP_PRUNE_AGE_S
+                self._rx_dedup = {k: v for k, v in self._rx_dedup.items() if v >= cutoff}
+            last = self._rx_dedup.get(key)
+            if last is not None and (now - last) < _RX_DEDUP_WINDOW_S:
+                return True
+            self._rx_dedup[key] = now
+        return False
+
+    def _directed_msearch_targets(self) -> list[str]:
+        configured = set(self._msearch_directed_ips)
+        extra: set[str] = set()
+        if self._ephemeral_probe_resolver is not None:
+            try:
+                for raw in self._ephemeral_probe_resolver():
+                    if not isinstance(raw, str) or not raw.strip():
+                        continue
+                    try:
+                        addr = ipaddress.ip_address(raw.strip())
+                    except ValueError:
+                        continue
+                    if isinstance(addr, ipaddress.IPv4Address) and not addr.is_loopback:
+                        extra.add(addr.compressed)
+            except Exception:
+                self._logger.debug("ephemeral SSDP M-SEARCH target resolver failed", exc_info=True)
+        return sorted(configured | extra)
 
     def start(self) -> None:
         if self._running:
             return
         self._running = True
         self._stop_event.clear()
-        self._socket = self._create_socket()
+        # Detect interfaces once so both sockets use the same list.
+        if_addrs = _local_ipv4_multicast_ifaces()
+        self._multicast_if_ipv4s = list(if_addrs)
+        if self._multicast_if_ipv4s:
+            self._logger.info(
+                "SSDP multicast will pin to IPv4 interface(s): %s",
+                ", ".join(self._multicast_if_ipv4s),
+            )
+        else:
+            self._logger.info("SSDP multicast: no usable local IPv4 list; using OS default interface only")
+        # Dual socket architecture:
+        #   _send_socket — ephemeral port; sends M-SEARCH and receives unicast responses.
+        #     On Windows, port 1900 responses go to the Windows SSDP service; an ephemeral
+        #     source port means M-SEARCH replies come back to US, not to that service.
+        #   _recv_socket — port 1900; receives multicast NOTIFY announcements.
+        self._send_socket = self._create_send_socket(if_addrs)
+        self._recv_socket = self._create_recv_socket(if_addrs)
         self._logger.info("SSDP discovery started")
         self._listen_thread = threading.Thread(target=self._listen_loop, name="ssdp-listener", daemon=True)
         self._listen_thread.start()
+        self._rx_worker_threads = []
+        for i in range(_RX_WORKER_COUNT):
+            wt = threading.Thread(target=self._rx_worker_loop, name=f"ssdp-rx-worker-{i}", daemon=True)
+            self._rx_worker_threads.append(wt)
+            wt.start()
         self._gc_thread = threading.Thread(target=self._gc_loop, name="ssdp-gc", daemon=True)
         self._gc_thread.start()
         self._refresh_thread = threading.Thread(target=self._refresh_loop, name="ssdp-refresh", daemon=True)
@@ -112,29 +330,36 @@ class SSDPDiscovery(BaseDiscovery):
             return
         self._running = False
         self._stop_event.set()
-        sock = self._socket
-        self._socket = None
-        if sock is not None:
-            try:
-                sock.close()
-            except OSError:
-                pass
+        for attr in ("_send_socket", "_recv_socket"):
+            sock = getattr(self, attr, None)
+            setattr(self, attr, None)
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
         if self._listen_thread is not None:
             self._listen_thread.join(timeout=0.25)
+        for wt in self._rx_worker_threads:
+            wt.join(timeout=1.5)
+        self._rx_worker_threads.clear()
         if self._gc_thread is not None:
             self._gc_thread.join(timeout=0.25)
         if self._refresh_thread is not None:
             self._refresh_thread.join(timeout=0.25)
+        self._xml_enrich_executor.shutdown(wait=False, cancel_futures=True)
         self._flush_persistent_caches_if_due(force=True)
         self._logger.info("SSDP discovery stopped")
 
     def refresh(self) -> None:
         if not self._running:
             return
-        sock = self._socket
+        sock = self._send_socket
         if sock is None:
             return
-        search_targets = ["ssdp:all", "upnp:rootdevice", "urn:dial-multiscreen-org:service:dial:1"]
+        search_targets = _SSDP_SEARCH_ST
+        mcast_ifs = self._multicast_if_ipv4s
+        mcast_round_robin = mcast_ifs if mcast_ifs else [None]
         for st in search_targets:
             payload = (
                 "M-SEARCH * HTTP/1.1\r\n"
@@ -144,61 +369,200 @@ class SSDPDiscovery(BaseDiscovery):
                 f"ST: {st}\r\n"
                 "\r\n"
             ).encode("utf-8")
-            try:
-                sock.sendto(payload, _SSDP_ADDR)
-                payload_text = payload.decode("utf-8", errors="ignore")
-                self._logger.debug(
-                    "SSDP TX %s:%s\n%s\n%s\n%s",
-                    _SSDP_ADDR[0],
-                    _SSDP_ADDR[1],
-                    _TX_FRAME_DELIMITER,
-                    payload_text,
-                    _TX_FRAME_DELIMITER,
-                )
-            except OSError:
-                self._logger.exception("Failed to send SSDP M-SEARCH for ST=%s", st)
+            payload_text = payload.decode("utf-8", errors="ignore")
+            for if_ip in mcast_round_robin:
+                if if_ip is not None:
+                    try:
+                        sock.setsockopt(
+                            socket.IPPROTO_IP,
+                            socket.IP_MULTICAST_IF,
+                            socket.inet_aton(if_ip),
+                        )
+                    except OSError:
+                        self._logger.debug("IP_MULTICAST_IF failed for %s", if_ip, exc_info=True)
+                        continue
+                try:
+                    sock.sendto(payload, _SSDP_ADDR)
+                    self._logger.debug(
+                        "SSDP TX %s:%s if=%s\n%s\n%s\n%s",
+                        _SSDP_ADDR[0],
+                        _SSDP_ADDR[1],
+                        if_ip or "default",
+                        _TX_FRAME_DELIMITER,
+                        payload_text,
+                        _TX_FRAME_DELIMITER,
+                    )
+                except OSError:
+                    self._logger.exception("Failed to send SSDP M-SEARCH for ST=%s (if=%s)", st, if_ip)
+        for dip in self._directed_msearch_targets():
+            host_line = f"{dip}:1900"
+            for st in search_targets:
+                payload = (
+                    "M-SEARCH * HTTP/1.1\r\n"
+                    f"HOST: {host_line}\r\n"
+                    "MAN: \"ssdp:discover\"\r\n"
+                    f"MX: {self._mx_seconds}\r\n"
+                    f"ST: {st}\r\n"
+                    "\r\n"
+                ).encode("utf-8")
+                try:
+                    sock.sendto(payload, (dip, 1900))
+                    self._logger.debug(
+                        "SSDP directed TX to %s ST=%s\n%s\n%s\n%s",
+                        host_line,
+                        st,
+                        _TX_FRAME_DELIMITER,
+                        payload.decode("utf-8", errors="ignore"),
+                        _TX_FRAME_DELIMITER,
+                    )
+                except OSError:
+                    self._logger.exception(
+                        "Failed to send directed SSDP M-SEARCH to %s ST=%s",
+                        host_line,
+                        st,
+                    )
 
-    def _create_socket(self) -> socket.socket:
+    def _create_send_socket(self, if_addrs: list[str]) -> socket.socket:
+        """Ephemeral-port socket for M-SEARCH sending and unicast response receiving.
+
+        Because it is not bound to port 1900, M-SEARCH replies (unicast UDP back to the
+        sender's source port) arrive here instead of being intercepted by the Windows SSDP
+        service, which wins the port-1900 delivery race on shared sockets.
+        """
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # SO_REUSEPORT is not defined on Windows; optional on POSIX for sharing UDP port 1900.
+        sock.settimeout(0.2)
+        try:
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, struct.pack("B", 4))
+        except OSError:
+            try:
+                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 4)
+            except OSError:
+                self._logger.debug("Could not set IP_MULTICAST_TTL on send socket", exc_info=True)
+        sock.bind(("", 0))
+        port = sock.getsockname()[1]
+        self._logger.info(
+            "SSDP send socket bound to ephemeral port %d (unicast M-SEARCH responses will arrive here)",
+            port,
+        )
+        return sock
+
+    def _create_recv_socket(self, if_addrs: list[str]) -> socket.socket:
+        """Port-1900 socket for multicast NOTIFY announcements.
+
+        Bound to port 1900 with SO_REUSEADDR so it shares the port with the Windows SSDP
+        service.  It receives multicast NOTIFY traffic (devices advertising themselves
+        spontaneously) but NOT the unicast M-SEARCH replies — those go to ``_send_socket``.
+        """
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # SO_REUSEPORT is not defined on Windows; optional on POSIX.
         if sys.platform != "win32" and hasattr(socket, "SO_REUSEPORT"):
             try:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             except OSError:
                 pass
         sock.settimeout(0.2)
+        # Large receive buffer to absorb multicast NOTIFY bursts.
+        _rcvbuf = 512 * 1024 if sys.platform == "win32" else 256 * 1024
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, _rcvbuf)
+        except OSError:
+            pass
         try:
             sock.bind(("", 1900))
-        except OSError:
-            # Fallback when 1900 cannot be acquired.
-            sock.bind(("", 0))
-        try:
-            membership = socket.inet_aton(_SSDP_ADDR[0]) + socket.inet_aton("0.0.0.0")
-            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
-        except OSError:
-            self._logger.debug("Unable to join SSDP multicast group", exc_info=True)
+            self._logger.info("SSDP recv socket bound to 0.0.0.0:1900 (multicast NOTIFY receive)")
+        except OSError as exc:
+            _bound_mcast = False
+            if sys.platform == "win32":
+                # Fallback: bind to the multicast group address itself — still receives NOTIFY.
+                try:
+                    sock.bind((_SSDP_ADDR[0], 1900))
+                    _bound_mcast = True
+                    self._logger.info(
+                        "SSDP recv socket bound to %s:1900 (Windows port-sharing fallback; NOTIFY receive only)",
+                        _SSDP_ADDR[0],
+                    )
+                except OSError:
+                    pass
+            if not _bound_mcast:
+                self._logger.warning(
+                    "SSDP recv socket could not bind UDP port 1900 (%s). "
+                    "Multicast NOTIFY may be missed. "
+                    "Unicast M-SEARCH responses will still arrive on the send socket.",
+                    exc,
+                )
+                sock.bind(("", 0))
+        mcast_bin = socket.inet_aton(_SSDP_ADDR[0])
+        joined_any = False
+        for if_ip in if_addrs:
+            try:
+                sock.setsockopt(
+                    socket.IPPROTO_IP,
+                    socket.IP_ADD_MEMBERSHIP,
+                    mcast_bin + socket.inet_aton(if_ip),
+                )
+                joined_any = True
+            except OSError:
+                self._logger.debug("IP_ADD_MEMBERSHIP failed for %s on recv socket", if_ip, exc_info=True)
+        if not joined_any:
+            try:
+                sock.setsockopt(
+                    socket.IPPROTO_IP,
+                    socket.IP_ADD_MEMBERSHIP,
+                    mcast_bin + socket.inet_aton("0.0.0.0"),
+                )
+            except OSError:
+                self._logger.debug("Unable to join SSDP multicast group (INADDR_ANY) on recv socket", exc_info=True)
         return sock
 
     def _listen_loop(self) -> None:
         while self._running:
-            sock = self._socket
-            if sock is None:
+            send_sock = self._send_socket
+            recv_sock = self._recv_socket
+            readable_pool = [s for s in (send_sock, recv_sock) if s is not None]
+            if not readable_pool:
                 break
             try:
-                data, addr = sock.recvfrom(65535)
-            except socket.timeout:
-                continue
+                ready, _, _ = select.select(readable_pool, [], [], 0.2)
             except OSError:
                 break
-            payload = data.decode("utf-8", errors="ignore")
-            is_reply = payload.startswith("HTTP/1.1 200")
-            is_notify = payload.startswith("NOTIFY * HTTP/1.1")
+            for sock in ready:
+                try:
+                    data, addr = sock.recvfrom(65535)
+                except OSError:
+                    continue
+                raw = data.decode("utf-8", errors="ignore")
+                try:
+                    self._rx_queue.put_nowait((raw, addr[0]))
+                except queue.Full:
+                    self._logger.warning(
+                        "SSDP RX queue full (%d); dropping packet from %s — workers cannot keep up",
+                        _RX_QUEUE_MAXSIZE,
+                        addr[0],
+                    )
+
+    def _rx_worker_loop(self) -> None:
+        while self._running:
+            try:
+                payload, src_ip = self._rx_queue.get(timeout=0.3)
+            except queue.Empty:
+                continue
+            # Accept both HTTP/1.1 and HTTP/1.0 — some devices (older TVs, embedded firmware) use 1.0.
+            # Case-insensitive match on the first token — some devices send lowercase.
+            first = payload[:20].upper()
+            is_reply = first.startswith("HTTP/1.1 200") or first.startswith("HTTP/1.0 200")
+            is_notify = first.startswith("NOTIFY * HTTP/1")
             if not (is_reply or is_notify):
+                self._logger.debug(
+                    "SSDP RX ignored (unrecognized type) from %s: %.80s",
+                    src_ip,
+                    payload[:80].replace("\r\n", " | "),
+                )
                 continue
             self._logger.debug(
                 "SSDP RX from %s\n%s\n%s\n%s",
-                addr[0],
+                src_ip,
                 _RX_FRAME_DELIMITER,
                 payload,
                 _RX_FRAME_DELIMITER,
@@ -209,7 +573,7 @@ class SSDPDiscovery(BaseDiscovery):
             if is_notify:
                 nts = headers.get("NTS", "").lower()
                 if nts == "ssdp:byebye":
-                    offline_payload = self._build_notify_offline_payload(headers, addr[0])
+                    offline_payload = self._build_notify_offline_payload(headers, src_ip)
                     self._logger.info(
                         "SSDP NOTIFY byebye: %s %s:%s",
                         offline_payload.get("name"),
@@ -220,10 +584,13 @@ class SSDPDiscovery(BaseDiscovery):
                     continue
                 if nts and nts != "ssdp:alive":
                     continue
-            device_payload = self._build_device_payload(headers, addr[0])
+            if self._should_skip_recent_duplicate_ssdp(headers, src_ip):
+                continue
+            # Emit immediately from headers (no HTTP round-trip) so the device appears fast.
+            device_payload = self._build_device_payload(headers, src_ip, fetch_xml=False)
             self._logger.debug(
-                "SSDP response from %s -> %s %s:%s",
-                addr[0],
+                "SSDP response from %s -> %s %s:%s (fast emit, XML pending)",
+                src_ip,
                 device_payload.get("name"),
                 device_payload.get("ip"),
                 device_payload.get("port"),
@@ -234,6 +601,29 @@ class SSDPDiscovery(BaseDiscovery):
             with self._lock:
                 self._seen_devices[device_key] = (now, timeout_seconds, device_payload)
             self._emit("device", device_payload)
+            # Offload XML/HTTP fetch to the enrichment pool so rx workers stay free.
+            if headers.get("LOCATION"):
+                self._xml_enrich_executor.submit(self._xml_enrich_task, headers, src_ip)
+
+    def _xml_enrich_task(self, headers: dict[str, str], src_ip: str) -> None:
+        """Fetch XML descriptor and re-emit the device with enriched data."""
+        try:
+            enriched = self._build_device_payload(headers, src_ip, fetch_xml=True)
+            device_key = self._device_key(enriched)
+            now = datetime.now(timezone.utc)
+            timeout_seconds = self._timeout_seconds_for_payload(enriched)
+            with self._lock:
+                self._seen_devices[device_key] = (now, timeout_seconds, enriched)
+            self._emit("device", enriched)
+            self._logger.debug(
+                "SSDP XML enriched %s -> %s %s:%s",
+                src_ip,
+                enriched.get("name"),
+                enriched.get("ip"),
+                enriched.get("port"),
+            )
+        except Exception:
+            self._logger.debug("SSDP XML enrichment failed for %s", src_ip, exc_info=True)
 
     def _refresh_loop(self) -> None:
         while self._running:
@@ -280,10 +670,10 @@ class SSDPDiscovery(BaseDiscovery):
             headers[key.strip().upper()] = value.strip()
         return headers
 
-    def _build_device_payload(self, headers: dict[str, str], fallback_ip: str) -> dict:
+    def _build_device_payload(self, headers: dict[str, str], fallback_ip: str, *, fetch_xml: bool = True) -> dict:
         location = headers.get("LOCATION")
         parsed = urlparse(location) if location else None
-        ip = parsed.hostname if parsed and parsed.hostname else fallback_ip
+        ip = _resolve_ssdp_device_ip(parsed.hostname if parsed else None, fallback_ip)
         port = parsed.port if parsed and parsed.port is not None else 80
         st = headers.get("ST") or headers.get("NT") or "ssdp:all"
         nt = headers.get("NT")
@@ -301,7 +691,41 @@ class SSDPDiscovery(BaseDiscovery):
                 name = prof_name.strip()
             if isinstance(prof_type, str) and prof_type.strip():
                 device_type = prof_type.strip()
-        xml_fields, raw_xml = self._fetch_and_parse_xml(location)
+        if fetch_xml:
+            xml_fields, raw_xml = self._fetch_and_parse_xml(location)
+            dev_loc = _sonos_device_description_alternate_url(location)
+            if dev_loc and dev_loc != (location or "").strip():
+                xf_dev, raw_dev = self._fetch_and_parse_xml(
+                    dev_loc,
+                    bypass_descriptor_min_interval=True,
+                )
+                if xf_dev:
+                    for key in (
+                        "friendlyName",
+                        "displayName",
+                        "roomName",
+                        "modelName",
+                        "manufacturer",
+                        "manufacturerURL",
+                        "modelURL",
+                        "serialNumber",
+                        "deviceType",
+                        "UDN",
+                        "mac",
+                        "modelType",
+                        "presentationURL",
+                        "iconURL",
+                        "icons_description",
+                        "services_description",
+                        "services_records",
+                    ):
+                        val = xf_dev.get(key)
+                        if val:
+                            xml_fields[key] = val
+                    if raw_dev:
+                        raw_xml = raw_dev
+        else:
+            xml_fields, raw_xml = {}, None
         if not xml_fields and profile is not None:
             _seen_at, prof = profile
             prof_xml = prof.get("xml_fields")
@@ -377,9 +801,11 @@ class SSDPDiscovery(BaseDiscovery):
             },
             "online": True,
         }
-        self._persist_profile_cache_entries(headers, ip, payload)
+        # Only persist profile when we have real XML data to avoid overwriting rich cache with stubs.
+        if fetch_xml:
+            self._persist_profile_cache_entries(headers, ip, payload)
         self._logger.info(
-            "SSDP device detected: %s %s:%s type=%s category=%s st=%s nt=%s",
+            "SSDP device detected: %s %s:%s type=%s category=%s st=%s nt=%s (xml=%s)",
             payload["name"],
             payload["ip"],
             payload["port"],
@@ -387,6 +813,7 @@ class SSDPDiscovery(BaseDiscovery):
             payload["category"],
             st,
             nt,
+            fetch_xml,
         )
         return payload
 
@@ -396,7 +823,7 @@ class SSDPDiscovery(BaseDiscovery):
         server = headers.get("SERVER", "")
         location = headers.get("LOCATION")
         parsed = urlparse(location) if location else None
-        ip = parsed.hostname if parsed and parsed.hostname else fallback_ip
+        ip = _resolve_ssdp_device_ip(parsed.hostname if parsed else None, fallback_ip)
         port = parsed.port if parsed and parsed.port is not None else 80
         seen_payload = self._find_seen_payload_for_byebye(ip, usn)
         if seen_payload is not None:
@@ -534,15 +961,15 @@ class SSDPDiscovery(BaseDiscovery):
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
         xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}
 
-        udn = xml_fields.get("UDN") or metadata.get("udn")
-        if isinstance(udn, str) and udn.strip():
-            return f"ssdp:udn:{udn.strip().lower()}"
-
         usn = metadata.get("usn")
         if isinstance(usn, str) and usn.strip():
             usn_base = usn.strip().lower().split("::", 1)[0]
             if usn_base:
                 return f"ssdp:usn:{usn_base}"
+
+        udn = xml_fields.get("UDN") or metadata.get("udn")
+        if isinstance(udn, str) and udn.strip():
+            return f"ssdp:udn:{udn.strip().lower()}"
 
         mac = (
             xml_fields.get("mac")
@@ -631,7 +1058,12 @@ class SSDPDiscovery(BaseDiscovery):
                 return dict(fields), raw
         return None
 
-    def _fetch_and_parse_xml(self, location: str | None) -> tuple[dict, str | None]:
+    def _fetch_and_parse_xml(
+        self,
+        location: str | None,
+        *,
+        bypass_descriptor_min_interval: bool = False,
+    ) -> tuple[dict, str | None]:
         if not location:
             return {}, None
         now = datetime.now(timezone.utc)
@@ -669,7 +1101,11 @@ class SSDPDiscovery(BaseDiscovery):
                     return dict(cached_fields), cached_raw
 
             mono = time.monotonic()
-            if self._descriptor_http_min_interval > 0 and host_key:
+            if (
+                not bypass_descriptor_min_interval
+                and self._descriptor_http_min_interval > 0
+                and host_key
+            ):
                 last_http = self._last_descriptor_http_mono.get(host_key)
                 if last_http is not None and (mono - last_http) < self._descriptor_http_min_interval:
                     alt = self._cached_xml_for_same_host(host_key, now)
@@ -849,6 +1285,9 @@ class SSDPDiscovery(BaseDiscovery):
             "raw_xml": metadata.get("xml") if isinstance(metadata, dict) else None,
             "ssdp_location": ssdp_loc.strip() if ssdp_loc.strip() else None,
         }
+        usn_persist = metadata.get("usn") if isinstance(metadata.get("usn"), str) else ""
+        if usn_persist.strip():
+            row["usn"] = usn_persist.strip()
         self._profile_disk_cache[profile_key.strip()] = (now, row)
         self._mark_cache_dirty()
 
