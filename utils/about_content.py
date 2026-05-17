@@ -1,6 +1,6 @@
 # File about_content.py for NetNeighbor version 1.0.0
 # License: LGPL3
-"""Shared About / Credits / License text (GTK V1 and Qt 2.0)."""
+"""Shared About / Credits / License text."""
 
 from __future__ import annotations
 
@@ -42,23 +42,14 @@ def about_license_notice_html() -> str:
     )
 
 
-def python_library_credit_entries(*, gtk_ui: bool = False) -> list[tuple[str, str, str]]:
+def python_library_credit_entries() -> list[tuple[str, str, str]]:
     """(name, description, url) for Credits sections."""
-    ui_binding = (
+    return [
         (
-            "PyGObject",
-            _("GTK 3 bindings"),
-            "https://pygobject.gnome.org",
-        )
-        if gtk_ui
-        else (
             "PySide6",
             _("Qt for Python bindings"),
             "https://doc.qt.io/qtforpython/",
-        )
-    )
-    return [
-        ui_binding,
+        ),
         (
             "zeroconf",
             _("mDNS/DNS-SD discovery"),

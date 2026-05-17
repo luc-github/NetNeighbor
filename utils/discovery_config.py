@@ -202,7 +202,7 @@ def _default_nested() -> dict[str, Any]:
             "query": dict(_DEFAULT_NMB_QUERY),
         },
         "wsdd": {
-            "enabled": False,
+            "enabled": True,
             "query": dict(_DEFAULT_WSDD_QUERY),
         },
         "merge": dict(_DEFAULT_MERGE),

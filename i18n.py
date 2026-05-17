@@ -55,22 +55,10 @@ def setup_i18n() -> None:
     locale_dir = Path(__file__).resolve().parent / "locale"
     languages = _detect_languages()
 
-    # Set the C library locale from the environment so GTK uses it for its own
-    # built-in widget labels (dialog buttons "Close", "Yes", "No", etc.).
     try:
         locale.setlocale(locale.LC_ALL, "")
     except locale.Error:
         pass
-
-    # On Ubuntu/Mint, GTK translations live under locale-langpack rather than
-    # the standard /usr/share/locale.  Tell GLib about both paths so that GTK's
-    # own strings (button labels etc.) are translated.
-    for gtk_domain in ("gtk30", "gtk30-properties"):
-        for lp in ("/usr/share/locale-langpack", "/usr/share/locale"):
-            try:
-                locale.bindtextdomain(gtk_domain, lp)  # type: ignore[attr-defined]
-            except (AttributeError, OSError):
-                break
 
     # Register our locale dir for modules that use `from gettext import gettext as _`.
     gettext.bindtextdomain(APP_DOMAIN, str(locale_dir))

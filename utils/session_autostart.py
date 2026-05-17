@@ -68,7 +68,7 @@ def apply_autostart_pref(enabled: bool) -> bool:
         f"Exec={exec_line}\n"
         "Icon=io.esp3d.netneighbor\n"
         "Terminal=false\n"
-        "Categories=Network;Utility;GTK;\n"
+        "Categories=Network;Utility;\n"
         "X-GNOME-Autostart-enabled=true\n"
         "StartupNotify=false\n"
     )
