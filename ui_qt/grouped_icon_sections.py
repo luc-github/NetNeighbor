@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+import logging
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
+
+_LOG = logging.getLogger(__name__)
 
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtWidgets import (
@@ -26,10 +29,15 @@ from utils.details_payload import format_device_type_for_details
 
 from .icon_grid_layout import (
     IconListViewportResizeFilter,
+    TILE_H_MARGIN,
     apply_icon_mode_list_layout,
+    break_label_for_width,
     format_icon_tile_label,
     icon_list_spacing_for_cell,
+    icon_mode_label_font,
 )
+from PySide6.QtGui import QFontMetrics
+
 from .icon_list_qss import ICON_MODE_LIST_QSS
 from .no_focus_item_delegate import NoFocusItemDelegate
 
@@ -97,9 +105,10 @@ class IconGroupSection(QFrame):
         self._list.setSpacing(icon_list_spacing_for_cell(self._icon_size))
         self._list.setIconSize(self._icon_size)
         self._list.setWrapping(True)
-        self._list.setWordWrap(False)
+        self._list.setWordWrap(True)
+        self._list.setFrameShape(QFrame.Shape.NoFrame)
         self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._list.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
         self._list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._list.setLayoutMode(QListView.LayoutMode.Batched)
@@ -165,6 +174,19 @@ class IconGroupSection(QFrame):
             compact_height=True,
             fallback_viewport_width=fallback,
         )
+        cell_w = self._list.gridSize().width()
+        if cell_w > 0:
+            fm = QFontMetrics(icon_mode_label_font(self._list))
+            text_zone = max(30, cell_w - TILE_H_MARGIN)
+            for i, orig in enumerate(self._item_labels):
+                it = self._list.item(i)
+                if it is None:
+                    continue
+                broken = break_label_for_width(orig, fm, text_zone)
+                if _LOG.isEnabledFor(logging.DEBUG) and it.text() != broken:
+                    _LOG.debug("  break label %r → %r", orig[:40], broken[:60])
+                if it.text() != broken:
+                    it.setText(broken)
 
     def resync_icons(self, icon_for_bundle: Callable[[DeviceBundle], object]) -> None:
         for row, bundle in enumerate(self._bundles_for_items):

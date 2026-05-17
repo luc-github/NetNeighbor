@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable, Sequence
 
 from gettext import gettext as _
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QResizeEvent, QShowEvent
+from PySide6.QtGui import QAction, QActionGroup, QFontMetrics, QIcon, QKeySequence, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -39,8 +39,11 @@ from ui.icons import resolve_asset_icon_file, resolve_persisted_icon_id_to_path
 from ui_qt.grouped_icon_sections import build_grouped_icon_scroll
 from ui_qt.icon_grid_layout import (
     IconListViewportResizeFilter,
+    TILE_H_MARGIN,
     apply_icon_mode_list_layout,
+    break_label_for_width,
     format_icon_tile_label,
+    icon_mode_label_font,
     labels_from_icon_list,
 )
 from ui_qt.device_actions import (
@@ -122,6 +125,7 @@ class NetNeighborMainWindow(QMainWindow):
 
     _FILTER_ROLE = Qt.ItemDataRole.UserRole
     _BUNDLE_KEY_ROLE = Qt.ItemDataRole.UserRole + 1
+    _ICON_LABEL_ROLE = Qt.ItemDataRole.UserRole + 2  # original label (pre-break) for relayout
 
     def __init__(
         self,
@@ -738,12 +742,35 @@ class NetNeighborMainWindow(QMainWindow):
         fallback = 0
         if self._icon_list.viewport().width() <= 0:
             fallback = max(240, self._content_frame.width() - 24)
+        # Collect original labels (pre-break) to compute cell size from unmodified text widths.
+        orig_labels: list[str] = []
+        for i in range(self._icon_list.count()):
+            it = self._icon_list.item(i)
+            if it is None:
+                continue
+            lbl = it.data(self._ICON_LABEL_ROLE)
+            orig_labels.append(lbl if isinstance(lbl, str) and lbl else it.text())
         apply_icon_mode_list_layout(
             self._icon_list,
             sz,
-            labels_from_icon_list(self._icon_list),
+            orig_labels,
             fallback_viewport_width=fallback,
         )
+        cell_w = self._icon_list.gridSize().width()
+        if cell_w > 0:
+            fm = QFontMetrics(icon_mode_label_font(self._icon_list))
+            text_zone = max(30, cell_w - TILE_H_MARGIN)
+            _LOG.debug("flat relayout preset=%s cell_w=%d text_zone=%d items=%d",
+                       self._icon_size_preset, cell_w, text_zone, len(orig_labels))
+            for i, orig in enumerate(orig_labels):
+                it = self._icon_list.item(i)
+                if it is None:
+                    continue
+                broken = break_label_for_width(orig, fm, text_zone)
+                if _LOG.isEnabledFor(logging.DEBUG) and it.text() != broken:
+                    _LOG.debug("  break label %r → %r", orig[:40], broken[:60])
+                if it.text() != broken:
+                    it.setText(broken)
 
     def _apply_view_mode(self, mode: str) -> None:
         if mode not in {"icons", "list"}:
@@ -1347,6 +1374,7 @@ class NetNeighborMainWindow(QMainWindow):
                 name = format_icon_tile_label(_safe_str(bundle.primary.name))
                 it = QListWidgetItem(self._icon_for_bundle(bundle), name)
                 it.setData(self._BUNDLE_KEY_ROLE, bundle.primary.key)
+                it.setData(self._ICON_LABEL_ROLE, name)
                 it.setToolTip(self._bundle_tooltip(bundle))
                 self._icon_list.addItem(it)
 
@@ -1369,6 +1397,7 @@ class NetNeighborMainWindow(QMainWindow):
                     continue
                 it.setIcon(self._icon_for_bundle(bundle))
                 name = format_icon_tile_label(_safe_str(bundle.primary.name))
+                it.setData(self._ICON_LABEL_ROLE, name)
                 if it.text() != name:
                     it.setText(name)
                 it.setToolTip(self._bundle_tooltip(bundle))
@@ -1390,6 +1419,14 @@ class NetNeighborMainWindow(QMainWindow):
     def _rebuild_grouped_icon_page(self, ordered: list[DeviceBundle]) -> None:
         page = self._grouped_icons_page
         was_page_visible = page.isVisible()
+
+        saved_scroll = 0
+        if self._grouped_icons_layout.count():
+            existing = self._grouped_icons_layout.itemAt(0)
+            if existing is not None and existing.widget() is not None:
+                saved_scroll = existing.widget().verticalScrollBar().value()
+
+        new_scroll = None
         page.setVisible(False)
         try:
             self._clear_grouped_icons_page()
@@ -1398,7 +1435,7 @@ class NetNeighborMainWindow(QMainWindow):
             if mode not in {"sorted", "location"}:
                 return
 
-            scroll = build_grouped_icon_scroll(
+            new_scroll = build_grouped_icon_scroll(
                 page,
                 mode=mode,
                 ordered_bundles=ordered,
@@ -1410,9 +1447,17 @@ class NetNeighborMainWindow(QMainWindow):
                 on_section_toggled=self._on_icon_section_toggled,
                 on_tile_context_menu=self._on_grouped_icon_context_menu,
             )
-            self._grouped_icons_layout.addWidget(scroll)
+            self._grouped_icons_layout.addWidget(new_scroll)
         finally:
             page.setVisible(was_page_visible)
+
+        if new_scroll is not None:
+            _sections = getattr(new_scroll, "_icon_group_sections", [])
+            if _sections:
+                QTimer.singleShot(0, lambda: [s._relayout_icon_grid() for s in _sections])
+
+        if saved_scroll > 0 and new_scroll is not None:
+            QTimer.singleShot(0, lambda: new_scroll.verticalScrollBar().setValue(saved_scroll))
 
     def bring_to_front(self) -> None:
         self.raise_()

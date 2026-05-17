@@ -17,14 +17,22 @@ class NoFocusItemDelegate(QStyledItemDelegate):
 
     def initStyleOption(self, option: QStyleOptionViewItem, index):  # type: ignore[override]
         super().initStyleOption(option, index)
+        # super() calls view->initViewItemOption() which resets textElideMode to ElideRight
+        # and resets features based on QListWidget.wordWrap().  Set our overrides AFTER.
         w = self.parent()
-        if isinstance(w, QListWidget) and w.wordWrap():
-            option.features |= QStyleOptionViewItem.ViewItemFeature.WrapText
+        if isinstance(w, QListWidget):
+            # WrapText must be set for Qt to respect explicit \n characters in item text.
+            # Without it QCommonStyle adds TextSingleLine which strips newlines, collapsing
+            # format_icon_tile_label's pre-formatted breaks into a single clipped line.
+            text = index.data(Qt.ItemDataRole.DisplayRole)
+            has_newlines = isinstance(text, str) and "\n" in text
+            if w.wordWrap() or has_newlines:
+                option.features |= QStyleOptionViewItem.ViewItemFeature.WrapText
+        if self._elide_none:
+            option.textElideMode = Qt.TextElideMode.ElideNone
 
     def paint(self, painter, option, index) -> None:
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         opt.state &= ~QStyle.StateFlag.State_HasFocus
-        if self._elide_none:
-            opt.textElideMode = Qt.TextElideMode.ElideNone
         super().paint(painter, opt, index)

@@ -82,10 +82,6 @@ def _normalize_device_pixmap(pix: QPixmap, size: int) -> QPixmap | None:
     if size <= 0:
         return pix
     source = pix
-    if pix.hasAlphaChannel():
-        cropped = _trim_transparent_borders(pix)
-        if cropped is not None and not cropped.isNull():
-            source = cropped
     width = max(1, source.width())
     height = max(1, source.height())
     if (width > size and height < size) or (height > size and width < size):
@@ -121,8 +117,12 @@ def _render_svg_pixmap(data: bytes, target_size: int) -> QPixmap | None:
     return pix
 
 
-def pixmap_from_icon_bytes(data: bytes, target_size: int) -> QPixmap | None:
-    """SVG at target size; raster trimmed and height-normalized like GTK."""
+def pixmap_from_icon_bytes(data: bytes, target_size: int, *, min_native_size: int = 0) -> QPixmap | None:
+    """SVG at target size; raster trimmed and height-normalized like GTK.
+
+    For raster images, pass ``min_native_size`` to reject images whose native
+    resolution is below the threshold (avoids blurry upscaling).
+    """
     if not data:
         return None
     if target_size <= 0:
@@ -136,16 +136,27 @@ def pixmap_from_icon_bytes(data: bytes, target_size: int) -> QPixmap | None:
     pix = QPixmap.fromImage(image)
     if pix.isNull():
         return None
+    if min_native_size > 0 and max(pix.width(), pix.height()) < min_native_size:
+        return None
     normalized = _normalize_device_pixmap(pix, target_size)
     return normalized
 
 
 def qicon_from_icon_bytes(data: bytes, target_size: int) -> QIcon | None:
-    """Build a multi-size ``QIcon`` anchored at 48px when possible."""
+    """Build a multi-size ``QIcon`` anchored at 48px when possible.
+
+    Raster icons are only used when their native resolution is at least
+    ``target_size``.  A 48 px device icon will therefore be shown at medium
+    (48 px) but NOT at large (96 px) or xlarge (256 px), where the caller
+    falls back to the bundled type icon.  SVG icons are always used because
+    they are resolution-independent.
+    """
     if target_size <= 0:
         target_size = DEVICE_ICON_REFERENCE_PX
 
-    pix = pixmap_from_icon_bytes(data, target_size)
+    is_svg = _is_svg_payload(data)
+    min_native = 0 if is_svg else target_size
+    pix = pixmap_from_icon_bytes(data, target_size, min_native_size=min_native)
     if pix is None or pix.isNull():
         return None
 
