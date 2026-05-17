@@ -14,12 +14,13 @@ from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QFrame,
+    QHBoxLayout,
+    QLabel,
     QListView,
     QListWidget,
     QListWidgetItem,
     QScrollArea,
     QSizePolicy,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -40,6 +41,67 @@ from PySide6.QtGui import QFontMetrics
 
 from .icon_list_qss import ICON_MODE_LIST_QSS
 from .no_focus_item_delegate import NoFocusItemDelegate
+
+
+class _SectionHeader(QWidget):
+    """Clickable header: grey chevron + bold black title. Hover = light-blue bg + dark chevron."""
+
+    toggled = Signal(bool)
+
+    def __init__(self, title: str, expanded: bool, parent=None) -> None:
+        super().__init__(parent)
+        self._checked = expanded
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("nnSectionHeader")
+
+        self._chevron = QLabel()
+        self._chevron.setFixedWidth(12)
+
+        self._title_lbl = QLabel(title)
+        self._title_lbl.setStyleSheet("font-weight: bold; color: palette(text);")
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(8, 6, 8, 6)
+        row.setSpacing(8)
+        row.addWidget(self._chevron)
+        row.addWidget(self._title_lbl)
+        row.addStretch(1)
+
+        self._apply_style(hovered=False)
+        self._update_chevron(expanded)
+
+    def _apply_style(self, hovered: bool) -> None:
+        bg = "palette(alternate-base)" if hovered else "palette(base)"
+        self.setStyleSheet(
+            f"#nnSectionHeader {{ background-color: {bg}; border-bottom: 1px solid palette(mid); }}"
+            "QLabel { background-color: transparent; }"
+        )
+        self._chevron.setStyleSheet(
+            "color: palette(text);" if hovered else "color: palette(mid);"
+        )
+
+    def _update_chevron(self, expanded: bool) -> None:
+        self._chevron.setText("▾" if expanded else "▸")
+
+    def setChecked(self, checked: bool) -> None:
+        self._checked = checked
+        self._update_chevron(checked)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._checked = not self._checked
+            self._update_chevron(self._checked)
+            self.toggled.emit(self._checked)
+        super().mousePressEvent(event)
+
+    def enterEvent(self, event) -> None:
+        self._apply_style(hovered=True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._apply_style(hovered=False)
+        super().leaveEvent(event)
 
 
 class IconGroupSection(QFrame):
@@ -71,30 +133,10 @@ class IconGroupSection(QFrame):
         self._bundles_for_items = list(bundles)
         self._on_tile_context_menu_cb = on_tile_context_menu
         self._icon_size = QSize(icon_size)
+        self._title = title
         self._item_labels: list[str] = []
 
-        self._header = QToolButton()
-        self._header.setObjectName("nnIconGroupHeader")
-        self._header.setStyleSheet(
-            "QToolButton#nnIconGroupHeader {"
-            " background-color: palette(button);"
-            " color: palette(button-text);"
-            " border: none;"
-            " border-radius: 0px;"
-            " padding: 6px 8px;"
-            " font-weight: bold;"
-            "}"
-            "QToolButton#nnIconGroupHeader:hover {"
-            " background-color: palette(light);"
-            "}"
-        )
-        self._header.setText(title)
-        self._header.setCheckable(True)
-        self._header.setChecked(expanded)
-        self._header.setAutoRaise(False)
-        self._header.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self._header.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self._header = _SectionHeader(title, expanded)
         self._header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._header.toggled.connect(self._on_header_toggled)
 
@@ -145,13 +187,8 @@ class IconGroupSection(QFrame):
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
+        outer.setSpacing(6)
         outer.addWidget(self._header)
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFrameShadow(QFrame.Shadow.Plain)
-        sep.setObjectName("nnIconGroupSeparator")
-        outer.addWidget(sep)
         outer.addWidget(self._list)
         # setVisible must be called after addWidget so the list is already parented;
         # calling it on a parentless widget would create a transient top-level OS window.
@@ -213,7 +250,6 @@ class IconGroupSection(QFrame):
         self._on_tile_context_menu_cb(gpos, self._bundles_for_items[row])
 
     def _on_header_toggled(self, expanded: bool) -> None:
-        self._header.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
         self._list.setVisible(expanded)
         if expanded:
             self._relayout_icon_grid()

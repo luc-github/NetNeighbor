@@ -25,9 +25,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Log extra Qt top-level QWidget/QWindow (set NETNEIGHBOR_DEBUG_TOPLEVEL; uses INFO lines)",
     )
     parser.add_argument(
-        "--qt-fusion-style",
+        "--qt-native-style",
         action="store_true",
-        help="Use Fusion widget style (test: avoids native Windows style in icon lists)",
+        help="Use the native OS widget style instead of Fusion",
+    )
+    parser.add_argument(
+        "--theme-light",
+        action="store_true",
+        help="Force light theme (overrides OS setting, Fusion only)",
+    )
+    parser.add_argument(
+        "--theme-dark",
+        action="store_true",
+        help="Force dark theme (overrides OS setting, Fusion only)",
     )
     args, _unknown = parser.parse_known_args(argv[1:])
     if args.qt_diag_toplevels:
@@ -52,8 +62,24 @@ def main(argv: list[str] | None = None) -> int:
     _log.info("NetNeighbor Qt bootstrap (logging to ~/.cache/netneighbor/netneighbor.log)")
 
     app = QApplication(argv)
-    if args.qt_fusion_style:
+    if not args.qt_native_style:
+        from PySide6.QtCore import Qt
+        from ui_qt.app_theme import setup_fusion_theme
         app.setStyle("Fusion")
+        if args.theme_dark:
+            forced: Qt.ColorScheme | None = Qt.ColorScheme.Dark
+        elif args.theme_light:
+            forced = Qt.ColorScheme.Light
+        else:
+            from utils.ui_prefs import load_ui_preferences
+            _theme_pref = load_ui_preferences().get("theme", "auto")
+            if _theme_pref == "light":
+                forced = Qt.ColorScheme.Light
+            elif _theme_pref == "dark":
+                forced = Qt.ColorScheme.Dark
+            else:
+                forced = None
+        setup_fusion_theme(app, forced_scheme=forced)
 
     if sys.platform == "win32":
         try:

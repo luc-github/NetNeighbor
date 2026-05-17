@@ -3,14 +3,15 @@
 """Shared QSS for icon-mode ``QListWidget`` tiles (flat list + grouped sections).
 
 Uses ``palette(...)`` roles so light/dark and high-contrast themes propagate from
-``QApplication``. Selection is drawn as a frame (not a solid highlight fill) so
-device icons stay visible; hover uses ``alternate-base`` like many Fusion-style
-list rows. This is still stylesheet-driven, so it will not match pixel-perfect
-native Win32 list hover (alpha accent), but it tracks the active Qt palette better
-than hard-coded RGB fills.
+``QApplication``.  The 1px transparent border is kept in all states to prevent
+layout shifts (border-box sizing stays constant).
+
+Hover/selected color contract (mirrors the rest of the UI):
+  hover    → palette(alternate-base)  light blue tint
+  selected → palette(alternate-base)  same tint, stays lit after click (no border)
 """
 
-# 1px border in all states so selection only changes color (no layout jump).
+# 1px transparent border in every state avoids layout jumps on state changes.
 ICON_MODE_LIST_QSS = (
     "QListWidget { background-color: palette(base); outline: none; show-decoration-selected: 0; }"
     "QListWidget::item {"
@@ -20,24 +21,19 @@ ICON_MODE_LIST_QSS = (
     "}"
     "QListWidget::item:hover {"
     " background-color: palette(alternate-base);"
-    " border: 1px solid transparent;"
     "}"
-    "QListWidget::item:selected, QListWidget::item:selected:active {"
-    " background-color: palette(base);"
-    " color: palette(text);"
-    " border: 1px solid palette(highlight);"
-    " outline: none;"
-    "}"
+    "QListWidget::item:selected,"
+    "QListWidget::item:selected:active,"
     "QListWidget::item:selected:!active {"
     " background-color: palette(base);"
     " color: palette(text);"
-    " border: 1px solid palette(mid);"
+    " border: 1px solid transparent;"
     " outline: none;"
     "}"
     "QListWidget::item:selected:hover {"
     " background-color: palette(alternate-base);"
     " color: palette(text);"
-    " border: 1px solid palette(highlight);"
+    " border: 1px solid transparent;"
     " outline: none;"
     "}"
     "QListWidget::item:focus { border: 1px solid transparent; outline: none; }"

@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTextBrowser,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -104,7 +103,10 @@ class DeviceDetailsDialog(QDialog):
         outer = QVBoxLayout(page)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
+        inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        inner.setStyleSheet("background-color: palette(base);")
         grid = QGridLayout(inner)
         grid.setColumnStretch(1, 1)
         grid.setHorizontalSpacing(16)
@@ -214,7 +216,7 @@ class DeviceDetailsDialog(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
 
-        icon_box = QGroupBox(_("Use icon from:"))
+        icon_box = QGroupBox(_("Use icon from"))
         icon_layout = QVBoxLayout(icon_box)
         self._icon_mode_group = QButtonGroup(self)
 
@@ -380,32 +382,31 @@ class MdnsServiceSection(QFrame):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        self._header = QToolButton()
+        self._title = title
+        self._header = QPushButton()
         self._header.setObjectName("nnMdnsServiceHeader")
         self._header.setStyleSheet(
-            "QToolButton#nnMdnsServiceHeader {"
-            " background-color: palette(button);"
-            " color: palette(button-text);"
+            "QPushButton#nnMdnsServiceHeader {"
+            " background-color: palette(base);"
+            " color: palette(text);"
             " border: none;"
+            " border-bottom: 1px solid palette(mid);"
+            " border-radius: 0px;"
             " padding: 6px 8px;"
             " font-weight: bold;"
             " text-align: left;"
             "}"
-            "QToolButton#nnMdnsServiceHeader:hover {"
-            " background-color: palette(light);"
+            "QPushButton#nnMdnsServiceHeader:hover {"
+            " background-color: palette(alternate-base);"
             "}"
         )
-        self._header.setText(title)
         self._header.setCheckable(True)
         self._header.setChecked(expanded)
-        self._header.setAutoRaise(False)
+        self._header.setFlat(True)
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self._header.setArrowType(
-            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
-        )
         self._header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._header.toggled.connect(self._on_header_toggled)
+        self._update_header_text(expanded)
         outer.addWidget(self._header)
 
         self._body = QWidget()
@@ -480,10 +481,12 @@ class MdnsServiceSection(QFrame):
         outer.addWidget(self._body)
         self._body.setVisible(expanded)
 
+    def _update_header_text(self, expanded: bool) -> None:
+        chevron = "▾" if expanded else "▸"
+        self._header.setText(f"{chevron}  {self._title}")
+
     def _on_header_toggled(self, expanded: bool) -> None:
-        self._header.setArrowType(
-            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
-        )
+        self._update_header_text(expanded)
         self._body.setVisible(expanded)
 
     @staticmethod

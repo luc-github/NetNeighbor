@@ -6,12 +6,13 @@ from __future__ import annotations
 
 from gettext import gettext as _
 
-from PySide6.QtCore import QSize, QUrl
+from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -44,7 +45,7 @@ class IconPickerDialog(QDialog):
     def __init__(self, parent: QWidget | None, *, preferred_type: str | None, current_id: str | None) -> None:
         super().__init__(parent)
         self.setWindowTitle(_("Choose icon"))
-        self.resize(560, 420)
+        self.resize(620, 484)
         self._selected_id: str | None = current_id.strip() if isinstance(current_id, str) and current_id.strip() else None
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)
@@ -68,7 +69,30 @@ class IconPickerDialog(QDialog):
 
         if entries:
             inner = QWidget()
+            inner.setObjectName("nnIconPickerGrid")
+            inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            inner.setStyleSheet(
+                "#nnIconPickerGrid { background-color: palette(base); }"
+                "QToolButton {"
+                " background-color: palette(base);"
+                " border: 1px solid palette(mid);"
+                " border-radius: 4px;"
+                "}"
+                "QToolButton:hover {"
+                " background-color: palette(alternate-base);"
+                " border-color: palette(highlight);"
+                "}"
+                "QToolButton:checked {"
+                " background-color: palette(highlight);"
+                " border-color: palette(shadow);"
+                "}"
+                "QToolButton:checked:hover {"
+                " background-color: palette(highlight);"
+                " border-color: palette(shadow);"
+                "}"
+            )
             grid = QGridLayout(inner)
+            grid.setContentsMargins(6, 6, 6, 6)
             grid.setHorizontalSpacing(6)
             grid.setVerticalSpacing(6)
             cols = 6
@@ -85,7 +109,6 @@ class IconPickerDialog(QDialog):
                 else:
                     btn.setText("?")
                 btn.setCheckable(True)
-                btn.setAutoRaise(True)
                 self._group.addButton(btn)
 
                 def _on_toggled(checked: bool, iid: str = icon_id) -> None:
@@ -111,6 +134,8 @@ class IconPickerDialog(QDialog):
 
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             scroll.setWidget(inner)
 
         folder_btn = QPushButton(_("Open custom icons folder"))

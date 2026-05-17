@@ -35,4 +35,5 @@ class NoFocusItemDelegate(QStyledItemDelegate):
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         opt.state &= ~QStyle.StateFlag.State_HasFocus
+        opt.state &= ~QStyle.StateFlag.State_Selected
         super().paint(painter, opt, index)

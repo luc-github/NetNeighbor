@@ -93,11 +93,18 @@ _LOG = logging.getLogger("ui_qt")
 _LIST_ITEM_INTERACTION_QSS = (
     "QListWidget { background-color: palette(base); outline: none; show-decoration-selected: 0; }"
     "QListWidget::item { padding: 4px 6px; border: 1px solid transparent; }"
+    "QListWidget::item:hover {"
+    " background-color: palette(alternate-base);"
+    "}"
     "QListWidget::item:selected, QListWidget::item:selected:active, QListWidget::item:selected:!active {"
     " background-color: palette(highlight);"
     " color: palette(highlighted-text);"
     " border: none;"
     " outline: none;"
+    "}"
+    "QListWidget::item:selected:hover {"
+    " background-color: palette(highlight);"
+    " color: palette(highlighted-text);"
     "}"
     "QListWidget::item:focus { border: none; outline: none; }"
 )
@@ -353,23 +360,29 @@ class NetNeighborMainWindow(QMainWindow):
 
         self._sidebar_toggle_btn = QToolButton(self)
         self._sidebar_toggle_btn.setObjectName("nnSidebarToggle")
-        self._sidebar_toggle_btn.setAutoRaise(False)
-        self._sidebar_toggle_btn.setFixedWidth(20)
+        self._sidebar_toggle_btn.setAutoRaise(True)
+        self._sidebar_toggle_btn.setFixedWidth(14)
         self._sidebar_toggle_btn.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
         )
-        self._sidebar_toggle_btn.setCursor(Qt.CursorShape.SplitHCursor)
+        self._sidebar_toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self._sidebar_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._sidebar_toggle_btn.clicked.connect(self._on_sidebar_handle_clicked)
         self._sidebar_toggle_btn.setStyleSheet(
             "QToolButton#nnSidebarToggle {"
             " background-color: palette(button);"
-            " color: palette(button-text);"
             " border: none;"
             " border-left: 1px solid palette(mid);"
             " border-right: 1px solid palette(mid);"
+            " color: palette(mid);"
+            " font-size: 11px;"
+            " padding: 0px;"
             "}"
             "QToolButton#nnSidebarToggle:hover {"
-            " background-color: palette(light);"
+            " background-color: palette(alternate-base);"
+            " border-left-color: palette(alternate-base);"
+            " border-right-color: palette(alternate-base);"
+            " color: palette(text);"
             "}"
         )
 
@@ -454,10 +467,10 @@ class NetNeighborMainWindow(QMainWindow):
         sz = self._splitter.sizes()
         visible = bool(sz and sz[0] > 8)
         if visible:
-            self._sidebar_toggle_btn.setArrowType(Qt.ArrowType.LeftArrow)
+            self._sidebar_toggle_btn.setText("◀")
             self._sidebar_toggle_btn.setToolTip(_("Hide sidebar"))
         else:
-            self._sidebar_toggle_btn.setArrowType(Qt.ArrowType.RightArrow)
+            self._sidebar_toggle_btn.setText("▶")
             self._sidebar_toggle_btn.setToolTip(_("Show sidebar"))
 
     def _on_sidebar_handle_clicked(self) -> None:
@@ -594,8 +607,8 @@ class NetNeighborMainWindow(QMainWindow):
     def _setup_menu_bar(self) -> None:
         menu_bar = self.menuBar()
 
-        view_menu = menu_bar.addMenu(_("&View"))
-        act_reload = QAction(_("&Reload discovery"), self)
+        view_menu = menu_bar.addMenu(_("View"))
+        act_reload = QAction(_("Reload discovery"), self)
         act_reload.setShortcut(QKeySequence.StandardKey.Refresh)
         act_reload.triggered.connect(self._reload_discovery)
         act_reload.setEnabled(self._discovery_manager is not None)
@@ -603,7 +616,7 @@ class NetNeighborMainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        self._act_sidebar = QAction(_("&Sidebar"), self)
+        self._act_sidebar = QAction(_("Sidebar"), self)
         self._act_sidebar.setCheckable(True)
         self._act_sidebar.setChecked(not self._sidebar_collapsed_pref)
         self._act_sidebar.toggled.connect(self._on_sidebar_toggled)
@@ -666,7 +679,7 @@ class NetNeighborMainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        act_prefs = QAction(_("&Preferences…"), self)
+        act_prefs = QAction(_("Preferences…"), self)
         act_prefs.setShortcut(QKeySequence.StandardKey.Preferences)
         act_prefs.setMenuRole(QAction.MenuRole.PreferencesRole)
         act_prefs.triggered.connect(self._open_preferences)
@@ -674,14 +687,14 @@ class NetNeighborMainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        act_quit = QAction(_("&Quit"), self)
+        act_quit = QAction(_("Quit"), self)
         act_quit.setShortcut(QKeySequence.StandardKey.Quit)
         act_quit.setMenuRole(QAction.MenuRole.QuitRole)
         act_quit.triggered.connect(self._quit_application)
         view_menu.addAction(act_quit)
 
-        help_menu = menu_bar.addMenu(_("&Help"))
-        act_about = QAction(_("&About NetNeighbor"), self)
+        help_menu = menu_bar.addMenu(_("Help"))
+        act_about = QAction(_("About NetNeighbor"), self)
         act_about.setMenuRole(QAction.MenuRole.AboutRole)
         act_about.triggered.connect(self._show_about)
         help_menu.addAction(act_about)
@@ -876,8 +889,23 @@ class NetNeighborMainWindow(QMainWindow):
     def _open_preferences(self) -> None:
         from ui_qt.preferences_dialog import PreferencesDialog
 
-        dlg = PreferencesDialog(self)
+        dlg = PreferencesDialog(
+            self,
+            on_location_presets_saved=self._apply_location_presets,
+            on_type_presets_saved=self._apply_type_presets,
+            on_connect_templates_saved=self._apply_connect_templates,
+        )
         dlg.exec()
+
+    def _apply_location_presets(self, options: list[str], _auto_add: bool) -> None:
+        self._location_options = options
+
+    def _apply_type_presets(self, options: list[tuple[str, str]]) -> None:
+        self._type_options = options
+
+    def _apply_connect_templates(self, templates: dict[str, str], custom: str) -> None:
+        self._connect_command_templates = templates
+        self._custom_command_template   = custom
 
     def _reload_discovery(self) -> None:
         if self._discovery_manager is None:
