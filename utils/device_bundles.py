@@ -104,6 +104,10 @@ class DeviceBundle:
         return any(getattr(device, "monitored", False) for device in self.devices)
 
     @property
+    def hidden(self) -> bool:
+        return any(getattr(device, "hidden", False) for device in self.devices)
+
+    @property
     def devices(self) -> list[Device]:
         unique: dict[str, Device] = {}
         for device in (self.mdns_device, self.ssdp_device, self.wsdd_device, self.wsd_device, self.nmb_device, self.primary):

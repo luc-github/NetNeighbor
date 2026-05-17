@@ -240,6 +240,16 @@ class NetNeighborMainWindow(QMainWindow):
             raw_mon = prefs.get("monitored_overrides")
             if isinstance(raw_mon, dict):
                 discovery_manager.set_monitored_overrides(raw_mon)
+            raw_hidden = prefs.get("hidden_overrides")
+            if isinstance(raw_hidden, dict):
+                discovery_manager.set_hidden_overrides(raw_hidden)
+
+        raw_hidden_meta = prefs.get("hidden_device_meta")
+        self._hidden_device_meta: dict[str, dict[str, object]] = {}
+        if isinstance(raw_hidden_meta, dict):
+            for key, value in raw_hidden_meta.items():
+                if isinstance(key, str) and isinstance(value, dict):
+                    self._hidden_device_meta[key] = dict(value)
 
         self._notification_log: list[tuple[str, str, str]] = []
         self._notification_received.connect(self._append_notification)
@@ -265,6 +275,10 @@ class NetNeighborMainWindow(QMainWindow):
         self._view_refresh_timer = QTimer(self)
         self._view_refresh_timer.setSingleShot(True)
         self._view_refresh_timer.timeout.connect(self._refresh_device_widgets)
+
+        self._persist_prefs_timer = QTimer(self)
+        self._persist_prefs_timer.setSingleShot(True)
+        self._persist_prefs_timer.timeout.connect(self._persist_ui_prefs)
 
         self._remote_icon_cache = QtRemoteIconCache(self)
         self._remote_icon_cache.icons_ready.connect(self._on_remote_icons_ready)
@@ -553,9 +567,17 @@ class NetNeighborMainWindow(QMainWindow):
         self._view_refresh_timer.stop()
         self._view_refresh_timer.start(int(delay_ms))
 
+    def _schedule_persist_ui_prefs(self) -> None:
+        """Write prefs on the next event-loop tick (keeps hide/unhide snappy)."""
+        self._persist_prefs_timer.start(0)
+
+    def _update_visible_device_count_status(self) -> None:
+        n = len(self._filtered_bundles())
+        self.statusBar().showMessage(_("{} devices").format(n))
+
     def _rebuild_sidebar(self) -> None:
         sidebar_mode = self._sidebar_group_mode()
-        bundles = list(self._bundles)
+        bundles = self._filtered_bundles()
         counts: dict[str, int] = {}
         bundle_filter_keys: dict[str, str] = {}
 
@@ -723,6 +745,9 @@ class NetNeighborMainWindow(QMainWindow):
         act_notif = QAction(_("Notifications history"), self)
         act_notif.triggered.connect(self._open_notifications_history)
         tools_menu.addAction(act_notif)
+        act_hidden = QAction(_("Hidden devices"), self)
+        act_hidden.triggered.connect(self._open_hidden_devices)
+        tools_menu.addAction(act_hidden)
 
         help_menu = menu_bar.addMenu(_("Help"))
         act_about = QAction(_("About NetNeighbor"), self)
@@ -861,6 +886,9 @@ class NetNeighborMainWindow(QMainWindow):
             prefs["custom_command_overrides"] = self._discovery_manager.get_custom_command_overrides()
             prefs["field_mapping_rules"] = self._discovery_manager.get_field_mapping_rules()
             prefs["monitored_overrides"] = self._discovery_manager.get_monitored_overrides()
+            prefs["hidden_overrides"] = self._discovery_manager.get_hidden_overrides()
+            self._prune_hidden_device_meta()
+            prefs["hidden_device_meta"] = dict(self._hidden_device_meta)
         save_ui_preferences(prefs)
 
     def _sync_menu_checks_from_state(self) -> None:
@@ -974,6 +1002,179 @@ class NetNeighborMainWindow(QMainWindow):
 
         show_notifications_history_dialog(self, list(self._notification_log), _clear)
 
+    def _prune_hidden_device_meta(self) -> None:
+        if self._discovery_manager is None:
+            return
+        hidden = self._discovery_manager.get_hidden_overrides()
+        self._hidden_device_meta = {
+            key: meta
+            for key, meta in self._hidden_device_meta.items()
+            if hidden.get(key) is True
+        }
+
+    def _hidden_device_rows(self) -> list:
+        from ui_qt.hidden_devices_dialog import HiddenDeviceRow
+
+        if self._discovery_manager is None:
+            return []
+        hidden = self._discovery_manager.get_hidden_overrides()
+        rows: list[HiddenDeviceRow] = []
+        seen: set[str] = set()
+        for host_key, flagged in hidden.items():
+            if not flagged or host_key in seen:
+                continue
+            seen.add(host_key)
+            meta = self._hidden_device_meta.get(host_key)
+            name = ""
+            ip = ""
+            port = 0
+            if isinstance(meta, dict):
+                name = str(meta.get("name", "") or "")
+                ip = str(meta.get("ip", "") or "")
+                try:
+                    port = int(meta.get("port", 0) or 0)
+                except (TypeError, ValueError):
+                    port = 0
+            if not name and ip:
+                name = ip
+            if not name:
+                name = host_key
+            rows.append(HiddenDeviceRow(host_key=host_key, name=name, ip=ip, port=port))
+        rows.sort(key=lambda row: row.name.lower())
+        return rows
+
+    def _open_hidden_devices(self) -> None:
+        from ui_qt.hidden_devices_dialog import show_hidden_devices_dialog
+
+        show_hidden_devices_dialog(
+            self,
+            self._hidden_device_rows(),
+            self._unhide_device_by_key,
+        )
+
+    def _bundle_for_host_key(self, host_key: str) -> DeviceBundle | None:
+        if self._discovery_manager is None or not host_key:
+            return None
+        for bundle in self._bundles:
+            if self._discovery_manager.canonical_host_identity_key(bundle.ip, bundle.port) == host_key:
+                return bundle
+        return None
+
+    def _apply_hidden_visibility_immediate(
+        self,
+        *,
+        removed_bundle_key: str | None = None,
+        added_bundle: DeviceBundle | None = None,
+    ) -> None:
+        """Refresh views after hide/unhide without rebuilding discovery bundles."""
+        self._sidebar_signature = None
+        self._last_device_view_sig = None
+        if removed_bundle_key and self._try_incremental_remove_bundle(removed_bundle_key):
+            self._rebuild_sidebar()
+            self._update_visible_device_count_status()
+            return
+        if added_bundle is not None and self._try_incremental_add_bundle(added_bundle):
+            self._rebuild_sidebar()
+            self._update_visible_device_count_status()
+            return
+        self._rebuild_sidebar()
+        self._refresh_device_widgets()
+
+    def _try_incremental_remove_bundle(self, bundle_key: str) -> bool:
+        if self._view_mode == "list":
+            for row in range(self._table.rowCount()):
+                item = self._table.item(row, 0)
+                if item is not None and item.data(self._BUNDLE_KEY_ROLE) == bundle_key:
+                    self._table.removeRow(row)
+                    return True
+            return False
+        if self._view_mode == "icons" and self._icon_sort_mode == "appearance":
+            for index in range(self._icon_list.count()):
+                item = self._icon_list.item(index)
+                if item is not None and item.data(self._BUNDLE_KEY_ROLE) == bundle_key:
+                    self._icon_list.takeItem(index)
+                    self._relayout_flat_icon_list()
+                    return True
+        return False
+
+    def _try_incremental_add_bundle(self, bundle: DeviceBundle) -> bool:
+        ordered = self._current_ordered_bundles_for_view()
+        try:
+            insert_at = next(i for i, row in enumerate(ordered) if row.primary.key == bundle.primary.key)
+        except StopIteration:
+            return False
+        if self._view_mode == "list":
+            if self._table.isSortingEnabled():
+                return False
+            self._table.insertRow(insert_at)
+            d = bundle.primary
+            name_item = QTableWidgetItem(_safe_str(d.name))
+            name_item.setData(self._BUNDLE_KEY_ROLE, d.key)
+            self._table.setItem(insert_at, 0, name_item)
+            self._table.setItem(insert_at, 1, QTableWidgetItem(_safe_str(d.ip)))
+            self._table.setItem(insert_at, 2, QTableWidgetItem(format_device_type_for_details(d)))
+            loc = bundle_location_label(bundle, no_location_label=self._no_location_label())
+            self._table.setItem(insert_at, 3, QTableWidgetItem(loc))
+            on_txt = _("Yes") if d.online else _("No")
+            on_item = QTableWidgetItem(on_txt)
+            on_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._table.setItem(insert_at, 4, on_item)
+            self._table.resizeRowsToContents()
+            return True
+        if self._view_mode == "icons" and self._icon_sort_mode == "appearance":
+            name = format_icon_tile_label(_safe_str(bundle.primary.name))
+            item = QListWidgetItem(self._icon_for_bundle(bundle), name)
+            item.setData(self._BUNDLE_KEY_ROLE, bundle.primary.key)
+            item.setData(self._ICON_LABEL_ROLE, name)
+            item.setToolTip(self._bundle_tooltip(bundle))
+            self._icon_list.insertItem(insert_at, item)
+            self._relayout_flat_icon_list()
+            return True
+        return False
+
+    def _unhide_device_by_key(self, host_key: str) -> None:
+        if self._discovery_manager is None:
+            return
+        meta = self._hidden_device_meta.get(host_key)
+        ip = ""
+        port = 0
+        if isinstance(meta, dict):
+            ip = str(meta.get("ip", "") or "")
+            try:
+                port = int(meta.get("port", 0) or 0)
+            except (TypeError, ValueError):
+                port = 0
+        if ip:
+            self._discovery_manager.set_bundle_hidden(ip, port, False, notify=False)
+        else:
+            for device in list(self._discovery_manager.devices):
+                if self._discovery_manager.canonical_host_identity_key(device.ip, device.port) == host_key:
+                    self._discovery_manager.set_bundle_hidden(device.ip, device.port, False, notify=False)
+                    break
+            else:
+                overrides = self._discovery_manager.get_hidden_overrides()
+                overrides.pop(host_key, None)
+                self._discovery_manager.set_hidden_overrides(overrides, notify=False)
+        self._hidden_device_meta.pop(host_key, None)
+        self._schedule_persist_ui_prefs()
+        restored = self._bundle_for_host_key(host_key)
+        self._apply_hidden_visibility_immediate(added_bundle=restored)
+
+    def _hide_bundle(self, bundle: DeviceBundle) -> None:
+        if self._discovery_manager is None:
+            return
+        host_key = self._discovery_manager.canonical_host_identity_key(bundle.ip, bundle.port)
+        removed_key = bundle.primary.key
+        self._discovery_manager.set_bundle_hidden(bundle.ip, bundle.port, True, notify=False)
+        if host_key:
+            self._hidden_device_meta[host_key] = {
+                "name": bundle.name,
+                "ip": bundle.ip,
+                "port": int(bundle.port),
+            }
+        self._schedule_persist_ui_prefs()
+        self._apply_hidden_visibility_immediate(removed_bundle_key=removed_key)
+
     def set_devices(self, devices: Iterable[Device]) -> None:
         """Replace views from discovery snapshot (coalesced to reduce flicker)."""
         self._pending_devices = list(devices)
@@ -1014,11 +1215,18 @@ class NetNeighborMainWindow(QMainWindow):
         self._schedule_view_refresh()
 
     def _filtered_bundles(self) -> list[DeviceBundle]:
-        return apply_bundle_category_filter(
+        bundles = apply_bundle_category_filter(
             self._bundles,
             self._selected_category,
             no_location_label=self._no_location_label(),
         )
+        if self._discovery_manager is None:
+            return bundles
+        return [
+            bundle
+            for bundle in bundles
+            if not self._discovery_manager.bundle_is_hidden(bundle.ip, bundle.port)
+        ]
 
     def _current_ordered_bundles_for_view(self) -> list[DeviceBundle]:
         filtered = self._filtered_bundles()
@@ -1195,6 +1403,7 @@ class NetNeighborMainWindow(QMainWindow):
             on_details=lambda: self._open_device_details(bundle),
             on_options=lambda: self._open_device_details(bundle, initial_tab="options"),
             on_monitor=lambda monitored: self._set_bundle_monitored(bundle, monitored),
+            on_hide=lambda: self._hide_bundle(bundle),
             on_rename=lambda: self._rename_bundle(bundle),
             on_location=lambda loc: self._set_bundle_location(bundle, loc),
             on_type=lambda slug: self._set_bundle_type(bundle, slug),

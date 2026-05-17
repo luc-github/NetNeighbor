@@ -47,6 +47,7 @@ def show_device_context_menu(
     on_details: Callable[[], None],
     on_options: Callable[[], None],
     on_monitor: Callable[[bool], None],
+    on_hide: Callable[[], None],
     on_rename: Callable[[], None],
     on_location: Callable[[str | None], None],
     on_type: Callable[[str | None], None],
@@ -79,6 +80,9 @@ def show_device_context_menu(
     else:
         act_follow = menu.addAction(_("Monitor"))
         act_follow.triggered.connect(lambda: on_monitor(True))
+
+    act_hide = menu.addAction(_("Hide device"))
+    act_hide.triggered.connect(on_hide)
 
     act_rename = menu.addAction(_("Rename"))
     act_rename.triggered.connect(on_rename)

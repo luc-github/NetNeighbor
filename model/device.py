@@ -21,6 +21,7 @@ class Device:
     last_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     online: bool = True
     monitored: bool = False
+    hidden: bool = False
     icon: str | None = None
 
     @property

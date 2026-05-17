@@ -262,6 +262,7 @@ class DiscoveryManager:
         self._custom_command_overrides: dict[str, str] = {}  # key → command template
         self._field_mapping_rules: dict[str, dict[str, list[str]]] = {}
         self._monitored_overrides: dict[str, bool] = {}
+        self._hidden_overrides: dict[str, bool] = {}
         self._last_seen_overrides: dict[str, str] = {}
         # One "online" notification per LAN host until it goes offline (SSDP + mDNS rows share IP).
         self._presence_announced_hosts: set[str] = set()
@@ -305,7 +306,11 @@ class DiscoveryManager:
 
     @property
     def devices(self) -> list[Device]:
-        return sorted(self._devices.values(), key=lambda device: (device.category, device.name.lower()))
+        return sorted(self._devices_snapshot(), key=lambda device: (device.category, device.name.lower()))
+
+    def _devices_snapshot(self) -> list[Device]:
+        """Copy of live rows — safe while discovery threads mutate ``_devices``."""
+        return list(self._devices.values())
 
     def start(self) -> None:
         self._stopped = False
@@ -440,12 +445,14 @@ class DiscoveryManager:
         self._apply_device_commands(device)
         self._apply_custom_command_override(device)
         self._apply_monitored_override(device)
+        self._apply_hidden_override(device)
 
         prev_online: bool | None = existing.online if existing is not None else None
 
         if existing is not None:
             # Preserve user-follow choice across updates.
             device.monitored = existing.monitored
+            device.hidden = existing.hidden
             if device.online is False and existing.last_seen:
                 device.last_seen = existing.last_seen
             if device.source == "ssdp":
@@ -1341,6 +1348,24 @@ class DiscoveryManager:
 
     def get_monitored_overrides(self) -> dict[str, bool]:
         return dict(self._monitored_overrides)
+
+    def set_hidden_overrides(self, overrides: dict[str, bool], *, notify: bool = True) -> None:
+        normalized: dict[str, bool] = {}
+        for key, value in overrides.items():
+            if isinstance(key, str):
+                normalized[key] = bool(value)
+        self._hidden_overrides = normalized
+        changed = False
+        for device in self._devices_snapshot():
+            before = device.hidden
+            self._apply_hidden_override(device)
+            if device.hidden != before:
+                changed = True
+        if changed and notify:
+            self._notify()
+
+    def get_hidden_overrides(self) -> dict[str, bool]:
+        return dict(self._hidden_overrides)
 
     def set_last_seen_overrides(self, overrides: dict[str, str]) -> None:
         normalized: dict[str, str] = {}
@@ -2266,6 +2291,11 @@ class DiscoveryManager:
         if override_value is not None:
             device.monitored = bool(override_value)
 
+    def _apply_hidden_override(self, device: Device) -> None:
+        override_value = self._find_hidden_override_value(device)
+        if override_value is not None:
+            device.hidden = bool(override_value)
+
     def _find_override_value(self, store: dict, device: Device):
         preferred_key = self._make_override_key_for_device(device)
         if preferred_key in store:
@@ -2508,14 +2538,39 @@ class DiscoveryManager:
         return self._canonical_monitored_key(device)
 
     def _find_monitored_override_value(self, device: Device) -> bool | None:
-        store = self._monitored_overrides
+        return self._find_host_flag_override_value(self._monitored_overrides, device)
+
+    def _find_hidden_override_value(self, device: Device) -> bool | None:
+        return self._find_host_flag_override_value(self._hidden_overrides, device)
+
+    def _find_host_flag_override_value(self, store: dict[str, bool], device: Device) -> bool | None:
         for key in self._monitored_lookup_keys_for_device(device):
             if key in store:
                 return store[key]
-        return self._find_override_value(store, device)
+        legacy = self._find_override_value(store, device)
+        if legacy is not None:
+            return bool(legacy)
+        return None
 
     def _device_matches_monitored_key(self, device: Device, host_key: str) -> bool:
         return host_key in self._monitored_lookup_keys_for_device(device)
+
+    def _device_matches_hidden_key(self, device: Device, host_key: str) -> bool:
+        return host_key in self._monitored_lookup_keys_for_device(device)
+
+    def bundle_is_hidden(self, ip: str, port: int) -> bool:
+        anchor = self._anchor_device_for_endpoint(ip, port)
+        if anchor is not None:
+            return self._find_hidden_override_value(anchor) is True
+        host_key = f"host:ip:{str(ip).strip()}"
+        return bool(self._hidden_overrides.get(host_key))
+
+    def canonical_host_identity_key(self, ip: str, port: int) -> str:
+        anchor = self._anchor_device_for_endpoint(ip, port)
+        if anchor is not None:
+            return self._canonical_monitored_key(anchor)
+        sip = str(ip).strip()
+        return f"host:ip:{sip}" if sip and sip != "0.0.0.0" else ""
 
     def _anchor_device_for_endpoint(self, ip: str, port: int) -> Device | None:
         sip = str(ip).strip()
@@ -2523,7 +2578,7 @@ class DiscoveryManager:
             return None
         exact: list[Device] = []
         same_ip: list[Device] = []
-        for device in self._devices.values():
+        for device in self._devices_snapshot():
             if str(device.ip).strip() != sip:
                 continue
             same_ip.append(device)
@@ -2731,7 +2786,7 @@ class DiscoveryManager:
             self._monitored_overrides[host_key] = True
         else:
             keys_to_drop: set[str] = {host_key}
-            for device in self._devices.values():
+            for device in self._devices_snapshot():
                 if anchor is not None:
                     if not self._device_matches_monitored_key(device, host_key):
                         continue
@@ -2741,7 +2796,7 @@ class DiscoveryManager:
             for key in keys_to_drop:
                 self._monitored_overrides.pop(key, None)
         changed = False
-        for device in self._devices.values():
+        for device in self._devices_snapshot():
             if anchor is not None:
                 if not self._device_matches_monitored_key(device, host_key):
                     continue
@@ -2764,6 +2819,36 @@ class DiscoveryManager:
         if device is None:
             return
         self.set_bundle_monitored(str(device.ip), int(device.port), monitored)
+
+    def set_bundle_hidden(self, ip: str, port: int, hidden: bool, *, notify: bool = True) -> None:
+        """Hide/show a UI bundle (same identity keys as follow/monitor)."""
+        anchor = self._anchor_device_for_endpoint(ip, port)
+        host_key = self._canonical_monitored_key(anchor) if anchor is not None else f"host:ip:{ip}"
+        if hidden:
+            self._hidden_overrides[host_key] = True
+        else:
+            keys_to_drop: set[str] = {host_key}
+            for device in self._devices_snapshot():
+                if anchor is not None:
+                    if not self._device_matches_hidden_key(device, host_key):
+                        continue
+                elif str(device.ip).strip() != str(ip).strip():
+                    continue
+                keys_to_drop.update(self._monitored_lookup_keys_for_device(device))
+            for key in keys_to_drop:
+                self._hidden_overrides.pop(key, None)
+        changed = False
+        for device in self._devices_snapshot():
+            if anchor is not None:
+                if not self._device_matches_hidden_key(device, host_key):
+                    continue
+            elif str(device.ip).strip() != str(ip).strip():
+                continue
+            if device.hidden != hidden:
+                device.hidden = hidden
+                changed = True
+        if changed and notify:
+            self._notify()
 
     def _notify(self) -> None:
         if not self._listeners:
