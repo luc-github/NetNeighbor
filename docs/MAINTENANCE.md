@@ -76,4 +76,4 @@ Architecture Decision Records (ADR): optional short files under `docs/adr/` for 
 - [ ] Translation catalogs merged (`msgmerge`) and `.mo` files compiled.
 - [ ] Smoke run: start app, discovery, details, tray hide/show, **CLI** `--start-minimized-to-tray`, optional autostart toggle, monitored device restart.
 - [ ] Test Open / double-click with Override and Additional device commands.
-- [ ] Packaging smoke: `./packaging/build_deb.sh`, install in VM, verify icons + `Recommends` (tray + `nmblookup`).
+- [ ] Packaging smoke: `./packaging/linux/build_deb.sh`, install in VM, verify icons + `Recommends` (tray + `nmblookup`).

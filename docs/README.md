@@ -20,6 +20,7 @@ documentation remains in the repository root [`README.md`](../README.md) and
 | [`TODO.md`](TODO.md) | Known items and ideas for future work. |
 | [`ROADMAP_QT_2_0.md`](ROADMAP_QT_2_0.md) | Phased checklist for the **2.0** migration to **PySide6** (GTK removal, cross-platform UI). |
 | [`QT_DEV_REQUIREMENTS.md`](QT_DEV_REQUIREMENTS.md) | Per-OS dev setup: Python, PySide6, system libs (Linux), Windows VC++ runtime, optional tools. |
+| [`PACKAGING.md`](PACKAGING.md) | Build `.deb` / tar.gz / AppImage (Linux), PyInstaller + Inno (Windows), `.app` (macOS), release CI. |
 | [`qt_single_instance.py`](../utils/qt_single_instance.py) | Qt single-instance (`QLocalServer`) used by `app_qt.py`. |
 | [`archive/`](archive/) | Archived documents (Brief v1.3, v1.4, ROADMAP, CHANGELOG). |
 

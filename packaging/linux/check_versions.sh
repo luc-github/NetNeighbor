@@ -8,8 +8,8 @@
 # Files missing the "Internal version" line are flagged as errors.
 #
 # Usage:
-#   bash packaging/check_versions.sh                       # scan /usr/share/netneighbor
-#   bash packaging/check_versions.sh /path/to/source       # scan a local source tree
+#   bash packaging/linux/check_versions.sh                       # scan /usr/share/netneighbor
+#   bash packaging/linux/check_versions.sh /path/to/source       # scan a local source tree
 
 set -euo pipefail
 

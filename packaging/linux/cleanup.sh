@@ -8,8 +8,8 @@
 # installation (system files), user shortcuts, user config and cache.
 #
 # Usage:
-#   sudo bash packaging/cleanup.sh          # full cleanup (needs sudo for /usr)
-#   bash packaging/cleanup.sh --user-only   # only user-level files (no sudo needed)
+#   sudo bash packaging/linux/cleanup.sh          # full cleanup (needs sudo for /usr)
+#   bash packaging/linux/cleanup.sh --user-only   # only user-level files (no sudo needed)
 
 set -euo pipefail
 

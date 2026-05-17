@@ -4,13 +4,13 @@
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 #
-# Build a NetNeighbor AppImage (system-Python, lightweight ~5-8 MB).
+# Build a NetNeighbor AppImage (system-Python, lightweight ~5-8 MB). GTK 1.x until Qt port.
 #
 # Usage:
-#   bash packaging/build_appimage.sh                        # version from VERSION file
-#   bash packaging/build_appimage.sh 1.0.0                  # explicit version
-#   bash packaging/build_appimage.sh 1.0.0 x86_64           # explicit version + arch
-#   bash packaging/build_appimage.sh --download-tool        # download appimagetool then build
+#   bash packaging/linux/build_appimage.sh                        # version from VERSION file
+#   bash packaging/linux/build_appimage.sh 1.0.0                  # explicit version
+#   bash packaging/linux/build_appimage.sh 1.0.0 x86_64           # explicit version + arch
+#   bash packaging/linux/build_appimage.sh --download-tool        # download appimagetool then build
 #
 # appimagetool is resolved in this order:
 #   1. $APPIMAGETOOL env var  (absolute path)
@@ -23,7 +23,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # ── Parse arguments ────────────────────────────────────────────────────────
 DOWNLOAD_TOOL=0
@@ -86,7 +86,7 @@ if [[ -z "${_tool}" ]]; then
   echo "appimagetool not found."
   echo ""
   echo "Run with --download-tool to download it automatically:"
-  echo "  bash packaging/build_appimage.sh --download-tool"
+  echo "  bash packaging/linux/build_appimage.sh --download-tool"
   echo ""
   echo "Or download manually from:"
   echo "  ${_APPIMAGETOOL_URL}"

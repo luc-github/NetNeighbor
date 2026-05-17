@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+# GTK 1.x .deb builder (system Python + PyGObject). After port: app.py + PySide6 — POST_PORT.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 VERSION="${1:-}"
 ARCH="${2:-$(dpkg --print-architecture)}"

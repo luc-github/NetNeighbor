@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+# GTK 1.x portable tarball. After port: app.py + copied paths — POST_PORT.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 VERSION="${1:-}"
 
 if [[ -z "${VERSION}" ]]; then

@@ -1,0 +1,67 @@
+# Build NetNeighbor Windows folder distribution with PyInstaller (entry: app.py).
+# Prerequisites: Python 3.10+, pip install -r requirements-qt.txt pyinstaller
+#
+#   .\packaging\windows\build.ps1
+#   .\packaging\windows\build.ps1 -Version 2.0.0
+
+param(
+    [string]$Version = ""
+)
+
+$ErrorActionPreference = "Stop"
+$WindowsDir = $PSScriptRoot
+$Root = (Resolve-Path (Join-Path $WindowsDir "..\..")).Path
+$DistDir = Join-Path $Root "dist"
+$BuildDir = Join-Path $Root "build\pyinstaller-windows"
+
+if (-not $Version) {
+    $vf = Join-Path $Root "VERSION"
+    if (Test-Path $vf) {
+        $Version = (Get-Content $vf -TotalCount 1).Trim()
+        if ($Version -match '#') { $Version = $Version.Split('#')[0].Trim() }
+    }
+}
+if (-not $Version) {
+    throw "Set VERSION file or pass -Version"
+}
+
+Write-Host "== NetNeighbor Windows PyInstaller =="
+Write-Host "version=$Version root=$Root"
+
+$py = $env:NETNEIGHBOR_PYTHON
+if (-not $py) {
+    $venvPy = Join-Path $Root ".venv\Scripts\python.exe"
+    if (Test-Path $venvPy) { $py = $venvPy } else { $py = "python" }
+}
+
+& $py -m pip install -q -r (Join-Path $Root "requirements-qt.txt") pyinstaller
+
+New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $BuildDir
+
+Push-Location $Root
+try {
+    & $py -m PyInstaller `
+        --noconfirm `
+        --distpath $DistDir `
+        --workpath $BuildDir `
+        (Join-Path $WindowsDir "netneighbor.spec")
+}
+finally {
+    Pop-Location
+}
+
+$outFolder = Join-Path $DistDir "NetNeighbor"
+if (-not (Test-Path $outFolder)) {
+    throw "PyInstaller output not found: $outFolder"
+}
+
+$zipName = "NetNeighbor-$Version-win64.zip"
+$zipPath = Join-Path $DistDir $zipName
+if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+Compress-Archive -Path $outFolder -DestinationPath $zipPath
+
+Write-Host "Built:"
+Write-Host "  $outFolder"
+Write-Host "  $zipPath"
+Write-Host "Next: .\packaging\windows\build_installer.ps1 -Version $Version"

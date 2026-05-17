@@ -1,97 +1,56 @@
-# Packaging (`.deb` + `tar.gz`)
+# Packaging
 
-This project ships helper scripts under `packaging/` to build:
+NetNeighbor ships platform-specific build scripts under `packaging/`.  
+**Linux** scripts currently produce **GTK 1.x** packages; **Windows** and **macOS** skeletons target **2.0** via **`app.py`** (PySide6). During migration, builds fall back to `app_qt.py` if `app.py` is not present yet. After the port, follow [`packaging/POST_PORT.md`](../packaging/POST_PORT.md).
 
-- a Debian package (`.deb`) for Ubuntu/Debian/Linux Mint
-- a portable source/runtime archive (`tar.gz`)
+Layout: [`packaging/README.md`](../packaging/README.md).
 
-## Prerequisites (build machine)
+---
+
+## Linux (`packaging/linux/`)
+
+### Prerequisites (build machine)
 
 - Debian/Ubuntu-like environment
-- `git`
-- `dpkg-deb`
-- `tar`
+- `git`, `dpkg-deb`, `tar`
+- Optional: `msgfmt` (`gettext`) for `.po` → `.mo`
+- Optional (AppImage): [appimagetool](https://github.com/AppImage/AppImageKit/releases) or `bash packaging/linux/build_appimage.sh --download-tool`
 
-Optional (post-install hooks in `.deb` call these if available):
-
-- `desktop-file-utils` (`update-desktop-database`)
-- `gtk-update-icon-cache`
-
-## Build commands
+### Build
 
 From repository root:
 
 ```bash
-chmod +x packaging/build_deb.sh packaging/build_tarball.sh packaging/netneighbor
-./packaging/build_deb.sh
-./packaging/build_tarball.sh
+chmod +x packaging/linux/*.sh packaging/checksums.sh
+./packaging/linux/release.sh
 ```
 
-Both scripts default to the repository root `VERSION` file (first non-empty line).  
-You can still override explicitly, e.g. `./packaging/build_deb.sh 0.7.0`.
-
-## One-command release helper
-
-Use `packaging/release.sh` to run build + checks in one go:
+Or individual targets:
 
 ```bash
-./packaging/release.sh
+./packaging/linux/build_deb.sh
+./packaging/linux/build_tarball.sh
+./packaging/linux/build_appimage.sh    # optional; needs appimagetool
 ```
 
-What it does:
+Version defaults to the first line of `VERSION`; override with `./packaging/linux/release.sh 2.0.0`.
 
-- Python syntax sanity checks (`app.py`, `ui/main_window.py`, `discovery/manager.py`, `utils/app_version.py`)
-- Bash syntax checks for packaging scripts
-- Build `.deb` and `tar.gz`
-- Verify `.deb` metadata (`Version`, `Installed-Size`)
-- Verify embedded runtime `VERSION` and desktop entry `Version=...`
-- Generate checksums file: `dist/SHA256SUMS-<version>.txt`
+### Outputs (`dist/`)
 
-Optional arguments:
+| Artifact | Description |
+|----------|-------------|
+| `netneighbor_<version>_<arch>.deb` | System install under `/usr/share/netneighbor` |
+| `netneighbor-<version>.tar.gz` | Portable tree + `run.sh` |
+| `NetNeighbor-<version>-<arch>.AppImage` | Optional; skipped if appimagetool missing |
+| `SHA256SUMS-<version>.txt` | Checksums (via `packaging/checksums.sh`) |
 
-```bash
-./packaging/release.sh <version> [architecture]
-```
+### Runtime dependencies (`.deb`, GTK 1.x)
 
-Outputs:
+**Depends:** `python3`, `python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`, `python3-zeroconf`, `samba-common-bin`, AppIndicator bindings.
 
-- `dist/netneighbor_<version>_<arch>.deb`
-- `dist/netneighbor-<version>.tar.gz`
+See `packaging/linux/build_deb.sh` for the full file list and icon layout.
 
-## `.deb` package layout
-
-- App files: `/usr/share/netneighbor/`
-- Launcher: `/usr/bin/netneighbor`
-- Desktop entry: `/usr/share/applications/netneighbor.desktop`
-- Icons (**SVG scalable**):
-  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg` — app/launcher icon (source: `assets/svg/netneighbor_icon.svg`)
-  - `/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg` — coloured tray icon for light GTK themes (source: `assets/svg/netneighbor-tray.svg`)
-  - `/usr/share/icons/hicolor/scalable/status/io.esp3d.netneighbor-tray-symbolic.svg` — white symbolic tray icon for dark GTK themes (source: `assets/svg/netneighbor-tray-symbolic.svg`)
-
-  The tray code (`ui/tray_indicator.py`) selects the icon at startup based on `gtk-theme-name`: themes containing `"dark"` or with `gtk-application-prefer-dark-theme=true` use the symbolic (white) variant; others use the coloured variant.
-
-  In dev mode (running from source) the same icons are resolved via `assets/icons/hicolor/` symlinks registered with `Gtk.IconTheme.append_search_path()`.
-
-The `.deb` embeds runtime-relevant tracked paths only (`discovery/`, `ui/`, `utils/`, `model/`, `data/`, `config/`, `assets/`, `locale/`, plus entrypoint/docs files listed in `packaging/build_deb.sh`).
-
-Desktop category is network-oriented:
-
-```ini
-Categories=Network;Utility;GTK;
-```
-
-## Runtime dependencies in `.deb`
-
-**Depends** (hard):
-
-- `python3`, `python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`, `python3-zeroconf`
-
-**Recommends** (installed by default with `apt install ./…deb` unless `--no-install-recommends`):
-
-- `samba-common-bin` — provides **`nmblookup`** for NetBIOS discovery (**not** the Samba server).
-- `gir1.2-ayatanaappindicator3-0.1` **|** `gir1.2-appindicator3-0.1` — GObject bindings so the panel tray icon works on typical desktops.
-
-## Install / uninstall (`.deb`)
+### Install / cleanup
 
 ```bash
 sudo apt install ./dist/netneighbor_<version>_amd64.deb
@@ -99,25 +58,102 @@ netneighbor
 sudo apt remove netneighbor
 ```
 
-Notes:
-
-- `apt remove` / `apt purge` do not delete per-user data under `~/.config/netneighbor` and `~/.cache/netneighbor`.
-- For explicit user-data cleanup, run:
-
 ```bash
-./packaging/cleanup-user-data.sh
+sudo bash packaging/linux/cleanup.sh
+bash packaging/linux/cleanup-user-data.sh
 ```
 
-## `tar.gz` usage
+Tarball: extract, `./run.sh`, optional `./install-desktop.sh`.
 
-```bash
-tar -xzf dist/netneighbor-<version>.tar.gz
-cd netneighbor-<version>
-./run.sh
+---
+
+## Windows (`packaging/windows/`)
+
+### Prerequisites
+
+- Windows 10/11, Python 3.10+
+- `pip install -r requirements-qt.txt pyinstaller`
+- **Inno Setup 6** (`ISCC.exe` on `PATH`, or set `INNO_SETUP_DIR`)
+- **VC++ Redistributable** on end-user machines — see [`QT_DEV_REQUIREMENTS.md`](QT_DEV_REQUIREMENTS.md)
+
+### Build
+
+```powershell
+.\packaging\windows\build.ps1
+.\packaging\windows\build_installer.ps1
 ```
 
-Notes:
+Optional: `-Version 2.0.0` on both scripts. Uses `.venv\Scripts\python.exe` when present, else `python`.
 
-- `tar.gz` does not register desktop launchers/icons automatically.
-- `install-desktop.sh` included in the tarball installs launcher + icon under `~/.local`.
-- System GTK/PyGObject dependencies must already be present.
+### Outputs (`dist/`)
+
+| Artifact | Description |
+|----------|-------------|
+| `NetNeighbor/` | PyInstaller onedir folder |
+| `NetNeighbor-<version>-win64.zip` | Zipped folder |
+| `NetNeighbor-<version>-win64-setup.exe` | Inno Setup installer |
+
+PyInstaller spec: `packaging/windows/netneighbor.spec` — entry `app.py` (review `hiddenimports` / `datas` after port).
+
+---
+
+## macOS (`packaging/macos/`)
+
+### Prerequisites
+
+- macOS 12+, Python 3.10+ (venv recommended)
+- `pip install -r requirements-qt.txt pyinstaller`
+- Xcode Command Line Tools (`xcode-select --install`) if pip/build tools complain
+
+### Build
+
+```bash
+bash packaging/macos/build_app.sh
+```
+
+### Outputs (`dist/`)
+
+| Artifact | Description |
+|----------|-------------|
+| `NetNeighbor.app` | Application bundle |
+| `NetNeighbor-<version>-macos.zip` | Zipped bundle |
+
+Distribution outside dev machines will need **code signing and notarization** (documented in `POST_PORT.md`).
+
+---
+
+## Checksums (all platforms)
+
+```bash
+packaging/checksums.sh <version> [basename ...]
+```
+
+Without basenames, includes known patterns already in `dist/`. Linux `release.sh` calls this automatically.
+
+---
+
+## GitHub Actions (release tags)
+
+Workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) runs on tags `v*` (e.g. `v2.0.0`):
+
+- **Linux** — full `packaging/linux/release.sh`, assets attached to the GitHub Release
+- **Windows / macOS** — PyInstaller skeleton builds (`continue-on-error: true` until validated locally)
+
+Push a tag to trigger:
+
+```bash
+git tag v2.0.0
+git push origin v2.0.0
+```
+
+---
+
+## 2.0 migration note
+
+Do not expect Windows/macOS CI builds to be production-ready until:
+
+1. UI port is complete (`app.py`, systray, notification history).
+2. [`packaging/POST_PORT.md`](../packaging/POST_PORT.md) checklist is done (`app_qt.py` removed).
+3. Local builds pass on each OS; then tighten CI (`continue-on-error: false`).
+
+Linux `.deb` / `tar.gz` / AppImage will switch from GTK to PySide6 in the same pass.
