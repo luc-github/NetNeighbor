@@ -12,7 +12,7 @@ from gettext import gettext as _
 import os
 from typing import Any
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QPoint, QUrl, Qt
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -73,6 +74,9 @@ class DeviceDetailsDialog(QDialog):
         initial_tab: str | None = None,
         icon_settings: DeviceIconSettings | None = None,
         command_settings: DeviceCommandSettings | None = None,
+        on_set_field_rule: Callable[[str, str], None] | None = None,
+        field_rules: dict[str, list[str]] | None = None,
+        on_delete_field_rule: Callable[[str, str], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(_("Device details") + f" - {model.title}")
@@ -80,6 +84,12 @@ class DeviceDetailsDialog(QDialog):
         self.resize(720, 520)
 
         self._icon_settings = icon_settings
+        self._on_set_field_rule = on_set_field_rule
+        self._field_rules: dict[str, list[str]] = field_rules or {}
+        self._on_delete_field_rule = on_delete_field_rule
+        self._field_rules_table: QTableWidget | None = None
+        self._field_rules_rows: list[tuple[str, str]] = []
+        self._field_rules_del_btn: QPushButton | None = None
         self._icon_mode_group: QButtonGroup | None = None
         self._icon_detail_label: QLabel | None = None
         self._provided_icon_preview: QLabel | None = None
@@ -178,10 +188,31 @@ class DeviceDetailsDialog(QDialog):
         return row + 1
 
     def _build_services_tab(self, model: DeviceDetailsViewModel) -> QWidget | None:
+        show_rules = (
+            self._on_set_field_rule is not None
+            or self._on_delete_field_rule is not None
+            or bool(self._field_rules)
+        )
+        rules_box: QWidget | None = None
+        if show_rules:
+            rules_box = self._build_field_rules_box(
+                self._field_rules,
+                self._on_delete_field_rule or (lambda t, f: None),
+            )
+
         if model.mdns_service_sections:
-            return self._build_mdns_services_page(model.mdns_service_sections)
+            return self._build_mdns_services_page(model.mdns_service_sections, prefix_widget=rules_box)
+
         if not model.services_records:
-            return None
+            if rules_box is None:
+                return None
+            page = QWidget()
+            lay = QVBoxLayout(page)
+            lay.setContentsMargins(12, 12, 12, 12)
+            lay.addWidget(rules_box)
+            lay.addStretch(1)
+            return page
+
         table = QTableWidget(len(model.services_records), 3)
         table.setHorizontalHeaderLabels([_("Service"), _("Target"), _("Port")])
         table.horizontalHeader().setStretchLastSection(True)
@@ -192,22 +223,149 @@ class DeviceDetailsDialog(QDialog):
             table.setItem(r, 1, QTableWidgetItem(target))
             table.setItem(r, 2, QTableWidgetItem(port))
         table.resizeColumnsToContents()
-        return table
+        if rules_box is None:
+            return table
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(12, 12, 12, 12)
+        lay.setSpacing(8)
+        lay.addWidget(rules_box)
+        lay.addWidget(table, stretch=1)
+        return page
 
-    def _build_mdns_services_page(self, sections: list[dict[str, Any]]) -> QWidget:
+    def _build_mdns_services_page(
+        self, sections: list[dict[str, Any]], *, prefix_widget: QWidget | None = None
+    ) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
+        inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        inner.setStyleSheet("background-color: palette(base);")
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
+        if prefix_widget is not None:
+            layout.addWidget(prefix_widget)
+        txt_rule_handler = self._handle_txt_rule if self._on_set_field_rule is not None else None
         for raw in sections:
             if isinstance(raw, dict):
-                layout.addWidget(MdnsServiceSection(raw, expanded=False))
+                layout.addWidget(
+                    MdnsServiceSection(
+                        raw,
+                        expanded=False,
+                        on_txt_rule=txt_rule_handler,
+                    )
+                )
         layout.addStretch(1)
         scroll.setWidget(inner)
         return scroll
+
+    def _build_field_rules_box(
+        self,
+        rules: dict[str, list[str]],
+        on_delete: Callable[[str, str], None],
+    ) -> QGroupBox:
+        self._field_rules_rows.clear()
+        for target_key, paths in rules.items():
+            for path in paths:
+                self._field_rules_rows.append((target_key, path))
+
+        box = QGroupBox(_("Field mapping rules"))
+        box_layout = QVBoxLayout(box)
+        box_layout.setContentsMargins(8, 4, 8, 8)
+        box_layout.setSpacing(4)
+
+        table = QTableWidget(len(self._field_rules_rows), 2)
+        self._field_rules_table = table
+        table.setHorizontalHeaderLabels([_("Target"), _("Field")])
+        table.horizontalHeader().setStretchLastSection(True)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.verticalHeader().setVisible(False)
+        self._populate_field_rules_table()
+        row_h = table.horizontalHeader().height() + len(self._field_rules_rows) * 26 + 8
+        table.setFixedHeight(max(60, row_h))
+        box_layout.addWidget(table)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        del_btn = QPushButton(_("Remove"))
+        self._field_rules_del_btn = del_btn
+        del_btn.setEnabled(False)
+        btn_row.addWidget(del_btn)
+        box_layout.addLayout(btn_row)
+
+        def _on_selection() -> None:
+            del_btn.setEnabled(table.currentRow() >= 0)
+
+        def _on_remove() -> None:
+            r = table.currentRow()
+            if r < 0 or r >= len(self._field_rules_rows):
+                return
+            tk, fp = self._field_rules_rows[r]
+            self._field_rules_rows.pop(r)
+            # Keep _field_rules in sync
+            bucket = self._field_rules.get(tk, [])
+            if fp in bucket:
+                bucket.remove(fp)
+            if not bucket:
+                self._field_rules.pop(tk, None)
+            table.removeRow(r)
+            new_h = table.horizontalHeader().height() + len(self._field_rules_rows) * 26 + 8
+            table.setFixedHeight(max(60, new_h))
+            del_btn.setEnabled(table.rowCount() > 0 and table.currentRow() >= 0)
+            on_delete(tk, fp)
+
+        table.itemSelectionChanged.connect(_on_selection)
+        del_btn.clicked.connect(_on_remove)
+        return box
+
+    def _populate_field_rules_table(self) -> None:
+        """Fill the rules table from self._field_rules_rows (no resize)."""
+        if self._field_rules_table is None:
+            return
+        target_labels = {
+            "name": _("Friendly name"),
+            "location": _("Location"),
+            "information": _("Information"),
+        }
+        table = self._field_rules_table
+        for r, (tk, fp) in enumerate(self._field_rules_rows):
+            tgt_item = QTableWidgetItem(target_labels.get(tk, tk))
+            tgt_item.setData(Qt.ItemDataRole.UserRole, tk)
+            fp_item = QTableWidgetItem(fp)
+            flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+            tgt_item.setFlags(flags)
+            fp_item.setFlags(flags)
+            table.setItem(r, 0, tgt_item)
+            table.setItem(r, 1, fp_item)
+        table.resizeColumnsToContents()
+
+    def _refresh_field_rules_table(self) -> None:
+        """Rebuild rules rows from self._field_rules and repopulate the table."""
+        if self._field_rules_table is None:
+            return
+        self._field_rules_rows.clear()
+        for tk, paths in self._field_rules.items():
+            for fp in paths:
+                self._field_rules_rows.append((tk, fp))
+        table = self._field_rules_table
+        table.setRowCount(len(self._field_rules_rows))
+        self._populate_field_rules_table()
+        new_h = table.horizontalHeader().height() + len(self._field_rules_rows) * 26 + 8
+        table.setFixedHeight(max(60, new_h))
+        if self._field_rules_del_btn is not None:
+            self._field_rules_del_btn.setEnabled(False)
+
+    def _handle_txt_rule(self, target: str, field_path: str) -> None:
+        """Intercepts TXT right-click rule assignment: updates local state then calls external cb."""
+        # Replace semantics: one path per target
+        self._field_rules[target] = [field_path]
+        self._refresh_field_rules_table()
+        if self._on_set_field_rule is not None:
+            self._on_set_field_rule(target, field_path)
 
     def _build_raw_tab(self, model: DeviceDetailsViewModel) -> QWidget | None:
         raw = model.raw_content
@@ -548,8 +706,15 @@ def _filter_mdns_txt_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, str]
 class MdnsServiceSection(QFrame):
     """One mDNS service block with a collapsible TXT / metadata body (GTK parity)."""
 
-    def __init__(self, section: dict[str, Any], *, expanded: bool = False) -> None:
+    def __init__(
+        self,
+        section: dict[str, Any],
+        *,
+        expanded: bool = False,
+        on_txt_rule: Callable[[str, str], None] | None = None,
+    ) -> None:
         super().__init__()
+        self._on_txt_rule = on_txt_rule
         self.setObjectName("nnMdnsServiceSection")
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -633,9 +798,17 @@ class MdnsServiceSection(QFrame):
             table.horizontalHeader().setStretchLastSection(True)
             table.verticalHeader().setVisible(False)
             table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
             table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             table.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+            if self._on_txt_rule is not None:
+                table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+                table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+                table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                table.customContextMenuRequested.connect(
+                    lambda pos, t=table: self._show_txt_context_menu(pos, t)
+                )
+            else:
+                table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
             table.setStyleSheet(
                 "QTableWidget { outline: none; }"
                 "QTableWidget::item { border: none; }"
@@ -647,7 +820,7 @@ class MdnsServiceSection(QFrame):
             for r, (tk, tv) in enumerate(filtered):
                 key_item = QTableWidgetItem(tk)
                 val_item = QTableWidgetItem(tv)
-                flags = Qt.ItemFlag.ItemIsEnabled
+                flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
                 key_item.setFlags(flags)
                 val_item.setFlags(flags)
                 table.setItem(r, 0, key_item)
@@ -659,6 +832,31 @@ class MdnsServiceSection(QFrame):
 
         outer.addWidget(self._body)
         self._body.setVisible(expanded)
+
+    def _show_txt_context_menu(self, pos: QPoint, table: QTableWidget) -> None:
+        if self._on_txt_rule is None:
+            return
+        item = table.itemAt(pos)
+        if item is None:
+            return
+        key_item = table.item(item.row(), 0)
+        if key_item is None:
+            return
+        key = key_item.text()
+        menu = QMenu(table)
+        menu.addAction(
+            _("Use as Friendly name"),
+            lambda: self._on_txt_rule("name", f"txt:{key}"),  # type: ignore[misc]
+        )
+        menu.addAction(
+            _("Use as Location"),
+            lambda: self._on_txt_rule("location", f"txt:{key}"),  # type: ignore[misc]
+        )
+        menu.addAction(
+            _("Use as Information"),
+            lambda: self._on_txt_rule("information", f"txt:{key}"),  # type: ignore[misc]
+        )
+        menu.exec(table.viewport().mapToGlobal(pos))
 
     def _update_header_text(self, expanded: bool) -> None:
         chevron = "▾" if expanded else "▸"
@@ -688,6 +886,9 @@ def show_device_details_dialog(
     initial_tab: str | None = None,
     icon_settings: DeviceIconSettings | None = None,
     command_settings: DeviceCommandSettings | None = None,
+    on_set_field_rule: Callable[[str, str], None] | None = None,
+    field_rules: dict[str, list[str]] | None = None,
+    on_delete_field_rule: Callable[[str, str], None] | None = None,
 ) -> None:
     DeviceDetailsDialog(
         parent,
@@ -695,4 +896,7 @@ def show_device_details_dialog(
         initial_tab=initial_tab,
         icon_settings=icon_settings,
         command_settings=command_settings,
+        on_set_field_rule=on_set_field_rule,
+        field_rules=field_rules,
+        on_delete_field_rule=on_delete_field_rule,
     ).exec()

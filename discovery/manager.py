@@ -2202,18 +2202,32 @@ class DiscoveryManager:
         if not key:
             return ""
         if prefix == "txt":
-            txt = metadata.get("txt") if isinstance(metadata.get("txt"), dict) else {}
-            for rk, rv in txt.items():
-                if isinstance(rk, str) and str(rk).strip().lower() == key.lower() and isinstance(rv, str):
-                    return rv
-            services = metadata.get("services") if isinstance(metadata.get("services"), list) else []
-            for svc in services:
-                if not isinstance(svc, dict):
-                    continue
-                st = svc.get("txt") if isinstance(svc.get("txt"), dict) else {}
-                for rk, rv in st.items():
+            def _txt_search(meta: dict) -> str:
+                txt = meta.get("txt") if isinstance(meta.get("txt"), dict) else {}
+                for rk, rv in txt.items():
                     if isinstance(rk, str) and str(rk).strip().lower() == key.lower() and isinstance(rv, str):
                         return rv
+                services = meta.get("services") if isinstance(meta.get("services"), list) else []
+                for svc in services:
+                    if not isinstance(svc, dict):
+                        continue
+                    st = svc.get("txt") if isinstance(svc.get("txt"), dict) else {}
+                    for rk, rv in st.items():
+                        if isinstance(rk, str) and str(rk).strip().lower() == key.lower() and isinstance(rv, str):
+                            return rv
+                return ""
+            found = _txt_search(metadata)
+            if found:
+                return found
+            # Fall back to sibling devices with the same IP (e.g. SSDP primary + mDNS TXT data)
+            ip_norm = str(device.ip).strip()
+            for sibling in self._devices.values():
+                if sibling is device or str(sibling.ip).strip() != ip_norm:
+                    continue
+                sib_meta = sibling.metadata if isinstance(sibling.metadata, dict) else {}
+                found = _txt_search(sib_meta)
+                if found:
+                    return found
             return ""
         if prefix == "xml":
             xml_fields = metadata.get("xml_fields") if isinstance(metadata.get("xml_fields"), dict) else {}

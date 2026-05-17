@@ -231,6 +231,9 @@ class NetNeighborMainWindow(QMainWindow):
             raw_cc = prefs.get("custom_command_overrides")
             if isinstance(raw_cc, dict):
                 discovery_manager.set_custom_command_overrides(raw_cc)
+            raw_fmr = prefs.get("field_mapping_rules")
+            if isinstance(raw_fmr, dict):
+                discovery_manager.set_field_mapping_rules(raw_fmr)
 
         self._last_devices: list[Device] = []
         self._bundles: list[DeviceBundle] = []
@@ -838,6 +841,7 @@ class NetNeighborMainWindow(QMainWindow):
         if self._discovery_manager is not None:
             prefs["device_commands"] = self._discovery_manager.get_device_commands_overrides()
             prefs["custom_command_overrides"] = self._discovery_manager.get_custom_command_overrides()
+            prefs["field_mapping_rules"] = self._discovery_manager.get_field_mapping_rules()
         save_ui_preferences(prefs)
 
     def _sync_menu_checks_from_state(self) -> None:
@@ -1277,12 +1281,46 @@ class NetNeighborMainWindow(QMainWindow):
                 on_set_device_commands=_on_set_device_commands,
             )
 
+        field_rule_cb = None
+        field_rules: dict[str, list[str]] | None = None
+        delete_rule_cb = None
+        if self._discovery_manager is not None:
+            def _on_set_field_rule(target: str, field_path: str) -> None:
+                if self._discovery_manager is None:
+                    return
+                for dev in bundle.devices:
+                    self._discovery_manager.remove_device_field_mapping_rule(
+                        dev.source, dev.ip, dev.port, target
+                    )
+                    self._discovery_manager.set_device_field_mapping_rule(
+                        dev.source, dev.ip, dev.port, target, field_path
+                    )
+                self._persist_ui_prefs()
+            field_rule_cb = _on_set_field_rule
+
+            fr = self._discovery_manager.get_device_field_mapping_rules(bundle.primary)
+            if fr:
+                field_rules = fr
+
+            def _on_delete_field_rule(target: str, field_path: str) -> None:
+                if self._discovery_manager is None:
+                    return
+                for dev in bundle.devices:
+                    self._discovery_manager.remove_device_field_mapping_rule(
+                        dev.source, dev.ip, dev.port, target, field_path
+                    )
+                self._persist_ui_prefs()
+            delete_rule_cb = _on_delete_field_rule
+
         show_device_details_dialog(
             self,
             model,
             initial_tab=initial_tab,
             icon_settings=icon_settings,
             command_settings=command_settings,
+            on_set_field_rule=field_rule_cb,
+            field_rules=field_rules,
+            on_delete_field_rule=delete_rule_cb,
         )
 
     def _set_bundle_monitored(self, bundle: DeviceBundle, monitored: bool) -> None:
