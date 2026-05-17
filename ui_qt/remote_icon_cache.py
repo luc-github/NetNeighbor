@@ -198,6 +198,19 @@ class QtRemoteIconCache(QObject):
         display = size if size > 0 else DEVICE_ICON_REFERENCE_PX
         return qicon_from_icon_bytes(data, display)
 
+    def bytes_for_device(self, device: Device) -> bytes | None:
+        """Return cached icon bytes (memory or disk) without triggering a network fetch."""
+        sip = str(device.ip).strip()
+        if sip:
+            hit = self._bytes_by_host.get(sip)
+            if hit:
+                return hit
+        for key in iter_remote_icon_disk_keys(device):
+            cached = self._bytes_by_key.get(key)
+            if cached:
+                return cached
+        return load_remote_icon_payload_for_device(device)
+
     def prefetch_bundle(self, bundle: DeviceBundle, size: int) -> None:
         for dev in (
             bundle.ssdp_device,

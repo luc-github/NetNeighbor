@@ -102,7 +102,7 @@ def _join_descriptor_base_and_path(base_url: str, absolute_path: str) -> str | N
     return urlunparse((p.scheme, p.netloc, path, "", "", ""))
 
 
-_VALID_COMMAND_SCHEMES = frozenset(("http", "https", "smb", "ftp", "ssh", "sftp", "telnet"))
+_VALID_COMMAND_SCHEMES = frozenset(("http", "https", "smb", "ftp", "ssh", "sftp", "telnet", "custom"))
 _VALID_COMMAND_MODES = frozenset(("override", "additional"))
 
 

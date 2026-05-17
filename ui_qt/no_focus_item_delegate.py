@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QListWidget, QStyledItemDelegate, QStyle, QStyleOptionViewItem
+from PySide6.QtWidgets import QApplication, QListWidget, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 
 
 class NoFocusItemDelegate(QStyledItemDelegate):
@@ -36,4 +36,9 @@ class NoFocusItemDelegate(QStyledItemDelegate):
         self.initStyleOption(opt, index)
         opt.state &= ~QStyle.StateFlag.State_HasFocus
         opt.state &= ~QStyle.StateFlag.State_Selected
-        super().paint(painter, opt, index)
+        # Call drawControl directly instead of super().paint() to avoid the
+        # second initStyleOption() call inside QStyledItemDelegate::paint that
+        # would re-read view state and overwrite our WrapText / ElideNone overrides.
+        widget = opt.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, widget)

@@ -19,7 +19,8 @@ _ITEM_PADDING_PX = 2
 _ITEM_INSET_LR = 2 * (_ITEM_BORDER_PX + _ITEM_PADDING_PX)
 _ITEM_EXTRA_PAD = 4
 
-_MAX_LABEL_LINES = 5
+_MAX_LABEL_LINES = 5   # cap: never measure beyond this many lines
+_MIN_LABEL_LINES = 2   # floor: always reserve at least this many lines per cell
 
 # Shared by flat icon list and Type / Location section lists.
 LONG_NAME_WRAP_MIN_WIDTH_FACTOR = 3
@@ -28,27 +29,132 @@ LONG_NAME_WRAP_MIN_WIDTH_FACTOR = 3
 TILE_H_MARGIN = 26
 
 
-def break_label_for_width(label: str, fm: QFontMetrics, max_px: int) -> str:
-    """Insert \\n in words wider than max_px so Qt wraps them as explicit line breaks."""
-    out: list[str] = []
-    for line in label.split("\n"):
-        words = line.split(" ")
-        new_words: list[str] = []
-        for word in words:
-            if fm.horizontalAdvance(word) > max_px:
-                new_w = ""
-                cur_px = 0
-                for ch in word:
-                    ch_px = fm.horizontalAdvance(ch)
-                    if cur_px + ch_px > max_px and cur_px > 0:
-                        new_w += "\n"
-                        cur_px = 0
-                    new_w += ch
-                    cur_px += ch_px
-                word = new_w
-            new_words.append(word)
-        out.append(" ".join(new_words))
-    return "\n".join(out)
+def _split_word_at_hyphens(word: str, fm: QFontMetrics, max_px: int) -> list[str]:
+    """Group hyphen-delimited parts of *word* into chunks that fit within *max_px*."""
+    raw = word.split('-')
+    if len(raw) <= 1:
+        return [word]
+    parts = [p + '-' for p in raw[:-1]] + [raw[-1]]
+    tokens: list[str] = []
+    current = ''
+    for part in parts:
+        test = current + part
+        if fm.horizontalAdvance(test) <= max_px:
+            current = test
+        else:
+            if current:
+                tokens.append(current)
+            current = part
+    if current:
+        tokens.append(current)
+    return tokens or [word]
+
+
+def _split_by_chars(text: str, fm: QFontMetrics, max_px: int) -> list[str]:
+    """Split *text* character-by-character into chunks fitting *max_px*."""
+    lines: list[str] = []
+    current = ''
+    for ch in text:
+        test = current + ch
+        if fm.horizontalAdvance(test) <= max_px:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = ch
+    if current:
+        lines.append(current)
+    return lines or ['']
+
+
+def _wrap_one_segment(text: str, fm: QFontMetrics, max_px: int) -> list[str]:
+    """Wrap a single text segment (no \\n) into lines of at most *max_px* pixels.
+
+    Cascade: word boundaries → hyphens within a word → characters.
+    """
+    text = text.strip()
+    if not text:
+        return []
+    if fm.horizontalAdvance(text) <= max_px:
+        return [text]
+
+    lines: list[str] = []
+    current = ''
+
+    for word in text.split(' '):
+        if not word:
+            continue
+        candidate = (current + ' ' + word) if current else word
+        if fm.horizontalAdvance(candidate) <= max_px:
+            current = candidate
+            continue
+
+        if current:
+            lines.append(current)
+            current = ''
+
+        if fm.horizontalAdvance(word) <= max_px:
+            current = word
+            continue
+
+        # Word itself is too wide — try hyphen splits then char splits
+        for token in _split_word_at_hyphens(word, fm, max_px):
+            t_candidate = (current + token) if current else token
+            if fm.horizontalAdvance(t_candidate) <= max_px:
+                current = t_candidate
+            else:
+                if current:
+                    lines.append(current)
+                    current = ''
+                if fm.horizontalAdvance(token) <= max_px:
+                    current = token
+                else:
+                    char_lines = _split_by_chars(token, fm, max_px)
+                    lines.extend(char_lines[:-1])
+                    current = char_lines[-1] if char_lines else ''
+
+    if current:
+        lines.append(current)
+    return lines or [text]
+
+
+def smart_break_label(label: str, fm: QFontMetrics, max_px: int, max_lines: int = _MAX_LABEL_LINES) -> str:
+    """Break *label* into lines fitting *max_px*, honouring existing \\n.
+
+    Cascade: spaces → hyphens → characters.  When the result still exceeds
+    *max_lines*, flattens and force-wraps char-by-char into at most *max_lines*.
+    """
+    if not label or max_px <= 0:
+        return label or ''
+
+    all_lines: list[str] = []
+    for segment in label.split('\n'):
+        all_lines.extend(_wrap_one_segment(segment, fm, max_px))
+
+    if len(all_lines) <= max_lines:
+        return '\n'.join(all_lines) if all_lines else label
+
+    # Over limit: flatten and force into max_lines via char-level cutting
+    flat = ' '.join(label.replace('\n', ' ').split())
+    forced: list[str] = []
+    current = ''
+    for ch in flat:
+        if len(forced) >= max_lines - 1:
+            test = current + ch
+            if fm.horizontalAdvance(test) <= max_px:
+                current = test
+            # else: silently truncate — text genuinely too long for max_lines
+        else:
+            test = current + ch
+            if fm.horizontalAdvance(test) <= max_px:
+                current = test
+            else:
+                if current:
+                    forced.append(current)
+                current = ch
+    if current and len(forced) < max_lines:
+        forced.append(current)
+    return '\n'.join(forced) if forced else label[:1]
 
 
 def format_icon_tile_label(name: str) -> str:
@@ -71,30 +177,6 @@ def icon_mode_label_font(list_widget: QListWidget) -> QFont:
     if pt > 0:
         font.setPointSizeF(max(1.0, pt * 0.85))
     return font
-
-
-def _text_block_height(
-    fm: QFontMetrics,
-    labels: list[str],
-    inner_width: int,
-    *,
-    use_wrap: bool,
-) -> int:
-    inner_w = max(32, inner_width - _ITEM_INSET_LR)
-    max_h = fm.height()
-    # TextSingleLine strips explicit \n characters, underestimating height for labels
-    # pre-formatted by format_icon_tile_label.  Use TextWordWrap whenever any label
-    # contains a newline so Qt's boundingRect measures all rendered lines.
-    any_newline = any("\n" in lbl for lbl in (labels or []))
-    flags = Qt.TextFlag.TextWordWrap if (use_wrap or any_newline) else Qt.TextFlag.TextSingleLine
-    cap_h = fm.lineSpacing() * _MAX_LABEL_LINES if (use_wrap or any_newline) else 0
-    for lbl in labels or ["—"]:
-        rect = fm.boundingRect(0, 0, inner_w, 10_000, flags, lbl)
-        h = rect.height()
-        if cap_h > 0:
-            h = min(h, cap_h)
-        max_h = max(max_h, h)
-    return max_h
 
 
 def compute_icon_mode_cell_size(
@@ -136,8 +218,8 @@ def compute_icon_mode_cell_size(
     count = len(labels)
     if count <= 0:
         return (
-            QSize(min_w, ih + label_gap + fm.height() + horizontal_pad + _ITEM_INSET_LR + _ITEM_EXTRA_PAD),
-            False,
+            QSize(min_w, ih + label_gap + fm.lineSpacing() * _MIN_LABEL_LINES + horizontal_pad + _ITEM_INSET_LR + _ITEM_EXTRA_PAD),
+            True,
         )
 
     vp = max(min_w, viewport_width)
@@ -166,38 +248,32 @@ def compute_icon_mode_cell_size(
     if max_cell_width is not None:
         cell_w = max(min_w, max_cell_width)  # fixed target width, not just a ceiling
 
+    text_zone_w = max(30, cell_w - TILE_H_MARGIN)
+
+    # Pre-break every label with the smart algorithm and count the maximum line count.
+    # Since we own all line breaks, cell height is exact — no estimation via boundingRect.
+    broken_for_height = [smart_break_label(lbl, fm, text_zone_w) for lbl in (labels or ["—"])]
+    max_n_lines = max(lbl.count('\n') + 1 for lbl in broken_for_height)
+    max_n_lines = max(max_n_lines, _MIN_LABEL_LINES)
+    text_h = max_n_lines * fm.lineSpacing()
+
     _LOG.debug(
         "cell_size icon=%dpx vp=%d count=%d text_w=%d min_w=%d "
-        "computed=%d long_name=%d cap=%s → cell_w=%d text_zone=%d",
+        "computed=%d long_name=%d cap=%s → cell_w=%d zone=%d lines=%d",
         iw, viewport_width, count, text_w, min_w,
         cell_w_before_long, cell_w_before_cap,
         str(max_cell_width),
-        cell_w, max(0, cell_w - TILE_H_MARGIN),
+        cell_w, text_zone_w, max_n_lines,
     )
 
-    use_wrap = True  # always word-wrap so Qt renders explicit \n characters correctly
-    # Measure height from broken labels so forced \n added by break_label_for_width
-    # (called by callers after relayout) are accounted for in cell height.
-    text_zone_w = max(30, cell_w - TILE_H_MARGIN)
-    broken_for_height = [break_label_for_width(lbl, fm, text_zone_w) for lbl in (labels or ["—"])]
-    text_h = _text_block_height(
-        fm,
-        broken_for_height,
-        cell_w - horizontal_pad * 2,
-        use_wrap=use_wrap,
-    )
-    # Always reserve space for _MAX_LABEL_LINES regardless of actual label content so text
-    # area stays consistent across all icon size presets and short names don't collapse the cell.
-    text_h = max(text_h, fm.lineSpacing() * _MAX_LABEL_LINES)
     cell_h = ih + label_gap + text_h + horizontal_pad + _ITEM_INSET_LR + _ITEM_EXTRA_PAD
-
-    return QSize(cell_w, cell_h), use_wrap
+    return QSize(cell_w, cell_h), True
 
 
 def icon_list_spacing_for_cell(icon_size: QSize) -> int:
     """Inter-tile spacing scaled with icon preset."""
     h = max(1, icon_size.height())
-    return max(8, min(36, h // 4))
+    return max(4, min(12, h // 8))
 
 
 def icon_list_content_height(
@@ -217,7 +293,7 @@ def icon_list_content_height(
     spacing = list_widget.spacing()
     cols = max(1, (vp_w + spacing) // (cw + spacing))
     rows = (count + cols - 1) // cols
-    return rows * ch + (rows + 1) * spacing
+    return rows * ch + rows * spacing
 
 
 def apply_icon_mode_list_layout(
@@ -238,11 +314,13 @@ def apply_icon_mode_list_layout(
         vp_w = fallback_viewport_width
 
     iw = icon_size.width()
-    # Fixed max tile widths: 3×48=144 for small/medium/large, icon-driven for xlarge (text≈250px).
+    # Fixed max tile widths: 3×48=144 for small/medium, icon+96 for large (192px), icon-driven for xlarge.
     if iw >= 256:
-        max_cw = iw + 20  # 276px → text zone = 276 - 26 = 250px
+        max_cw = iw + 20          # xlarge: 276px → text zone ≈ 250px
+    elif iw >= 96:
+        max_cw = iw + 96          # large: 192px → text zone ≈ 166px (avoids 3-line wrapping)
     else:
-        max_cw = 3 * 48   # 144px for small/medium/large
+        max_cw = 3 * 48           # small/medium: 144px
 
     _LOG.debug("apply_layout icon=%dpx vp=%d max_cw=%d labels=%d", iw, vp_w, max_cw, len(labels))
 
@@ -255,6 +333,7 @@ def apply_icon_mode_list_layout(
         max_cell_width=max_cw,
     )
     list_widget.setWordWrap(use_wrap)
+    list_widget.setTextElideMode(Qt.TextElideMode.ElideNone)
     list_widget.setGridSize(cell)
     list_widget.setMinimumHeight(0)
     list_widget.setMaximumHeight(16777215)

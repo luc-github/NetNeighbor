@@ -7,16 +7,17 @@ from __future__ import annotations
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from gettext import gettext as _
 import os
 from typing import Any
 
 from PySide6.QtCore import QUrl, Qt
-from PySide6.QtGui import QDesktopServices, QGuiApplication
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFrame,
@@ -41,6 +42,16 @@ from utils.details_payload import detail_field_value_visible
 from utils.device_details_view import DeviceDetailsViewModel
 
 
+_VALID_SCHEMES = ["http", "https", "smb", "ftp", "ssh", "sftp", "telnet", "custom"]
+_VALID_MODES = ["override", "additional"]
+
+
+@dataclass(slots=True)
+class DeviceCommandSettings:
+    device_commands: list[dict] = field(default_factory=list)
+    on_set_device_commands: Callable[[list[dict]], None] = field(default=lambda _: None)
+
+
 @dataclass(slots=True)
 class DeviceIconSettings:
     icon_mode: str
@@ -49,6 +60,8 @@ class DeviceIconSettings:
     selected_custom_icon_id: str | None
     on_apply: Callable[[str, str | None], None]
     on_pick_custom: Callable[[], str | None]
+    provided_icon_pixmap: QPixmap | None = None
+    provided_icon_native_size: tuple[int, int] | None = None
 
 
 class DeviceDetailsDialog(QDialog):
@@ -59,6 +72,7 @@ class DeviceDetailsDialog(QDialog):
         *,
         initial_tab: str | None = None,
         icon_settings: DeviceIconSettings | None = None,
+        command_settings: DeviceCommandSettings | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(_("Device details") + f" - {model.title}")
@@ -68,8 +82,11 @@ class DeviceDetailsDialog(QDialog):
         self._icon_settings = icon_settings
         self._icon_mode_group: QButtonGroup | None = None
         self._icon_detail_label: QLabel | None = None
+        self._provided_icon_preview: QLabel | None = None
+        self._provided_icon_size_lbl: QLabel | None = None
         self._suppress_icon_signals = False
         self._last_icon_mode = "provided"
+        self._cmd_table: QTableWidget | None = None
 
         tabs = QTabWidget()
         tabs.addTab(self._build_overview_tab(model), _("Overview"))
@@ -79,8 +96,11 @@ class DeviceDetailsDialog(QDialog):
         raw = self._build_raw_tab(model)
         if raw is not None:
             tabs.addTab(raw, _("Device data"))
-        if icon_settings is not None:
-            tabs.addTab(self._build_options_tab(icon_settings, model), _("Options"))
+        if icon_settings is not None or command_settings is not None:
+            tabs.addTab(
+                self._build_options_tab(icon_settings, command_settings, model),
+                _("Options"),
+            )
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
@@ -211,73 +231,201 @@ class DeviceDetailsDialog(QDialog):
         return page
 
     def _build_options_tab(
-        self, icon: DeviceIconSettings, model: DeviceDetailsViewModel
+        self,
+        icon: DeviceIconSettings | None,
+        cmd: DeviceCommandSettings | None,
+        model: DeviceDetailsViewModel,
     ) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
 
-        icon_box = QGroupBox(_("Use icon from"))
-        icon_layout = QVBoxLayout(icon_box)
-        self._icon_mode_group = QButtonGroup(self)
+        if icon is not None:
+            icon_box = QGroupBox(_("Use icon from"))
+            icon_layout = QVBoxLayout(icon_box)
+            self._icon_mode_group = QButtonGroup(self)
 
-        rb_system = QRadioButton(_("System"))
-        rb_provided = QRadioButton(_("From device"))
-        rb_custom = QRadioButton(_("Custom"))
-        self._icon_mode_group.addButton(rb_system, 0)
-        self._icon_mode_group.addButton(rb_provided, 1)
-        self._icon_mode_group.addButton(rb_custom, 2)
-        icon_layout.addWidget(rb_system)
-        if icon.has_device_icon_source:
-            icon_layout.addWidget(rb_provided)
-        icon_layout.addWidget(rb_custom)
+            rb_system = QRadioButton(_("System"))
+            rb_provided = QRadioButton(_("From device"))
+            rb_custom = QRadioButton(_("Custom"))
+            self._icon_mode_group.addButton(rb_system, 0)
+            self._icon_mode_group.addButton(rb_provided, 1)
+            self._icon_mode_group.addButton(rb_custom, 2)
+            icon_layout.addWidget(rb_system)
+            if icon.has_device_icon_source:
+                icon_layout.addWidget(rb_provided)
+            icon_layout.addWidget(rb_custom)
 
-        self._icon_detail_label = QLabel()
-        self._icon_detail_label.setWordWrap(True)
-        self._icon_detail_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        icon_layout.addWidget(self._icon_detail_label)
+            self._icon_detail_label = QLabel()
+            self._icon_detail_label.setWordWrap(True)
+            self._icon_detail_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            icon_layout.addWidget(self._icon_detail_label)
 
-        open_folder_btn = QPushButton(_("Open custom icons folder"))
-        open_folder_btn.setSizePolicy(
-            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
-        )
-        open_folder_btn.clicked.connect(self._on_open_custom_icons_folder)
-        icon_layout.addWidget(open_folder_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+            self._provided_icon_preview = QLabel()
+            self._provided_icon_preview.setFixedSize(48, 48)
+            self._provided_icon_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._provided_icon_preview.setStyleSheet("background: transparent;")
+            self._provided_icon_size_lbl = QLabel()
+            self._provided_icon_size_lbl.setStyleSheet("color: palette(mid);")
+            preview_row = QHBoxLayout()
+            preview_row.setContentsMargins(0, 0, 0, 0)
+            preview_row.addWidget(self._provided_icon_preview)
+            preview_row.addWidget(self._provided_icon_size_lbl)
+            preview_row.addStretch(1)
+            icon_layout.addLayout(preview_row)
+            self._refresh_provided_icon_preview(icon)
 
-        mode = icon.icon_mode if icon.icon_mode in {"system", "provided", "custom"} else "provided"
-        if mode == "provided" and not icon.has_device_icon_source:
-            mode = "system"
-        self._last_icon_mode = mode
+            open_folder_btn = QPushButton(_("Open custom icons folder"))
+            open_folder_btn.setSizePolicy(
+                QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
+            )
+            open_folder_btn.clicked.connect(self._on_open_custom_icons_folder)
+            icon_layout.addWidget(open_folder_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        self._suppress_icon_signals = True
-        if mode == "system":
-            rb_system.setChecked(True)
-        elif mode == "custom":
-            rb_custom.setChecked(True)
-        else:
-            rb_provided.setChecked(True)
-        self._suppress_icon_signals = False
-        self._refresh_icon_detail_line(icon)
+            mode = icon.icon_mode if icon.icon_mode in {"system", "provided", "custom"} else "provided"
+            if mode == "provided" and not icon.has_device_icon_source:
+                mode = "system"
+            self._last_icon_mode = mode
 
-        self._icon_mode_group.idClicked.connect(
-            lambda btn_id: self._on_icon_mode_clicked(btn_id, icon)
-        )
-        layout.addWidget(icon_box)
+            self._suppress_icon_signals = True
+            if mode == "system":
+                rb_system.setChecked(True)
+            elif mode == "custom":
+                rb_custom.setChecked(True)
+            else:
+                rb_provided.setChecked(True)
+            self._suppress_icon_signals = False
+            self._refresh_icon_detail_line(icon)
 
-        if model.custom_command:
-            cmd = QLabel(_("Custom command") + ": " + model.custom_command)
-            cmd.setWordWrap(True)
-            cmd.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            layout.addWidget(cmd)
-        if model.url_override:
-            url = QLabel(_("URL override") + ": " + model.url_override)
-            url.setWordWrap(True)
-            url.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            layout.addWidget(url)
+            self._icon_mode_group.idClicked.connect(
+                lambda btn_id: self._on_icon_mode_clicked(btn_id, icon)
+            )
+            layout.addWidget(icon_box)
+
+        if cmd is not None:
+            layout.addWidget(self._build_device_commands_box(cmd))
 
         layout.addStretch(1)
         return page
+
+    def _build_device_commands_box(self, cmd: DeviceCommandSettings) -> QGroupBox:
+        box = QGroupBox(_("Commands"))
+        bl = QVBoxLayout(box)
+
+        hint = QLabel(
+            _("Override or add connection endpoints per protocol. "
+              "For 'custom' scheme, enter the command template in IP/Host "
+              "({ip}, {ip_raw}, {port}, {name}, {type}, {category}, {url}). "
+              "IP/Host and Port are optional for other schemes.")
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: palette(mid);")
+        bl.addWidget(hint)
+
+        self._cmd_table = QTableWidget(0, 5)
+        self._cmd_table.setHorizontalHeaderLabels(
+            [_("Scheme"), _("Command"), _("Port"), _("Mode"), _("Label")]
+        )
+        hdr = self._cmd_table.horizontalHeader()
+        hdr.setStretchLastSection(True)
+        hdr.resizeSection(0, 90)
+        hdr.resizeSection(2, 60)
+        hdr.resizeSection(3, 100)
+        self._cmd_table.verticalHeader().setVisible(False)
+        self._cmd_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._cmd_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+        for entry in (cmd.device_commands or []):
+            self._append_command_row(entry)
+
+        bl.addWidget(self._cmd_table)
+
+        btns = QHBoxLayout()
+        add_btn = QPushButton(_("Add"))
+        add_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        add_btn.clicked.connect(self._on_cmd_add_row)
+        del_btn = QPushButton(_("Delete"))
+        del_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        del_btn.clicked.connect(self._on_cmd_delete_row)
+        apply_btn = QPushButton(_("Apply"))
+        apply_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        apply_btn.clicked.connect(lambda: self._on_cmd_table_apply(cmd))
+        btns.addWidget(add_btn)
+        btns.addWidget(del_btn)
+        btns.addStretch(1)
+        btns.addWidget(apply_btn)
+        bl.addLayout(btns)
+        return box
+
+    def _append_command_row(self, entry: dict | None = None) -> None:
+        if self._cmd_table is None:
+            return
+        r = self._cmd_table.rowCount()
+        self._cmd_table.insertRow(r)
+
+        scheme_combo = QComboBox()
+        for s in _VALID_SCHEMES:
+            scheme_combo.addItem(s)
+        if entry:
+            idx = scheme_combo.findText(str(entry.get("scheme", "http")))
+            scheme_combo.setCurrentIndex(max(0, idx))
+        self._cmd_table.setCellWidget(r, 0, scheme_combo)
+
+        ip_item = QTableWidgetItem(str(entry.get("ip", "")) if entry else "")
+        self._cmd_table.setItem(r, 1, ip_item)
+
+        port_val = entry.get("port", 0) if entry else 0
+        port_item = QTableWidgetItem(str(port_val) if port_val else "")
+        self._cmd_table.setItem(r, 2, port_item)
+
+        mode_combo = QComboBox()
+        for m in _VALID_MODES:
+            mode_combo.addItem(m)
+        if entry:
+            idx = mode_combo.findText(str(entry.get("mode", "override")))
+            mode_combo.setCurrentIndex(max(0, idx))
+        self._cmd_table.setCellWidget(r, 3, mode_combo)
+
+        label_item = QTableWidgetItem(str(entry.get("label", "")) if entry else "")
+        self._cmd_table.setItem(r, 4, label_item)
+
+    def _on_cmd_add_row(self) -> None:
+        self._append_command_row(None)
+
+    def _on_cmd_delete_row(self) -> None:
+        if self._cmd_table is None:
+            return
+        row = self._cmd_table.currentRow()
+        if row >= 0:
+            self._cmd_table.removeRow(row)
+
+    def _read_cmd_table_rows(self) -> list[dict]:
+        if self._cmd_table is None:
+            return []
+        result = []
+        for r in range(self._cmd_table.rowCount()):
+            scheme_w = self._cmd_table.cellWidget(r, 0)
+            scheme = scheme_w.currentText() if isinstance(scheme_w, QComboBox) else "http"
+            ip_item = self._cmd_table.item(r, 1)
+            ip = ip_item.text().strip() if ip_item else ""
+            port_item = self._cmd_table.item(r, 2)
+            port_str = port_item.text().strip() if port_item else ""
+            try:
+                port = int(port_str) if port_str else 0
+            except ValueError:
+                port = 0
+            mode_w = self._cmd_table.cellWidget(r, 3)
+            mode = mode_w.currentText() if isinstance(mode_w, QComboBox) else "override"
+            label_item = self._cmd_table.item(r, 4)
+            label = label_item.text().strip() if label_item else ""
+            result.append({"scheme": scheme, "ip": ip, "port": port, "mode": mode, "label": label})
+        return result
+
+    def _on_cmd_table_apply(self, cmd: DeviceCommandSettings) -> None:
+        rows = self._read_cmd_table_rows()
+        cmd.device_commands = rows
+        cmd.on_set_device_commands(rows)
 
     def _current_icon_mode(self, icon: DeviceIconSettings) -> str:
         if self._icon_mode_group is None:
@@ -305,6 +453,37 @@ class DeviceDetailsDialog(QDialog):
         else:
             label = icon.selected_custom_icon_id or _("none")
             self._icon_detail_label.setText(_("Selected icon") + ": " + label)
+
+    def _refresh_provided_icon_preview(self, icon: DeviceIconSettings) -> None:
+        if self._provided_icon_preview is None:
+            return
+        pix = icon.provided_icon_pixmap
+        nat = icon.provided_icon_native_size
+        has_source = icon.has_device_icon_source
+
+        if not has_source:
+            self._provided_icon_preview.hide()
+            self._provided_icon_size_lbl.hide()
+            return
+
+        self._provided_icon_preview.show()
+        self._provided_icon_size_lbl.show()
+
+        if pix is not None and not pix.isNull():
+            self._provided_icon_preview.setPixmap(
+                pix.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                           Qt.TransformationMode.SmoothTransformation)
+            )
+            if nat:
+                self._provided_icon_size_lbl.setText(f"{nat[0]} × {nat[1]} px")
+            else:
+                self._provided_icon_size_lbl.setText(f"{pix.width()} × {pix.height()} px (cached)")
+        else:
+            self._provided_icon_preview.setText("?")
+            if nat is None and icon.provided_icon_display:
+                self._provided_icon_size_lbl.setText(_("not yet downloaded"))
+            else:
+                self._provided_icon_size_lbl.setText(_("unavailable"))
 
     def _restore_icon_mode_radio(self, icon: DeviceIconSettings) -> None:
         if self._icon_mode_group is None:
@@ -508,10 +687,12 @@ def show_device_details_dialog(
     *,
     initial_tab: str | None = None,
     icon_settings: DeviceIconSettings | None = None,
+    command_settings: DeviceCommandSettings | None = None,
 ) -> None:
     DeviceDetailsDialog(
         parent,
         model,
         initial_tab=initial_tab,
         icon_settings=icon_settings,
+        command_settings=command_settings,
     ).exec()

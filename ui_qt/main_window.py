@@ -41,7 +41,7 @@ from ui_qt.icon_grid_layout import (
     IconListViewportResizeFilter,
     TILE_H_MARGIN,
     apply_icon_mode_list_layout,
-    break_label_for_width,
+    smart_break_label,
     format_icon_tile_label,
     icon_mode_label_font,
     labels_from_icon_list,
@@ -53,7 +53,7 @@ from ui_qt.device_actions import (
     run_custom_command_for_bundle,
 )
 from ui_qt.device_context_menu import show_device_context_menu
-from ui_qt.device_details_dialog import DeviceIconSettings, show_device_details_dialog
+from ui_qt.device_details_dialog import DeviceCommandSettings, DeviceIconSettings, show_device_details_dialog
 from ui_qt.icon_picker_dialog import pick_device_icon_id
 from ui_qt.no_focus_item_delegate import NoFocusItemDelegate
 from utils.app_version import get_app_version
@@ -72,7 +72,7 @@ from utils.device_remote_icon import (
     bundle_provided_icon_display,
 )
 from utils.discovery_config import normalize_information_precedence_list
-from utils.double_click_open import resolve_all_connect_targets
+from utils.double_click_open import resolve_all_connect_targets, resolve_connect_target
 from utils.location_label import normalize_location_options
 from utils.icon_view_prefs import (
     DEVICE_ICON_REFERENCE_PX,
@@ -224,6 +224,14 @@ class NetNeighborMainWindow(QMainWindow):
         )
         self._custom_command_template = str(prefs.get("custom_command_template", "") or "")
 
+        if discovery_manager is not None:
+            raw_dc = prefs.get("device_commands")
+            if isinstance(raw_dc, dict):
+                discovery_manager.set_device_commands_overrides(raw_dc)
+            raw_cc = prefs.get("custom_command_overrides")
+            if isinstance(raw_cc, dict):
+                discovery_manager.set_custom_command_overrides(raw_cc)
+
         self._last_devices: list[Device] = []
         self._bundles: list[DeviceBundle] = []
         self._sidebar_signature: tuple | None = None
@@ -298,6 +306,7 @@ class NetNeighborMainWindow(QMainWindow):
         self._table.verticalHeader().setVisible(False)
         self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._on_table_context_menu)
+        self._table.cellDoubleClicked.connect(self._on_table_double_clicked)
         hdr = self._table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -323,7 +332,7 @@ class NetNeighborMainWindow(QMainWindow):
         self._icon_list.setMovement(QListWidget.Movement.Static)
         self._icon_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self._icon_list.setWrapping(True)
-        self._icon_list.setWordWrap(False)
+        self._icon_list.setWordWrap(True)
         # Windows native (Vista) style for QListView IconMode can create transient top-level HWNDs
         # per layout pass; batched layout + a minimal stylesheet steer this widget through the
         # style-polished path instead (taskbar entries titled like "python…" still pick up our AppID).
@@ -335,6 +344,7 @@ class NetNeighborMainWindow(QMainWindow):
         )
         self._icon_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._icon_list.customContextMenuRequested.connect(self._on_icon_list_context_menu)
+        self._icon_list.itemDoubleClicked.connect(self._on_icon_list_double_clicked)
         self._flat_icon_viewport_filter = IconListViewportResizeFilter(
             self._relayout_flat_icon_list, self
         )
@@ -779,7 +789,7 @@ class NetNeighborMainWindow(QMainWindow):
                 it = self._icon_list.item(i)
                 if it is None:
                     continue
-                broken = break_label_for_width(orig, fm, text_zone)
+                broken = smart_break_label(orig, fm, text_zone)
                 if _LOG.isEnabledFor(logging.DEBUG) and it.text() != broken:
                     _LOG.debug("  break label %r → %r", orig[:40], broken[:60])
                 if it.text() != broken:
@@ -825,6 +835,9 @@ class NetNeighborMainWindow(QMainWindow):
         prefs["custom_icon_overrides"] = {
             f"{ip}:{port}": cid for (ip, port), cid in self._custom_icon_overrides.items()
         }
+        if self._discovery_manager is not None:
+            prefs["device_commands"] = self._discovery_manager.get_device_commands_overrides()
+            prefs["custom_command_overrides"] = self._discovery_manager.get_custom_command_overrides()
         save_ui_preferences(prefs)
 
     def _sync_menu_checks_from_state(self) -> None:
@@ -1077,6 +1090,33 @@ class NetNeighborMainWindow(QMainWindow):
     def _on_grouped_icon_context_menu(self, global_pos: QPoint, bundle: DeviceBundle) -> None:
         self._show_device_context_menu(global_pos, bundle)
 
+    def _on_tile_double_clicked(self, bundle: DeviceBundle) -> None:
+        uri = resolve_connect_target(
+            bundle_ip=bundle.ip,
+            primary_type=bundle.primary.type or "",
+            devices=bundle.devices,
+        )
+        if uri:
+            launch_open_uri(
+                self, bundle, uri,
+                connect_templates=self._connect_command_templates,
+                global_custom_command=self._custom_command_template or "",
+            )
+
+    def _on_icon_list_double_clicked(self, item) -> None:
+        key = item.data(self._BUNDLE_KEY_ROLE)
+        bundle = self._bundle_for_primary_key(key)
+        if bundle is not None:
+            self._on_tile_double_clicked(bundle)
+
+    def _on_table_double_clicked(self, row: int, _col: int) -> None:
+        item = self._table.item(row, 0)
+        if item is None:
+            return
+        bundle = self._bundle_for_primary_key(item.data(self._BUNDLE_KEY_ROLE))
+        if bundle is not None:
+            self._on_tile_double_clicked(bundle)
+
     def _bundle_connect_targets(self, bundle: DeviceBundle) -> list[tuple[str, str]]:
         return resolve_all_connect_targets(
             bundle_ip=bundle.ip,
@@ -1171,6 +1211,21 @@ class NetNeighborMainWindow(QMainWindow):
                 self, preferred_type=bundle.primary.type, current_id=cur
             )
 
+        provided_pixmap = None
+        provided_native_size = None
+        for dev in (bundle.ssdp_device, bundle.wsdd_device, bundle.wsd_device,
+                    bundle.nmb_device, bundle.mdns_device):
+            if dev is None:
+                continue
+            raw_bytes = self._remote_icon_cache.bytes_for_device(dev)
+            if raw_bytes:
+                from ui_qt.remote_icon_cache import pixmap_from_icon_bytes
+                pix = pixmap_from_icon_bytes(raw_bytes, 128)
+                if pix is not None and not pix.isNull():
+                    provided_native_size = (pix.width(), pix.height())
+                    provided_pixmap = pix
+                break
+
         icon_settings = DeviceIconSettings(
             icon_mode=mode,
             has_device_icon_source=bundle_has_device_icon_source(bundle),
@@ -1178,13 +1233,56 @@ class NetNeighborMainWindow(QMainWindow):
             selected_custom_icon_id=custom_id,
             on_apply=lambda m, cid: self._apply_bundle_icon_settings(bundle, m, cid),
             on_pick_custom=_pick_custom,
+            provided_icon_pixmap=provided_pixmap,
+            provided_icon_native_size=provided_native_size,
         )
+
+        command_settings: DeviceCommandSettings | None = None
+        if self._discovery_manager is not None:
+            # Merge legacy custom_command into device_commands list as a "custom" override entry
+            initial_cmds = list(model.device_commands or [])
+            has_custom_override = any(
+                isinstance(c, dict) and c.get("scheme") == "custom" and c.get("mode") == "override"
+                for c in initial_cmds
+            )
+            if not has_custom_override and model.custom_command:
+                initial_cmds = [
+                    {"scheme": "custom", "ip": model.custom_command, "port": 0,
+                     "mode": "override", "label": ""}
+                ] + initial_cmds
+
+            def _on_set_device_commands(cmds: list[dict]) -> None:
+                if self._discovery_manager is None:
+                    return
+                for dev in bundle.devices:
+                    self._discovery_manager.set_device_commands(
+                        dev.source, dev.ip, dev.port, cmds
+                    )
+                    # Keep legacy custom_command in sync for backward compat
+                    custom_override = next(
+                        (c for c in cmds
+                         if isinstance(c, dict)
+                         and c.get("scheme") == "custom"
+                         and c.get("mode") == "override"),
+                        None,
+                    )
+                    legacy_tmpl = str(custom_override.get("ip", "")).strip() if custom_override else None
+                    self._discovery_manager.set_device_custom_command(
+                        dev.source, dev.ip, dev.port, legacy_tmpl or None
+                    )
+                self._persist_ui_prefs()
+
+            command_settings = DeviceCommandSettings(
+                device_commands=initial_cmds,
+                on_set_device_commands=_on_set_device_commands,
+            )
 
         show_device_details_dialog(
             self,
             model,
             initial_tab=initial_tab,
             icon_settings=icon_settings,
+            command_settings=command_settings,
         )
 
     def _set_bundle_monitored(self, bundle: DeviceBundle, monitored: bool) -> None:
@@ -1474,6 +1572,7 @@ class NetNeighborMainWindow(QMainWindow):
                 icon_size=icon_size_preset_to_qsize(self._icon_size_preset),
                 on_section_toggled=self._on_icon_section_toggled,
                 on_tile_context_menu=self._on_grouped_icon_context_menu,
+                on_tile_double_clicked=self._on_tile_double_clicked,
             )
             self._grouped_icons_layout.addWidget(new_scroll)
         finally:

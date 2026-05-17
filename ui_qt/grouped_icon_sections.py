@@ -32,7 +32,7 @@ from .icon_grid_layout import (
     IconListViewportResizeFilter,
     TILE_H_MARGIN,
     apply_icon_mode_list_layout,
-    break_label_for_width,
+    smart_break_label,
     format_icon_tile_label,
     icon_list_spacing_for_cell,
     icon_mode_label_font,
@@ -120,6 +120,7 @@ class IconGroupSection(QFrame):
         tooltip_for_bundle: Callable[[DeviceBundle], str],
         icon_size: QSize,
         on_tile_context_menu: Callable[[QPoint, DeviceBundle], None] | None = None,
+        on_tile_double_clicked: Callable[[DeviceBundle], None] | None = None,
     ) -> None:
         super().__init__()
         self._group_id = group_id
@@ -132,6 +133,7 @@ class IconGroupSection(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._bundles_for_items = list(bundles)
         self._on_tile_context_menu_cb = on_tile_context_menu
+        self._on_tile_double_clicked_cb = on_tile_double_clicked
         self._icon_size = QSize(icon_size)
         self._title = title
         self._item_labels: list[str] = []
@@ -165,6 +167,8 @@ class IconGroupSection(QFrame):
         if self._on_tile_context_menu_cb is not None:
             self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             self._list.customContextMenuRequested.connect(self._on_list_context_menu)
+        if self._on_tile_double_clicked_cb is not None:
+            self._list.itemDoubleClicked.connect(self._on_list_item_double_clicked)
 
         self._list.setVisible(False)
         vp = self._list.viewport()
@@ -219,7 +223,7 @@ class IconGroupSection(QFrame):
                 it = self._list.item(i)
                 if it is None:
                     continue
-                broken = break_label_for_width(orig, fm, text_zone)
+                broken = smart_break_label(orig, fm, text_zone)
                 if _LOG.isEnabledFor(logging.DEBUG) and it.text() != broken:
                     _LOG.debug("  break label %r → %r", orig[:40], broken[:60])
                 if it.text() != broken:
@@ -248,6 +252,13 @@ class IconGroupSection(QFrame):
             return
         gpos = self._list.viewport().mapToGlobal(pos)
         self._on_tile_context_menu_cb(gpos, self._bundles_for_items[row])
+
+    def _on_list_item_double_clicked(self, item) -> None:
+        if self._on_tile_double_clicked_cb is None:
+            return
+        row = self._list.row(item)
+        if 0 <= row < len(self._bundles_for_items):
+            self._on_tile_double_clicked_cb(self._bundles_for_items[row])
 
     def _on_header_toggled(self, expanded: bool) -> None:
         self._list.setVisible(expanded)
@@ -312,6 +323,7 @@ def build_grouped_icon_scroll(
     icon_size: QSize,
     on_section_toggled: Callable[[str, bool], None],
     on_tile_context_menu: Callable[[QPoint, DeviceBundle], None] | None = None,
+    on_tile_double_clicked: Callable[[DeviceBundle], None] | None = None,
 ) -> QScrollArea:
     """Build scroll area with one collapsible section per group; ``mode`` is ``sorted`` or ``location``."""
     scroll = QScrollArea(parent)
@@ -334,8 +346,8 @@ def build_grouped_icon_scroll(
     inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     inner.setStyleSheet("#nnGroupedIconInner { background-color: palette(base); }")
     layout = QVBoxLayout(inner)
-    layout.setContentsMargins(8, 0, 8, 12)
-    layout.setSpacing(10)
+    layout.setContentsMargins(8, 0, 8, 8)
+    layout.setSpacing(4)
 
     if mode == "sorted":
         buckets = bucket_bundles_by_type(ordered_bundles)
@@ -377,6 +389,7 @@ def build_grouped_icon_scroll(
             tooltip_for_bundle=tooltip_for_bundle,
             icon_size=icon_size,
             on_tile_context_menu=on_tile_context_menu,
+            on_tile_double_clicked=on_tile_double_clicked,
         )
         section.toggled.connect(on_section_toggled)
         layout.addWidget(section)

@@ -30,10 +30,50 @@ def show_command_error(parent: QWidget, message: str) -> None:
 def bundle_custom_command(bundle: DeviceBundle) -> str:
     for dev in bundle.devices:
         md = dev.metadata if isinstance(dev.metadata, dict) else {}
+        # New: look for custom scheme override in device_commands
+        cmds = md.get("device_commands")
+        if isinstance(cmds, list):
+            for c in cmds:
+                if (isinstance(c, dict)
+                        and c.get("scheme") == "custom"
+                        and c.get("mode") == "override"):
+                    tmpl = str(c.get("ip", "")).strip()
+                    if tmpl:
+                        return tmpl
+        # Legacy: flat custom_command field
         cmd = md.get("custom_command")
         if isinstance(cmd, str) and cmd.strip():
             return cmd.strip()
     return ""
+
+
+def bundle_all_custom_commands(bundle: DeviceBundle) -> list[tuple[str, str]]:
+    """Return all custom scheme entries as (label, template) pairs (override first)."""
+    result: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for dev in bundle.devices:
+        md = dev.metadata if isinstance(dev.metadata, dict) else {}
+        cmds = md.get("device_commands")
+        if isinstance(cmds, list):
+            for c in cmds:
+                if not isinstance(c, dict) or c.get("scheme") != "custom":
+                    continue
+                tmpl = str(c.get("ip", "")).strip()
+                if not tmpl or tmpl in seen:
+                    continue
+                seen.add(tmpl)
+                label = str(c.get("label", "")).strip() or (
+                    _("Custom command") if c.get("mode") == "override"
+                    else _("Custom command (additional)")
+                )
+                result.append((label, tmpl))
+        # Legacy flat field (only if no device_commands custom entry yet)
+        if not result:
+            cmd = md.get("custom_command")
+            if isinstance(cmd, str) and cmd.strip() and cmd.strip() not in seen:
+                seen.add(cmd.strip())
+                result.append((_("Custom command"), cmd.strip()))
+    return result
 
 
 def run_custom_command_for_bundle(
