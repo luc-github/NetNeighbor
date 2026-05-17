@@ -9,6 +9,9 @@ import logging
 import os
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parent.parent
+_SHIPPED_LOGGING_JSON = _ROOT / "config" / "logging.json"
+
 _LOG_LEVEL_OFF = 100  # above CRITICAL (50): suppress all standard levels
 
 # Exact stock ``logging.json`` from older releases (no ``app_qt`` key) — useless log file.
@@ -47,8 +50,8 @@ def _to_level(level_name: str, fallback: int) -> int:
     return fallback
 
 
-def _visible_logging_defaults() -> dict[str, str]:
-    """Defaults so ``~/.cache/netneighbor/netneighbor.log`` is useful without tuning."""
+def _fallback_logging_defaults() -> dict[str, str]:
+    """Built-in fallback when ``config/logging.json`` is missing or invalid."""
     return {
         "default": "INFO",
         "app": "INFO",
@@ -63,6 +66,24 @@ def _visible_logging_defaults() -> dict[str, str]:
     }
 
 
+def _shipped_logging_defaults() -> dict[str, str]:
+    """Defaults from ``config/logging.json`` (shipped with the app)."""
+    fallback = _fallback_logging_defaults()
+    if not _SHIPPED_LOGGING_JSON.is_file():
+        return dict(fallback)
+    try:
+        parsed = json.loads(_SHIPPED_LOGGING_JSON.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return dict(fallback)
+    if not isinstance(parsed, dict):
+        return dict(fallback)
+    merged = dict(fallback)
+    for key, value in parsed.items():
+        if isinstance(key, str) and isinstance(value, str) and value.strip():
+            merged[key.strip()] = value.strip()
+    return merged
+
+
 class _FlushingFileHandler(logging.FileHandler):
     """Line-oriented log tailing on Windows/Linux without waiting for buffer fill."""
 
@@ -74,11 +95,15 @@ class _FlushingFileHandler(logging.FileHandler):
 def load_logging_config() -> dict:
     config_dir = Path.home() / ".config" / "netneighbor"
     config_path = config_dir / "logging.json"
-    defaults = _visible_logging_defaults()
+    defaults = _shipped_logging_defaults()
     try:
         config_dir.mkdir(parents=True, exist_ok=True)
         if not config_path.exists():
-            config_path.write_text(json.dumps(defaults, indent=2, sort_keys=True), encoding="utf-8")
+            if _SHIPPED_LOGGING_JSON.is_file():
+                shipped_text = _SHIPPED_LOGGING_JSON.read_text(encoding="utf-8")
+                config_path.write_text(shipped_text, encoding="utf-8")
+            else:
+                config_path.write_text(json.dumps(defaults, indent=2, sort_keys=True), encoding="utf-8")
             return dict(defaults)
         parsed_raw = json.loads(config_path.read_text(encoding="utf-8"))
         if not isinstance(parsed_raw, dict):

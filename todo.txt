@@ -1,0 +1,10 @@
+1 - correction des noms => Not DONE!!!!!!!!!!!!!!!!!!!!
+2 - ajout des commandes par devices
+en incluant la custom commande dams la liste = plusieurs custom commandes=>OK
+3 - ajout des regles users mDNS ajout + suppression ==> OK 
+4 - Notification history=>Ok
+5 - add Hidden devices in context menu + tables in tools=>Ok
+5 - systray
+6 - gestion des non presents 
+7 - traductions
+8 - packaging

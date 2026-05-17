@@ -12,6 +12,9 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
+_ROOT = Path(__file__).resolve().parent.parent
+_SHIPPED_DISCOVERY_JSON = _ROOT / "config" / "discovery.json"
+
 _DEFAULT_STARTUP_REFRESH = [5, 15, 30, 60, 120, 300, 600]
 
 # mDNS: enumeration and per-service resolution (see discovery/mdns.py).
@@ -596,11 +599,24 @@ def _disk_repr(cfg: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _normalize_discovery_document(parsed: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "mdns": _normalize_mdns_block(parsed.get("mdns")),
+        "ssdp": _normalize_ssdp_block(parsed.get("ssdp")),
+        "wsd": _normalize_wsd_block(parsed.get("wsd")),
+        "nmb": _normalize_nmb_block(parsed.get("nmb")),
+        "wsdd": _normalize_wsdd_block(parsed.get("wsdd")),
+        "merge": _normalize_merge(parsed.get("merge")),
+        "startup_refresh_seconds": _normalize_startup_refresh(parsed.get("startup_refresh_seconds")),
+    }
+
+
 def load_discovery_protocol_config() -> dict[str, object]:
     """Return discovery settings from ~/.config/netneighbor/discovery.json.
 
-    Expected shape: top-level ``mdns`` / ``ssdp`` / ``wsd`` objects (``wsd`` has ``enabled`` and optional
-    ``query``: ``interval_seconds``, ``timeout_seconds``), optional ``merge.protocol_order``
+    Shipped defaults live in ``config/discovery.json`` and are copied on first run when the user file
+    is missing. Expected shape: top-level ``mdns`` / ``ssdp`` / ``wsd`` objects (``wsd`` has ``enabled``
+    and optional ``query``: ``interval_seconds``, ``timeout_seconds``), optional ``merge.protocol_order``
     (ordered ``source`` ids: ``ssdp``, ``wsd``, ``mdns``, …), optional ``merge.information_precedence``
     (roles ``user_override``, ``ssdp_live``, ``wsd_live``, ``ssdp_profile_cache``, ``mdns``), and root
     ``startup_refresh_seconds``. Use ``"mdns": { "enabled": false }`` to disable mDNS (SSDP-only
@@ -617,23 +633,25 @@ def load_discovery_protocol_config() -> dict[str, object]:
     try:
         cfg_dir.mkdir(parents=True, exist_ok=True)
         if not cfg_path.exists():
-            cfg_path.write_text(json.dumps(_disk_repr(defaults), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            return copy.deepcopy(defaults)
+            if _SHIPPED_DISCOVERY_JSON.is_file():
+                shipped_text = _SHIPPED_DISCOVERY_JSON.read_text(encoding="utf-8")
+                cfg_path.write_text(
+                    shipped_text if shipped_text.endswith("\n") else shipped_text + "\n",
+                    encoding="utf-8",
+                )
+                parsed_raw = json.loads(shipped_text)
+            else:
+                cfg_path.write_text(json.dumps(_disk_repr(defaults), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                return copy.deepcopy(defaults)
+            if not isinstance(parsed_raw, dict):
+                return copy.deepcopy(defaults)
+            return _normalize_discovery_document(parsed_raw)
 
         parsed_raw = json.loads(cfg_path.read_text(encoding="utf-8"))
         if not isinstance(parsed_raw, dict):
             return copy.deepcopy(defaults)
 
-        parsed: dict[str, Any] = parsed_raw
-        return {
-            "mdns": _normalize_mdns_block(parsed.get("mdns")),
-            "ssdp": _normalize_ssdp_block(parsed.get("ssdp")),
-            "wsd": _normalize_wsd_block(parsed.get("wsd")),
-            "nmb": _normalize_nmb_block(parsed.get("nmb")),
-            "wsdd": _normalize_wsdd_block(parsed.get("wsdd")),
-            "merge": _normalize_merge(parsed.get("merge")),
-            "startup_refresh_seconds": _normalize_startup_refresh(parsed.get("startup_refresh_seconds")),
-        }
+        return _normalize_discovery_document(parsed_raw)
     except (OSError, json.JSONDecodeError):
         return copy.deepcopy(defaults)
 

@@ -1,0 +1,12 @@
+{
+  "app": "NONE",
+  "app_qt": "NONE",
+  "default": "NONE",
+  "device_list": "NONE",
+  "mdns": "NONE",
+  "nmb": "NONE",
+  "ssdp": "NONE",
+  "ui_qt": "NONE",
+  "wsd": "NONE",
+  "wsdd": "NONE"
+}

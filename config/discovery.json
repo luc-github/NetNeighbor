@@ -1,0 +1,68 @@
+{
+  "mdns": {
+    "enabled": true,
+    "query": {
+      "enumeration_interval_seconds": 240,
+      "enumeration_timeout_seconds": 2.5,
+      "service_info_timeout_ms": 2500
+    },
+    "rules": true
+  },
+  "merge": {
+    "information_precedence": [
+      "user_override",
+      "ssdp_live",
+      "ssdp_profile_cache",
+      "mdns",
+      "nmb_live",
+      "wsdd_live",
+      "wsd_live"
+    ],
+    "protocol_order": [
+      "ssdp",
+      "wsd",
+      "wsdd",
+      "nmb",
+      "mdns"
+    ],
+    "show_ip_in_device_list": true
+  },
+  "nmb": {
+    "enabled": true,
+    "query": {
+      "argv": [
+        "-S",
+        "*"
+      ],
+      "interval_seconds": 60.0,
+      "timeout_seconds": 10.0
+    }
+  },
+  "ssdp": {
+    "enabled": true,
+    "query": {
+      "descriptor_http_min_interval_seconds": 5.0,
+      "interval_seconds": 60,
+      "msearch_directed_ips": [],
+      "mx_seconds": 5
+    },
+    "rules": true
+  },
+  "startup_refresh_seconds": "5, 15, 30, 60, 120, 300, 600",
+  "wsd": {
+    "enabled": true,
+    "query": {
+      "interval_seconds": 90.0,
+      "timeout_seconds": 8.0
+    }
+  },
+  "wsdd": {
+    "enabled": true,
+    "query": {
+      "interval_seconds": 60.0,
+      "listen": "",
+      "probe_each_poll": true,
+      "socket_timeout_seconds": 4.0
+    }
+  }
+}
