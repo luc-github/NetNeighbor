@@ -6,10 +6,16 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
 
 _UUID_IN_TEXT = re.compile(
     r"(?:urn:uuid:|uuid:)?([0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12})",
+    re.IGNORECASE,
+)
+# Sonos advertises ZonePlayer / MediaServer / MediaRenderer as separate USN suffixes on one speaker.
+_RINCON_MONITORED_UID = re.compile(
+    r"^(uuid:rincon_[0-9a-f]+)(?:_mr|_ms)$",
     re.IGNORECASE,
 )
 
@@ -40,6 +46,34 @@ def upnp_identity_from_usn(usn: str) -> str:
     if u:
         return u
     return head.lower()
+
+
+def normalize_monitored_uid(uid: str) -> str:
+    """One follow/monitor identity per physical Sonos (strip ``_MR`` / ``_MS`` service USNs)."""
+    if not isinstance(uid, str) or not uid.strip():
+        return ""
+    u = uid.strip().lower()
+    m = _RINCON_MONITORED_UID.match(u)
+    if m:
+        return m.group(1)
+    return u
+
+
+def normalize_monitored_name(name: str) -> str:
+    """Display-name token for follow prefs (skip IPs and placeholder labels)."""
+    if not isinstance(name, str) or not name.strip():
+        return ""
+    collapsed = " ".join(name.strip().split()).lower()
+    if not collapsed or collapsed in {"unknown", "wsd host"}:
+        return ""
+    try:
+        ipaddress.ip_address(collapsed.strip("[]"))
+        return ""
+    except ValueError:
+        pass
+    if collapsed.startswith("mdns device "):
+        return ""
+    return collapsed
 
 
 def upnp_identity_from_udn(udn: str) -> str:

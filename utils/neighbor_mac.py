@@ -137,11 +137,52 @@ def _run_ip_neigh(args: list[str]) -> str:
     return proc.stdout or ""
 
 
-def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
-    """Return MAC if present in kernel ARP / IPv6 neighbor tables (Linux)."""
-    if sys.platform == "win32" or sys.platform == "darwin":
+def _mac_from_windows_arp(ipv4: str) -> str | None:
+    """Read ``arp -a`` on Windows (no extra packets; entry appears after LAN traffic)."""
+    if sys.platform != "win32":
         return None
+    target = ipv4.strip()
+    if not target:
+        return None
+    try:
+        proc = subprocess.run(
+            ["arp", "-a"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
+        _LOG.debug("arp -a failed: %s", e)
+        return None
+    if proc.returncode != 0:
+        return None
+    for line in (proc.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        if parts[0] != target:
+            continue
+        m = _norm_mac(parts[1])
+        if m and m != "00:00:00:00:00:00":
+            return m
+    return None
+
+
+def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
+    """Return MAC from OS neighbor/ARP tables if known (Linux ``ip neigh`` / ``/proc/net/arp``, Windows ``arp -a``)."""
     if not ip_raw:
+        return None
+    if sys.platform == "win32":
+        try:
+            base = str(ip_raw).strip().split("%", 1)[0].strip()
+            if base and isinstance(ipaddress.ip_address(base), ipaddress.IPv4Address):
+                return _mac_from_windows_arp(base)
+        except ValueError:
+            pass
+        return None
+    if sys.platform == "darwin":
         return None
     raw = str(ip_raw).strip()
     base = raw.split("%", 1)[0].strip()

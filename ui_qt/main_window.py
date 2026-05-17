@@ -7,9 +7,10 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Iterable, Sequence
+from datetime import datetime
 
 from gettext import gettext as _
-from PySide6.QtCore import QPoint, QSize, Qt, QTimer
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QFontMetrics, QIcon, QKeySequence, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -130,6 +131,8 @@ _TABLE_BODY_QSS = (
 class NetNeighborMainWindow(QMainWindow):
     """Table (list) and icon-mode list; view options stored in ``ui_prefs.json``."""
 
+    _notification_received = Signal(str, str, str)  # datetime_str, device_name, status
+
     _FILTER_ROLE = Qt.ItemDataRole.UserRole
     _BUNDLE_KEY_ROLE = Qt.ItemDataRole.UserRole + 1
     _ICON_LABEL_ROLE = Qt.ItemDataRole.UserRole + 2  # original label (pre-break) for relayout
@@ -234,6 +237,16 @@ class NetNeighborMainWindow(QMainWindow):
             raw_fmr = prefs.get("field_mapping_rules")
             if isinstance(raw_fmr, dict):
                 discovery_manager.set_field_mapping_rules(raw_fmr)
+            raw_mon = prefs.get("monitored_overrides")
+            if isinstance(raw_mon, dict):
+                discovery_manager.set_monitored_overrides(raw_mon)
+
+        self._notification_log: list[tuple[str, str, str]] = []
+        self._notification_received.connect(self._append_notification)
+        if discovery_manager is not None:
+            discovery_manager.register_presence_transition_hook(
+                self._on_presence_transition
+            )
 
         self._last_devices: list[Device] = []
         self._bundles: list[DeviceBundle] = []
@@ -706,6 +719,11 @@ class NetNeighborMainWindow(QMainWindow):
         act_quit.triggered.connect(self._quit_application)
         view_menu.addAction(act_quit)
 
+        tools_menu = menu_bar.addMenu(_("Tools"))
+        act_notif = QAction(_("Notifications history"), self)
+        act_notif.triggered.connect(self._open_notifications_history)
+        tools_menu.addAction(act_notif)
+
         help_menu = menu_bar.addMenu(_("Help"))
         act_about = QAction(_("About NetNeighbor"), self)
         act_about.setMenuRole(QAction.MenuRole.AboutRole)
@@ -842,6 +860,7 @@ class NetNeighborMainWindow(QMainWindow):
             prefs["device_commands"] = self._discovery_manager.get_device_commands_overrides()
             prefs["custom_command_overrides"] = self._discovery_manager.get_custom_command_overrides()
             prefs["field_mapping_rules"] = self._discovery_manager.get_field_mapping_rules()
+            prefs["monitored_overrides"] = self._discovery_manager.get_monitored_overrides()
         save_ui_preferences(prefs)
 
     def _sync_menu_checks_from_state(self) -> None:
@@ -934,6 +953,26 @@ class NetNeighborMainWindow(QMainWindow):
         from ui_qt.about_dialog import show_about_dialog
 
         show_about_dialog(self)
+
+    def _on_presence_transition(self, device: Device, kind: str) -> None:
+        """Called from the discovery thread on online/offline transitions."""
+        if not getattr(device, "monitored", False):
+            return
+        dt_str = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        name = str(device.name or device.ip)
+        status = _("Online") if kind == "online" else _("Offline")
+        self._notification_received.emit(dt_str, name, status)
+
+    def _append_notification(self, dt_str: str, name: str, status: str) -> None:
+        self._notification_log.append((dt_str, name, status))
+
+    def _open_notifications_history(self) -> None:
+        from ui_qt.notifications_history_dialog import show_notifications_history_dialog
+
+        def _clear() -> None:
+            self._notification_log.clear()
+
+        show_notifications_history_dialog(self, list(self._notification_log), _clear)
 
     def set_devices(self, devices: Iterable[Device]) -> None:
         """Replace views from discovery snapshot (coalesced to reduce flicker)."""
@@ -1326,8 +1365,8 @@ class NetNeighborMainWindow(QMainWindow):
     def _set_bundle_monitored(self, bundle: DeviceBundle, monitored: bool) -> None:
         if self._discovery_manager is None:
             return
-        for device in bundle.devices:
-            self._discovery_manager.set_device_monitored(device.key, monitored)
+        self._discovery_manager.set_bundle_monitored(bundle.ip, bundle.port, monitored)
+        self._persist_ui_prefs()
 
     def _rename_bundle(self, bundle: DeviceBundle) -> None:
         if self._discovery_manager is None:

@@ -21,7 +21,15 @@ from discovery.wsd import WSDiscovery, is_synthetic_wsd_display_name
 from model.device import Device
 from utils.discovery_cache import load_discovery_cache
 from utils.discovery_config import normalize_information_precedence_list
-from utils.discovery_identity import upnp_identity_from_udn, upnp_identity_from_usn, uuid_urn_if_present
+from utils.device_bundles import normalize_mac_for_bundle_merge
+from utils.discovery_identity import (
+    normalize_monitored_name,
+    normalize_monitored_uid,
+    upnp_identity_from_udn,
+    upnp_identity_from_usn,
+    uuid_urn_if_present,
+)
+from utils.neighbor_mac import lookup_mac_from_neighbor_cache
 from utils.location_label import is_plausible_room_location
 from utils.scheduling import ScheduleMainFn
 
@@ -255,6 +263,8 @@ class DiscoveryManager:
         self._field_mapping_rules: dict[str, dict[str, list[str]]] = {}
         self._monitored_overrides: dict[str, bool] = {}
         self._last_seen_overrides: dict[str, str] = {}
+        # One "online" notification per LAN host until it goes offline (SSDP + mDNS rows share IP).
+        self._presence_announced_hosts: set[str] = set()
         self._identity_pending: dict[str, tuple[datetime, Device]] = {}
         self._ssdp_profile_cache_by_ip: dict[str, dict]
         self._ssdp_profile_cache_emit_rows: list[tuple[str, dict]]
@@ -317,6 +327,7 @@ class DiscoveryManager:
         for protocol in self._protocols:
             protocol.stop()
         self._identity_pending.clear()
+        self._presence_announced_hosts.clear()
 
     def refresh(self) -> None:
         self._logger.debug("Manual refresh requested")
@@ -1154,6 +1165,14 @@ class DiscoveryManager:
             transition = "offline"
         else:
             return
+        host_key = self._presence_dedupe_key(device)
+        if host_key:
+            if transition == "online":
+                if host_key in self._presence_announced_hosts:
+                    return
+                self._presence_announced_hosts.add(host_key)
+            else:
+                self._presence_announced_hosts.discard(host_key)
         if not self._presence_hooks:
             return
         for hook in tuple(self._presence_hooks):
@@ -2243,7 +2262,7 @@ class DiscoveryManager:
         return ""
 
     def _apply_monitored_override(self, device: Device) -> None:
-        override_value = self._find_override_value(self._monitored_overrides, device)
+        override_value = self._find_monitored_override_value(device)
         if override_value is not None:
             device.monitored = bool(override_value)
 
@@ -2412,6 +2431,117 @@ class DiscoveryManager:
 
     def _make_override_key(self, source: str, ip: str, port: int) -> str:
         return f"{source}:{ip}:{int(port)}"
+
+    def _mac_for_device_identity(self, device: Device) -> str:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        raw = self._extract_mac(metadata)
+        normalized = normalize_mac_for_bundle_merge(raw) if raw else ""
+        if normalized:
+            return normalized
+        hit = lookup_mac_from_neighbor_cache(str(device.ip).strip())
+        return normalize_mac_for_bundle_merge(hit) if hit else ""
+
+    def _normalized_monitored_uid(self, device: Device) -> str:
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        uid = self._extract_uid(metadata)
+        return normalize_monitored_uid(uid) if uid else ""
+
+    def _monitored_name_for_identity(self, device: Device) -> str:
+        override = self._find_name_override_value(device)
+        if override:
+            return normalize_monitored_name(override)
+        return normalize_monitored_name(device.name or "")
+
+    def _monitored_lookup_keys_for_device(self, device: Device) -> list[str]:
+        """Prefs aliases for this row: MAC → UID → name → IP (then legacy endpoint keys)."""
+        keys: list[str] = []
+        seen: set[str] = set()
+
+        def _add(key: str) -> None:
+            if key and key not in seen:
+                seen.add(key)
+                keys.append(key)
+
+        mac = self._mac_for_device_identity(device)
+        if mac:
+            _add(f"host:mac:{mac}")
+        uid = self._normalized_monitored_uid(device)
+        if uid:
+            _add(f"host:uid:{uid}")
+        metadata = device.metadata if isinstance(device.metadata, dict) else {}
+        raw_uid = self._extract_uid(metadata)
+        if raw_uid:
+            _add(f"host:uid:{raw_uid.strip().lower()}")
+        name = self._monitored_name_for_identity(device)
+        if name:
+            _add(f"host:name:{name}")
+        ip = str(device.ip).strip()
+        if ip and ip != "0.0.0.0":
+            _add(f"host:ip:{ip}")
+        _add(self._make_override_key(device.source, device.ip, device.port))
+        return keys
+
+    def _canonical_monitored_keys(self, device: Device) -> list[str]:
+        """Persisted follow key preference: MAC, UUID, name, IP (no endpoint/port keys)."""
+        out: list[str] = []
+        mac = self._mac_for_device_identity(device)
+        if mac:
+            out.append(f"host:mac:{mac}")
+        uid = self._normalized_monitored_uid(device)
+        if uid:
+            out.append(f"host:uid:{uid}")
+        name = self._monitored_name_for_identity(device)
+        if name:
+            out.append(f"host:name:{name}")
+        ip = str(device.ip).strip()
+        if ip and ip != "0.0.0.0":
+            out.append(f"host:ip:{ip}")
+        return out
+
+    def _canonical_monitored_key(self, device: Device) -> str:
+        keys = self._canonical_monitored_keys(device)
+        if keys:
+            return keys[0]
+        return self._make_override_key(device.source, device.ip, device.port)
+
+    def _presence_dedupe_key(self, device: Device) -> str | None:
+        return self._canonical_monitored_key(device)
+
+    def _find_monitored_override_value(self, device: Device) -> bool | None:
+        store = self._monitored_overrides
+        for key in self._monitored_lookup_keys_for_device(device):
+            if key in store:
+                return store[key]
+        return self._find_override_value(store, device)
+
+    def _device_matches_monitored_key(self, device: Device, host_key: str) -> bool:
+        return host_key in self._monitored_lookup_keys_for_device(device)
+
+    def _anchor_device_for_endpoint(self, ip: str, port: int) -> Device | None:
+        sip = str(ip).strip()
+        if not sip or sip == "0.0.0.0":
+            return None
+        exact: list[Device] = []
+        same_ip: list[Device] = []
+        for device in self._devices.values():
+            if str(device.ip).strip() != sip:
+                continue
+            same_ip.append(device)
+            if int(device.port) == int(port):
+                exact.append(device)
+        if exact:
+            for preferred in ("ssdp", "mdns", "wsd", "wsdd", "nmb"):
+                for device in exact:
+                    if (device.source or "").strip().lower() == preferred:
+                        return device
+            return exact[0]
+        if same_ip:
+            for preferred in ("ssdp", "mdns", "wsd", "wsdd", "nmb"):
+                for device in same_ip:
+                    if (device.source or "").strip().lower() == preferred:
+                        return device
+            return same_ip[0]
+        return None
 
     def _make_override_key_for_device(self, device: Device) -> str:
         uid = self._extract_uid(device.metadata)
@@ -2593,15 +2723,47 @@ class DiscoveryManager:
             "unknown": _("Unknown Devices"),
         }.get(device_type, _("Unknown Devices"))
 
+    def set_bundle_monitored(self, ip: str, port: int, monitored: bool) -> None:
+        """Follow/unfollow a UI bundle (persisted by MAC, else UPnP UID, else IP)."""
+        anchor = self._anchor_device_for_endpoint(ip, port)
+        host_key = self._canonical_monitored_key(anchor) if anchor is not None else f"host:ip:{ip}"
+        if monitored:
+            self._monitored_overrides[host_key] = True
+        else:
+            keys_to_drop: set[str] = {host_key}
+            for device in self._devices.values():
+                if anchor is not None:
+                    if not self._device_matches_monitored_key(device, host_key):
+                        continue
+                elif str(device.ip).strip() != str(ip).strip():
+                    continue
+                keys_to_drop.update(self._monitored_lookup_keys_for_device(device))
+            for key in keys_to_drop:
+                self._monitored_overrides.pop(key, None)
+        changed = False
+        for device in self._devices.values():
+            if anchor is not None:
+                if not self._device_matches_monitored_key(device, host_key):
+                    continue
+            elif str(device.ip).strip() != str(ip).strip():
+                continue
+            if device.monitored != monitored:
+                device.monitored = monitored
+                changed = True
+        if changed:
+            self._notify()
+
+    def set_host_monitored(self, ip: str, monitored: bool) -> None:
+        """Backward-compatible wrapper (uses first row at ``ip`` for identity)."""
+        anchor = self._anchor_device_for_endpoint(ip, 0)
+        port = int(anchor.port) if anchor is not None else 0
+        self.set_bundle_monitored(ip, port, monitored)
+
     def set_device_monitored(self, device_key: str, monitored: bool) -> None:
         device = self._devices.get(device_key)
         if device is None:
             return
-        if device.monitored == monitored:
-            return
-        device.monitored = monitored
-        self._monitored_overrides[self._make_override_key_for_device(device)] = monitored
-        self._notify()
+        self.set_bundle_monitored(str(device.ip), int(device.port), monitored)
 
     def _notify(self) -> None:
         if not self._listeners:
