@@ -43,6 +43,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.qt_diag_toplevels:
         os.environ["NETNEIGHBOR_DEBUG_TOPLEVEL"] = "1"
 
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            # Must run before QApplication / any HWND so the taskbar uses our icon, not python.exe.
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("io.esp3d.netneighbor.qt.1")
+        except OSError:
+            pass
+
     from PySide6.QtCore import QTimer
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
@@ -81,17 +90,6 @@ def main(argv: list[str] | None = None) -> int:
                 forced = None
         setup_fusion_theme(app, forced_scheme=forced)
 
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            # Lets the taskbar use our window icon instead of grouping under python.exe only.
-            # Note: this AppUserModelID applies to the whole process — any stray top-level HWND
-            # (e.g. from native styling) can briefly show the same icon / a truncated "python…" title.
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("io.esp3d.netneighbor.qt.1")
-        except OSError:
-            pass
-
     for icon_path in resolve_app_icon_paths_in_order():
         app_icon = QIcon(str(icon_path))
         if not app_icon.isNull():
@@ -113,9 +111,6 @@ def main(argv: list[str] | None = None) -> int:
         discovery_manager=manager,
         information_precedence=list(dm_kw["information_precedence"]),
     )
-    app_icon = app.windowIcon()
-    if not app_icon.isNull():
-        window.setWindowIcon(app_icon)
     app._qt_main_window = window
 
     activation_server = create_activation_listener(app, on_activate=window.bring_to_front)
@@ -136,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
     manager.add_listener(on_devices)
 
     window.resize(960, 520)
+    app_icon = app.windowIcon()
+    if not app_icon.isNull():
+        window.setWindowIcon(app_icon)
     window.show()
 
     if os.environ.get("NETNEIGHBOR_DEBUG_TOPLEVEL"):

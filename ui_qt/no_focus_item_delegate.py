@@ -23,7 +23,7 @@ class NoFocusItemDelegate(QStyledItemDelegate):
         if isinstance(w, QListWidget):
             # WrapText must be set for Qt to respect explicit \n characters in item text.
             # Without it QCommonStyle adds TextSingleLine which strips newlines, collapsing
-            # format_icon_tile_label's pre-formatted breaks into a single clipped line.
+            # relayout_icon_mode_list's explicit \\n breaks into a single clipped line.
             text = index.data(Qt.ItemDataRole.DisplayRole)
             has_newlines = isinstance(text, str) and "\n" in text
             if w.wordWrap() or has_newlines:

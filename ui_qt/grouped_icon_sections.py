@@ -30,17 +30,13 @@ from utils.details_payload import format_device_type_for_details
 
 from .icon_grid_layout import (
     IconListViewportResizeFilter,
-    TILE_H_MARGIN,
-    apply_icon_mode_list_layout,
-    smart_break_label,
-    format_icon_tile_label,
+    create_icon_tile_list_item,
     icon_list_spacing_for_cell,
-    icon_mode_label_font,
+    relayout_icon_mode_list,
 )
-from PySide6.QtGui import QFontMetrics
 
 from .icon_list_qss import ICON_MODE_LIST_QSS
-from .no_focus_item_delegate import NoFocusItemDelegate
+from .icon_tile_delegate import IconTileItemDelegate
 
 
 class _SectionHeader(QWidget):
@@ -136,7 +132,6 @@ class IconGroupSection(QFrame):
         self._on_tile_double_clicked_cb = on_tile_double_clicked
         self._icon_size = QSize(icon_size)
         self._title = title
-        self._item_labels: list[str] = []
 
         self._header = _SectionHeader(title, expanded)
         self._header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -144,6 +139,7 @@ class IconGroupSection(QFrame):
 
         self._list = QListWidget()
         self._list.setViewMode(QListWidget.ViewMode.IconMode)
+        self._list.setUniformItemSizes(True)
         self._list.setMovement(QListWidget.Movement.Static)
         self._list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self._list.setSpacing(icon_list_spacing_for_cell(self._icon_size))
@@ -158,7 +154,7 @@ class IconGroupSection(QFrame):
         self._list.setLayoutMode(QListView.LayoutMode.Batched)
         self._list.setBatchSize(32)
         self._list.setStyleSheet(ICON_MODE_LIST_QSS)
-        self._list.setItemDelegate(NoFocusItemDelegate(self._list, elide_none=True))
+        self._list.setItemDelegate(IconTileItemDelegate(self._list))
         self._viewport_resize_filter = IconListViewportResizeFilter(
             self._relayout_icon_grid, self
         )
@@ -177,17 +173,16 @@ class IconGroupSection(QFrame):
         try:
             for bundle in bundles:
                 d = bundle.primary
-                raw = (d.name or "").strip() or "-"
-                name = format_icon_tile_label(raw)
-                self._item_labels.append(name)
-                it = QListWidgetItem(icon_for_bundle(bundle), name)
+                it = create_icon_tile_list_item(
+                    icon_for_bundle(bundle), d.name or ""
+                )
                 it.setToolTip(tooltip_for_bundle(bundle))
                 self._list.addItem(it)
         finally:
             self._list.setUpdatesEnabled(True)
             vp.setUpdatesEnabled(True)
 
-        self._relayout_icon_grid()
+        self._relayout_icon_grid(force=True)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -198,7 +193,7 @@ class IconGroupSection(QFrame):
         # calling it on a parentless widget would create a transient top-level OS window.
         self._list.setVisible(expanded)
 
-    def _relayout_icon_grid(self) -> None:
+    def _relayout_icon_grid(self, *, force: bool = False) -> None:
         fallback = 0
         if self._list.isVisible():
             fallback = max(200, self.width() - 16)
@@ -208,26 +203,13 @@ class IconGroupSection(QFrame):
                     fallback = max(fallback, parent.viewport().width() - 16)
                     break
                 parent = parent.parentWidget()
-        apply_icon_mode_list_layout(
+        relayout_icon_mode_list(
             self._list,
             self._icon_size,
-            self._item_labels,
             compact_height=True,
             fallback_viewport_width=fallback,
+            force=force,
         )
-        cell_w = self._list.gridSize().width()
-        if cell_w > 0:
-            fm = QFontMetrics(icon_mode_label_font(self._list))
-            text_zone = max(30, cell_w - TILE_H_MARGIN)
-            for i, orig in enumerate(self._item_labels):
-                it = self._list.item(i)
-                if it is None:
-                    continue
-                broken = smart_break_label(orig, fm, text_zone)
-                if _LOG.isEnabledFor(logging.DEBUG) and it.text() != broken:
-                    _LOG.debug("  break label %r → %r", orig[:40], broken[:60])
-                if it.text() != broken:
-                    it.setText(broken)
 
     def resync_icons(self, icon_for_bundle: Callable[[DeviceBundle], object]) -> None:
         for row, bundle in enumerate(self._bundles_for_items):

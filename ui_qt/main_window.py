@@ -11,7 +11,7 @@ from datetime import datetime
 
 from gettext import gettext as _
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QFontMetrics, QIcon, QKeySequence, QResizeEvent, QShowEvent
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -40,12 +40,9 @@ from ui.icons import resolve_asset_icon_file, resolve_persisted_icon_id_to_path
 from ui_qt.grouped_icon_sections import build_grouped_icon_scroll
 from ui_qt.icon_grid_layout import (
     IconListViewportResizeFilter,
-    TILE_H_MARGIN,
-    apply_icon_mode_list_layout,
-    smart_break_label,
-    format_icon_tile_label,
-    icon_mode_label_font,
-    labels_from_icon_list,
+    create_icon_tile_list_item,
+    relayout_icon_mode_list,
+    set_icon_tile_item_label,
 )
 from ui_qt.device_actions import (
     bundle_custom_command,
@@ -56,6 +53,7 @@ from ui_qt.device_actions import (
 from ui_qt.device_context_menu import show_device_context_menu
 from ui_qt.device_details_dialog import DeviceCommandSettings, DeviceIconSettings, show_device_details_dialog
 from ui_qt.icon_picker_dialog import pick_device_icon_id
+from ui_qt.icon_tile_delegate import IconTileItemDelegate
 from ui_qt.no_focus_item_delegate import NoFocusItemDelegate
 from utils.app_version import get_app_version
 from utils.details_payload import format_device_type_for_details
@@ -135,7 +133,6 @@ class NetNeighborMainWindow(QMainWindow):
 
     _FILTER_ROLE = Qt.ItemDataRole.UserRole
     _BUNDLE_KEY_ROLE = Qt.ItemDataRole.UserRole + 1
-    _ICON_LABEL_ROLE = Qt.ItemDataRole.UserRole + 2  # original label (pre-break) for relayout
 
     def __init__(
         self,
@@ -359,6 +356,7 @@ class NetNeighborMainWindow(QMainWindow):
 
         self._icon_list = QListWidget()
         self._icon_list.setViewMode(QListWidget.ViewMode.IconMode)
+        self._icon_list.setUniformItemSizes(True)
         self._icon_list.setMovement(QListWidget.Movement.Static)
         self._icon_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self._icon_list.setWrapping(True)
@@ -369,9 +367,7 @@ class NetNeighborMainWindow(QMainWindow):
         self._icon_list.setLayoutMode(QListView.LayoutMode.Batched)
         self._icon_list.setBatchSize(32)
         self._icon_list.setStyleSheet(ICON_MODE_LIST_QSS)
-        self._icon_list.setItemDelegate(
-            NoFocusItemDelegate(self._icon_list, elide_none=True)
-        )
+        self._icon_list.setItemDelegate(IconTileItemDelegate(self._icon_list))
         self._icon_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._icon_list.customContextMenuRequested.connect(self._on_icon_list_context_menu)
         self._icon_list.itemDoubleClicked.connect(self._on_icon_list_double_clicked)
@@ -802,44 +798,20 @@ class NetNeighborMainWindow(QMainWindow):
         self._last_device_view_sig = self._device_view_refresh_signature(ordered)
 
     def _apply_icon_list_dimensions(self) -> None:
-        self._relayout_flat_icon_list()
+        self._relayout_flat_icon_list(force=True)
 
-    def _relayout_flat_icon_list(self) -> None:
+    def _relayout_flat_icon_list(self, *, force: bool = False) -> None:
         if self._icon_list.count() <= 0:
             return
-        sz = icon_size_preset_to_qsize(self._icon_size_preset)
         fallback = 0
         if self._icon_list.viewport().width() <= 0:
             fallback = max(240, self._content_frame.width() - 24)
-        # Collect original labels (pre-break) to compute cell size from unmodified text widths.
-        orig_labels: list[str] = []
-        for i in range(self._icon_list.count()):
-            it = self._icon_list.item(i)
-            if it is None:
-                continue
-            lbl = it.data(self._ICON_LABEL_ROLE)
-            orig_labels.append(lbl if isinstance(lbl, str) and lbl else it.text())
-        apply_icon_mode_list_layout(
+        relayout_icon_mode_list(
             self._icon_list,
-            sz,
-            orig_labels,
+            icon_size_preset_to_qsize(self._icon_size_preset),
             fallback_viewport_width=fallback,
+            force=force,
         )
-        cell_w = self._icon_list.gridSize().width()
-        if cell_w > 0:
-            fm = QFontMetrics(icon_mode_label_font(self._icon_list))
-            text_zone = max(30, cell_w - TILE_H_MARGIN)
-            _LOG.debug("flat relayout preset=%s cell_w=%d text_zone=%d items=%d",
-                       self._icon_size_preset, cell_w, text_zone, len(orig_labels))
-            for i, orig in enumerate(orig_labels):
-                it = self._icon_list.item(i)
-                if it is None:
-                    continue
-                broken = smart_break_label(orig, fm, text_zone)
-                if _LOG.isEnabledFor(logging.DEBUG) and it.text() != broken:
-                    _LOG.debug("  break label %r → %r", orig[:40], broken[:60])
-                if it.text() != broken:
-                    it.setText(broken)
 
     def _apply_view_mode(self, mode: str) -> None:
         if mode not in {"icons", "list"}:
@@ -1122,10 +1094,10 @@ class NetNeighborMainWindow(QMainWindow):
             self._table.resizeRowsToContents()
             return True
         if self._view_mode == "icons" and self._icon_sort_mode == "appearance":
-            name = format_icon_tile_label(_safe_str(bundle.primary.name))
-            item = QListWidgetItem(self._icon_for_bundle(bundle), name)
+            item = create_icon_tile_list_item(
+                self._icon_for_bundle(bundle), _safe_str(bundle.primary.name)
+            )
             item.setData(self._BUNDLE_KEY_ROLE, bundle.primary.key)
-            item.setData(self._ICON_LABEL_ROLE, name)
             item.setToolTip(self._bundle_tooltip(bundle))
             self._icon_list.insertItem(insert_at, item)
             self._relayout_flat_icon_list()
@@ -1763,10 +1735,8 @@ class NetNeighborMainWindow(QMainWindow):
         )
 
     def _run_flat_icon_list_batched(self, work: Callable[[], None]) -> None:
-        """Hide the icon list while mutating it so Windows does not flash a native surface per item."""
+        """Batch list mutations without disabling the widget (avoids stray Windows taskbar entries)."""
         lst = self._icon_list
-        was_visible = lst.isVisible()
-        lst.setVisible(False)
         vp = lst.viewport()
         lst.blockSignals(True)
         vp.setUpdatesEnabled(False)
@@ -1777,21 +1747,20 @@ class NetNeighborMainWindow(QMainWindow):
             lst.setUpdatesEnabled(True)
             vp.setUpdatesEnabled(True)
             lst.blockSignals(False)
-            lst.setVisible(was_visible)
 
     def _fill_flat_icon_list(self, rows: list[DeviceBundle]) -> None:
         def _fill() -> None:
             self._icon_list.clear()
             for bundle in rows:
-                name = format_icon_tile_label(_safe_str(bundle.primary.name))
-                it = QListWidgetItem(self._icon_for_bundle(bundle), name)
+                it = create_icon_tile_list_item(
+                    self._icon_for_bundle(bundle), _safe_str(bundle.primary.name)
+                )
                 it.setData(self._BUNDLE_KEY_ROLE, bundle.primary.key)
-                it.setData(self._ICON_LABEL_ROLE, name)
                 it.setToolTip(self._bundle_tooltip(bundle))
                 self._icon_list.addItem(it)
 
         self._run_flat_icon_list_batched(_fill)
-        self._relayout_flat_icon_list()
+        self._relayout_flat_icon_list(force=True)
 
     def _resync_flat_icon_list_pixmaps(self) -> None:
         """Refresh icons after preset change without rebuilding the whole list."""
@@ -1808,10 +1777,7 @@ class NetNeighborMainWindow(QMainWindow):
                 if bundle is None:
                     continue
                 it.setIcon(self._icon_for_bundle(bundle))
-                name = format_icon_tile_label(_safe_str(bundle.primary.name))
-                it.setData(self._ICON_LABEL_ROLE, name)
-                if it.text() != name:
-                    it.setText(name)
+                set_icon_tile_item_label(it, _safe_str(bundle.primary.name))
                 it.setToolTip(self._bundle_tooltip(bundle))
 
         self._run_flat_icon_list_batched(_sync)

@@ -1,182 +1,80 @@
 # File icon_grid_layout.py for NetNeighbor version 1.0.0
 # License: LGPL3
-"""Adaptive cell sizing for icon-mode ``QListWidget`` grids (flat Unsorted + grouped sections)."""
+"""Adaptive cell sizing for icon-mode ``QListWidget`` grids (flat + grouped sections)."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
-from PySide6.QtCore import QEvent, QObject, QSize, Qt
-from PySide6.QtGui import QFont, QFontMetrics
-from PySide6.QtWidgets import QListWidget
+from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
+from PySide6.QtGui import QFont, QFontMetrics, QIcon
+from PySide6.QtWidgets import QListWidget, QListWidgetItem
+
+from ui_qt.icon_tile_label import (
+    ICON_TILE_LABEL_ROLE,
+    LONG_NAME_WRAP_MIN_WIDTH_FACTOR,
+    MIN_LINES_BEFORE_ELLIPSIS,
+    TILE_H_MARGIN,
+    _ITEM_EXTRA_PAD,
+    _ITEM_INSET_LR,
+    _label_max_horizontal_advance,
+    format_icon_tile_label,
+    icon_mode_label_font,
+    icon_tile_cell_height,
+    icon_tile_label_paint_rect,
+    max_label_block_height_for_labels,
+    normalize_icon_tile_label,
+    refresh_icon_tile_display_cache,
+)
 
 _LOG = logging.getLogger(__name__)
 
-# Must match ``ICON_MODE_LIST_QSS`` (1px border + 2px padding on each side).
-_ITEM_BORDER_PX = 1
-_ITEM_PADDING_PX = 2
-_ITEM_INSET_LR = 2 * (_ITEM_BORDER_PX + _ITEM_PADDING_PX)
-_ITEM_EXTRA_PAD = 4
-
-_MAX_LABEL_LINES = 5   # cap: never measure beyond this many lines
-_MIN_LABEL_LINES = 2   # floor: always reserve at least this many lines per cell
-
-# Shared by flat icon list and Type / Location section lists.
-LONG_NAME_WRAP_MIN_WIDTH_FACTOR = 3
-
-# Total horizontal margin per tile: horizontal_pad×2 (20) + border+padding insets (6).
-TILE_H_MARGIN = 26
-
-
-def _split_word_at_hyphens(word: str, fm: QFontMetrics, max_px: int) -> list[str]:
-    """Group hyphen-delimited parts of *word* into chunks that fit within *max_px*."""
-    raw = word.split('-')
-    if len(raw) <= 1:
-        return [word]
-    parts = [p + '-' for p in raw[:-1]] + [raw[-1]]
-    tokens: list[str] = []
-    current = ''
-    for part in parts:
-        test = current + part
-        if fm.horizontalAdvance(test) <= max_px:
-            current = test
-        else:
-            if current:
-                tokens.append(current)
-            current = part
-    if current:
-        tokens.append(current)
-    return tokens or [word]
+# Re-export for callers that imported these from icon_grid_layout.
+__all__ = [
+    "ICON_TILE_LABEL_ROLE",
+    "TILE_H_MARGIN",
+    "format_icon_tile_label",
+    "normalize_icon_tile_label",
+    "set_icon_tile_item_label",
+    "collect_icon_tile_labels",
+    "icon_mode_label_font",
+    "relayout_icon_mode_list",
+    "apply_icon_mode_list_layout",
+    "IconListViewportResizeFilter",
+    "icon_list_spacing_for_cell",
+    "icon_list_content_height",
+    "labels_from_icon_list",
+]
 
 
-def _split_by_chars(text: str, fm: QFontMetrics, max_px: int) -> list[str]:
-    """Split *text* character-by-character into chunks fitting *max_px*."""
-    lines: list[str] = []
-    current = ''
-    for ch in text:
-        test = current + ch
-        if fm.horizontalAdvance(test) <= max_px:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = ch
-    if current:
-        lines.append(current)
-    return lines or ['']
+def create_icon_tile_list_item(icon: QIcon, name: str) -> QListWidgetItem:
+    """``QListWidgetItem`` requires ``(icon, text)`` in PySide6 — never pass icon alone."""
+    item = QListWidgetItem(icon, "")
+    set_icon_tile_item_label(item, name)
+    return item
 
 
-def _wrap_one_segment(text: str, fm: QFontMetrics, max_px: int) -> list[str]:
-    """Wrap a single text segment (no \\n) into lines of at most *max_px* pixels.
+def set_icon_tile_item_label(item: QListWidgetItem, name: str) -> str:
+    """Store the unbroken label on *item*; returns the normalized string."""
+    label = normalize_icon_tile_label(name)
+    item.setData(ICON_TILE_LABEL_ROLE, label)
+    item.setText(label)
+    return label
 
-    Cascade: word boundaries → hyphens within a word → characters.
-    """
-    text = text.strip()
-    if not text:
-        return []
-    if fm.horizontalAdvance(text) <= max_px:
-        return [text]
 
-    lines: list[str] = []
-    current = ''
-
-    for word in text.split(' '):
-        if not word:
+def collect_icon_tile_labels(list_widget: QListWidget) -> list[str]:
+    out: list[str] = []
+    for i in range(list_widget.count()):
+        it = list_widget.item(i)
+        if it is None:
             continue
-        candidate = (current + ' ' + word) if current else word
-        if fm.horizontalAdvance(candidate) <= max_px:
-            current = candidate
-            continue
-
-        if current:
-            lines.append(current)
-            current = ''
-
-        if fm.horizontalAdvance(word) <= max_px:
-            current = word
-            continue
-
-        # Word itself is too wide — try hyphen splits then char splits
-        for token in _split_word_at_hyphens(word, fm, max_px):
-            t_candidate = (current + token) if current else token
-            if fm.horizontalAdvance(t_candidate) <= max_px:
-                current = t_candidate
-            else:
-                if current:
-                    lines.append(current)
-                    current = ''
-                if fm.horizontalAdvance(token) <= max_px:
-                    current = token
-                else:
-                    char_lines = _split_by_chars(token, fm, max_px)
-                    lines.extend(char_lines[:-1])
-                    current = char_lines[-1] if char_lines else ''
-
-    if current:
-        lines.append(current)
-    return lines or [text]
-
-
-def smart_break_label(label: str, fm: QFontMetrics, max_px: int, max_lines: int = _MAX_LABEL_LINES) -> str:
-    """Break *label* into lines fitting *max_px*, honouring existing \\n.
-
-    Cascade: spaces → hyphens → characters.  When the result still exceeds
-    *max_lines*, flattens and force-wraps char-by-char into at most *max_lines*.
-    """
-    if not label or max_px <= 0:
-        return label or ''
-
-    all_lines: list[str] = []
-    for segment in label.split('\n'):
-        all_lines.extend(_wrap_one_segment(segment, fm, max_px))
-
-    if len(all_lines) <= max_lines:
-        return '\n'.join(all_lines) if all_lines else label
-
-    # Over limit: flatten and force into max_lines via char-level cutting
-    flat = ' '.join(label.replace('\n', ' ').split())
-    forced: list[str] = []
-    current = ''
-    for ch in flat:
-        if len(forced) >= max_lines - 1:
-            test = current + ch
-            if fm.horizontalAdvance(test) <= max_px:
-                current = test
-            # else: silently truncate — text genuinely too long for max_lines
+        stored = it.data(ICON_TILE_LABEL_ROLE)
+        if isinstance(stored, str) and stored:
+            out.append(stored)
         else:
-            test = current + ch
-            if fm.horizontalAdvance(test) <= max_px:
-                current = test
-            else:
-                if current:
-                    forced.append(current)
-                current = ch
-    if current and len(forced) < max_lines:
-        forced.append(current)
-    return '\n'.join(forced) if forced else label[:1]
-
-
-def format_icon_tile_label(name: str) -> str:
-    """Break long SSDP-style titles at `` - `` so each segment fits narrow icon cells."""
-    n = (name or "").strip()
-    if len(n) < 16 or " - " not in n:
-        return n
-    return n.replace(" - ", "\n")
-
-
-def _label_max_horizontal_advance(fm: QFontMetrics, lbl: str) -> int:
-    lines = (lbl or "").split("\n") or ["—"]
-    return max(fm.horizontalAdvance(line) if line.strip() else fm.horizontalAdvance("—") for line in lines)
-
-
-def icon_mode_label_font(list_widget: QListWidget) -> QFont:
-    """Match ``font-size: smaller`` from ``ICON_MODE_LIST_QSS`` when measuring labels."""
-    font = QFont(list_widget.font())
-    pt = font.pointSizeF()
-    if pt > 0:
-        font.setPointSizeF(max(1.0, pt * 0.85))
-    return font
+            out.append(normalize_icon_tile_label(it.text()))
+    return out
 
 
 def compute_icon_mode_cell_size(
@@ -190,15 +88,8 @@ def compute_icon_mode_cell_size(
     label_gap: int = 6,
     min_cell_width: int | None = None,
     max_cell_width: int | None = None,
-) -> tuple[QSize, bool]:
-    """Return ``(grid cell size, use_word_wrap)`` for an icon-mode list.
-
-    Uses the longest label width when there is room. When labels are wider than the
-    minimum tile, cell width is at least ``3 ×`` that minimum (flat list and grouped
-    sections). Word wrap with up to four lines is used when the cell is still narrower
-    than the longest name.  ``max_cell_width`` caps the final tile width (respecting the
-    icon-driven minimum so the icon always fits).
-    """
+) -> QSize:
+    """Return grid cell size; label height from ``QTextLayout`` (min four lines)."""
     iw = max(1, icon_size.width())
     ih = max(1, icon_size.height())
     min_w = min_cell_width if min_cell_width is not None else iw + 20
@@ -212,15 +103,13 @@ def compute_icon_mode_cell_size(
 
     has_long_names = text_w > min_w
     text_inner_min = text_w + horizontal_pad * 2 + _ITEM_INSET_LR
-
     max_cell_w = max(min_w, iw + horizontal_pad * 2 + _ITEM_INSET_LR, text_inner_min)
 
     count = len(labels)
     if count <= 0:
-        return (
-            QSize(min_w, ih + label_gap + fm.lineSpacing() * _MIN_LABEL_LINES + horizontal_pad + _ITEM_INSET_LR + _ITEM_EXTRA_PAD),
-            True,
-        )
+        dummy = QRect(0, 0, min_w, 10000)
+        empty_h = max_label_block_height_for_labels([], font, icon_tile_label_paint_rect(dummy, ih).width())
+        return QSize(min_w, icon_tile_cell_height(ih, empty_h))
 
     vp = max(min_w, viewport_width)
     gaps_one_row = list_spacing * max(0, count - 1)
@@ -240,38 +129,25 @@ def compute_icon_mode_cell_size(
             cell_w = max(min_w, (vp - list_spacing * (cols - 1)) // cols)
             cell_w = min(cell_w, max_cell_w)
 
-    cell_w_before_long = cell_w
     if has_long_names:
         cell_w = max(cell_w, long_name_min_w)
 
-    cell_w_before_cap = cell_w
     if max_cell_width is not None:
-        cell_w = max(min_w, max_cell_width)  # fixed target width, not just a ceiling
+        cell_w = max(min_w, max_cell_width)
 
-    text_zone_w = max(30, cell_w - TILE_H_MARGIN)
-
-    # Pre-break every label with the smart algorithm and count the maximum line count.
-    # Since we own all line breaks, cell height is exact — no estimation via boundingRect.
-    broken_for_height = [smart_break_label(lbl, fm, text_zone_w) for lbl in (labels or ["—"])]
-    max_n_lines = max(lbl.count('\n') + 1 for lbl in broken_for_height)
-    max_n_lines = max(max_n_lines, _MIN_LABEL_LINES)
-    text_h = max_n_lines * fm.lineSpacing()
+    dummy_cell = QRect(0, 0, cell_w, 10000)
+    zone_w = icon_tile_label_paint_rect(dummy_cell, ih).width()
+    max_text_h = max_label_block_height_for_labels(labels, font, zone_w)
+    cell_h = icon_tile_cell_height(ih, max_text_h)
 
     _LOG.debug(
-        "cell_size icon=%dpx vp=%d count=%d text_w=%d min_w=%d "
-        "computed=%d long_name=%d cap=%s → cell_w=%d zone=%d lines=%d",
-        iw, viewport_width, count, text_w, min_w,
-        cell_w_before_long, cell_w_before_cap,
-        str(max_cell_width),
-        cell_w, text_zone_w, max_n_lines,
+        "cell_size icon=%dpx vp=%d count=%d cell_w=%d zone=%d text_h=%d cell_h=%d",
+        iw, viewport_width, count, cell_w, zone_w, max_text_h, cell_h,
     )
-
-    cell_h = ih + label_gap + text_h + horizontal_pad + _ITEM_INSET_LR + _ITEM_EXTRA_PAD
-    return QSize(cell_w, cell_h), True
+    return QSize(cell_w, cell_h)
 
 
 def icon_list_spacing_for_cell(icon_size: QSize) -> int:
-    """Inter-tile spacing scaled with icon preset."""
     h = max(1, icon_size.height())
     return max(4, min(12, h // 8))
 
@@ -283,7 +159,6 @@ def icon_list_content_height(
     item_count: int | None = None,
     viewport_width: int | None = None,
 ) -> int:
-    """Pixel height for an icon-mode list grid (grouped sections — not full viewport)."""
     count = item_count if item_count is not None else list_widget.count()
     if count <= 0:
         return 0
@@ -305,7 +180,6 @@ def apply_icon_mode_list_layout(
     compact_height: bool = False,
     fallback_viewport_width: int = 0,
 ) -> None:
-    """Apply spacing, grid size, and word-wrap for an icon-mode list."""
     list_widget.setSpacing(icon_list_spacing_for_cell(icon_size))
     list_widget.setIconSize(icon_size)
 
@@ -314,17 +188,14 @@ def apply_icon_mode_list_layout(
         vp_w = fallback_viewport_width
 
     iw = icon_size.width()
-    # Fixed max tile widths: 3×48=144 for small/medium, icon+96 for large (192px), icon-driven for xlarge.
     if iw >= 256:
-        max_cw = iw + 20          # xlarge: 276px → text zone ≈ 250px
+        max_cw = iw + 20
     elif iw >= 96:
-        max_cw = iw + 96          # large: 192px → text zone ≈ 166px (avoids 3-line wrapping)
+        max_cw = iw + 96
     else:
-        max_cw = 3 * 48           # small/medium: 144px
+        max_cw = 3 * 48
 
-    _LOG.debug("apply_layout icon=%dpx vp=%d max_cw=%d labels=%d", iw, vp_w, max_cw, len(labels))
-
-    cell, use_wrap = compute_icon_mode_cell_size(
+    cell = compute_icon_mode_cell_size(
         vp_w,
         icon_size,
         labels,
@@ -332,12 +203,13 @@ def apply_icon_mode_list_layout(
         list_spacing=list_widget.spacing(),
         max_cell_width=max_cw,
     )
-    list_widget.setWordWrap(use_wrap)
+    list_widget.setWordWrap(False)
     list_widget.setTextElideMode(Qt.TextElideMode.ElideNone)
     list_widget.setGridSize(cell)
     list_widget.setMinimumHeight(0)
     list_widget.setMaximumHeight(16777215)
     list_widget.doItemsLayout()
+    list_widget.updateGeometries()
     if compact_height:
         content_h = icon_list_content_height(list_widget, cell, viewport_width=vp_w)
         if content_h > 0:
@@ -347,26 +219,70 @@ def apply_icon_mode_list_layout(
         list_widget.setMinimumHeight(max(96, cell.height(), ih + 56))
 
 
-class IconListViewportResizeFilter(QObject):
-    """Invoke ``on_resize`` when the watched widget is resized."""
+def relayout_icon_mode_list(
+    list_widget: QListWidget,
+    icon_size: QSize,
+    *,
+    labels: Sequence[str] | None = None,
+    compact_height: bool = False,
+    set_min_height: bool = False,
+    fallback_viewport_width: int = 0,
+    force: bool = False,
+) -> None:
+    """Resize grid cells; precompute wrapped lines once (delegate reads cache)."""
+    label_list = list(labels) if labels is not None else collect_icon_tile_labels(list_widget)
+    if not label_list and list_widget.count() <= 0:
+        return
 
-    def __init__(self, on_resize: Callable[[], None], parent: QObject | None = None) -> None:
+    vp_w = list_widget.viewport().width()
+    if vp_w <= 0 and fallback_viewport_width > 0:
+        vp_w = fallback_viewport_width
+    layout_key = (vp_w, icon_size.width(), icon_size.height(), len(label_list))
+    if not force and getattr(list_widget, "_nn_icon_layout_key", None) == layout_key:
+        return
+    list_widget._nn_icon_layout_key = layout_key  # type: ignore[attr-defined]
+
+    apply_icon_mode_list_layout(
+        list_widget,
+        icon_size,
+        label_list,
+        compact_height=compact_height,
+        set_min_height=set_min_height,
+        fallback_viewport_width=fallback_viewport_width,
+    )
+    refresh_icon_tile_display_cache(list_widget, icon_size, label_list)
+    for i, orig in enumerate(label_list):
+        it = list_widget.item(i)
+        if it is None:
+            continue
+        if it.data(ICON_TILE_LABEL_ROLE) != orig:
+            it.setData(ICON_TILE_LABEL_ROLE, orig)
+        if it.text() != orig:
+            it.setText(orig)
+
+
+class IconListViewportResizeFilter(QObject):
+    """Debounce resize storms (each pixel was relayouting every label)."""
+
+    def __init__(
+        self,
+        on_resize: Callable[[], None],
+        parent: QObject | None = None,
+        *,
+        debounce_ms: int = 80,
+    ) -> None:
         super().__init__(parent)
         self._on_resize = on_resize
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(max(0, debounce_ms))
+        self._timer.timeout.connect(self._on_resize)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.Resize:
-            self._on_resize()
+            self._timer.start()
         return False
 
 
 def labels_from_icon_list(list_widget: QListWidget) -> list[str]:
-    out: list[str] = []
-    for i in range(list_widget.count()):
-        it = list_widget.item(i)
-        if it is None:
-            continue
-        text = (it.text() or "").strip()
-        if text:
-            out.append(text)
-    return out
+    return collect_icon_tile_labels(list_widget)
