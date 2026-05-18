@@ -17,17 +17,10 @@ from utils.mdns_rules import cached_mdns_rules, evaluate_type_rules
 from utils.scheduling import ScheduleMainFn
 from utils.user_config_overlay import USER_DEVICE_TYPES_JSON, merge_device_types_trees, optional_user_json
 
-try:
-    from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
-except Exception:  # pragma: no cover - dependency/runtime availability
-    ServiceBrowser = None
-    ServiceListener = object
-    Zeroconf = None
-
-try:
-    from zeroconf import ZeroconfServiceTypes
-except Exception:  # pragma: no cover - older zeroconf builds
-    ZeroconfServiceTypes = None
+ServiceBrowser = None
+ServiceListener = object
+Zeroconf = None
+ZeroconfServiceTypes = None
 
 _ENUMERATION_TIMEOUT_S = 2.5
 _ENUMERATION_REFRESH_INTERVAL_S = 240
@@ -43,6 +36,25 @@ _SERVICE_REMOVE_GRACE_S = 180
 
 
 _TYPE_MAP_PATH = Path(__file__).resolve().parent.parent / "data" / "device_types.json"
+_ZEROCONF_LIBS_LOADED = False
+
+
+def _ensure_zeroconf_libs() -> None:
+    global ServiceBrowser, Zeroconf, ZeroconfServiceTypes, _ZEROCONF_LIBS_LOADED
+    if _ZEROCONF_LIBS_LOADED:
+        return
+    _ZEROCONF_LIBS_LOADED = True
+    try:
+        from zeroconf import ServiceBrowser as _SB, Zeroconf as _Z
+        ServiceBrowser = _SB
+        Zeroconf = _Z
+    except Exception:
+        return
+    try:
+        from zeroconf import ZeroconfServiceTypes as _ZST
+        ZeroconfServiceTypes = _ZST
+    except Exception:
+        pass
 
 
 class _MDNSListener(ServiceListener):
@@ -106,6 +118,7 @@ class MDNSDiscovery(BaseDiscovery):
         if self._running:
             return
         self._running = True
+        _ensure_zeroconf_libs()
         if Zeroconf is None or ServiceBrowser is None:
             self._logger.warning("mDNS discovery unavailable: zeroconf not installed")
             return

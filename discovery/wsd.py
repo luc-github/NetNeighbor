@@ -16,27 +16,31 @@ from urllib.parse import urlparse
 
 from discovery.base import BaseDiscovery
 
-try:
-    from wsdiscovery import QName
-except ImportError:  # pragma: no cover - optional dependency
-    QName = None  # type: ignore[misc, assignment]
-
-try:
-    from wsdiscovery.discovery import ThreadedWSDiscovery as _ThreadedWSDiscovery
-except ImportError:  # pragma: no cover - optional dependency
-    _ThreadedWSDiscovery = None
+QName = None  # type: ignore[misc, assignment]
+_ThreadedWSDiscovery = None
 
 _DEFAULT_INTERVAL_S = 90.0
 _DEFAULT_TIMEOUT_S = 8.0
 # Remember last LAN IPv4 per WSD EPR when a later probe only lists link-local IPv6 (common on Wi‑Fi mini PCs).
 _STICKY_LAN_IPV4_TTL_S = 3600.0
 
-# DPWS "Device" — many Windows and embedded hosts match this type in Probe.
-_DPWS_DEVICE_TYPE: object | None
-if QName is not None:
-    _DPWS_DEVICE_TYPE = QName("http://schemas.xmlsoap.org/ws/2006/02/devprof", "Device")
-else:
-    _DPWS_DEVICE_TYPE = None
+_DPWS_DEVICE_TYPE: object | None = None
+_WSD_LIBS_LOADED = False
+
+
+def _ensure_wsd_libs() -> None:
+    global QName, _ThreadedWSDiscovery, _DPWS_DEVICE_TYPE, _WSD_LIBS_LOADED
+    if _WSD_LIBS_LOADED:
+        return
+    _WSD_LIBS_LOADED = True
+    try:
+        from wsdiscovery import QName as _QName
+        from wsdiscovery.discovery import ThreadedWSDiscovery as _T
+        QName = _QName
+        _ThreadedWSDiscovery = _T
+        _DPWS_DEVICE_TYPE = _QName("http://schemas.xmlsoap.org/ws/2006/02/devprof", "Device")
+    except ImportError:
+        pass
 
 # soap.udp://[fe80::1]:3702/ or soap.udp://192.168.1.1:3702/…
 _SOAP_UDP_RE = re.compile(
@@ -468,6 +472,7 @@ class WSDiscovery(BaseDiscovery):
     def start(self) -> None:
         if self._running:
             return
+        _ensure_wsd_libs()
         if _ThreadedWSDiscovery is None:
             self._logger.warning("WSD discovery unavailable: install package WSDiscovery (PyPI)")
             return

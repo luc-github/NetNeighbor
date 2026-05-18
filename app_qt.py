@@ -153,16 +153,24 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             _log.debug("Startup auto-refresh failed at +%ss", delay_seconds, exc_info=True)
 
-    manager.start()
-    # Same as GTK ``MainWindow._start_discovery_protocols``: wake probes once threads run,
-    # then repeat M-SEARCH / other polls at ``startup_refresh_seconds`` from discovery.json.
-    try:
-        manager.refresh()
-    except Exception:
-        _log.debug("Post-start discovery refresh failed", exc_info=True)
+    def _start_discovery() -> None:
+        """Run in a background thread so the Qt event loop (and overlay) stay responsive."""
+        import threading as _threading
+        def _run() -> None:
+            manager.start()
+            try:
+                manager.refresh()
+            except Exception:
+                _log.debug("Post-start discovery refresh failed", exc_info=True)
+        _threading.Thread(target=_run, daemon=True, name="discovery-start").start()
+
     for delay in startup_refresh_seconds:
         if delay > 0:
             QTimer.singleShot(delay * 1000, lambda d=delay: _run_startup_refresh_once(d))
+
+    # Defer start until the first event-loop tick so the window (and overlay) paint first.
+    QTimer.singleShot(0, _start_discovery)
+
     try:
         return int(app.exec())
     finally:

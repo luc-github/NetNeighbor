@@ -5,13 +5,16 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
+import threading
+import time
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
 
 from gettext import gettext as _
-from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QResizeEvent, QShowEvent
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPainter, QPalette, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -124,6 +127,126 @@ _TABLE_BODY_QSS = (
     "}"
     "QTableWidget::item:focus { border: none; outline: none; }"
 )
+
+
+class _ScanningOverlay(QWidget):
+    """Animated spinner overlay — a background thread drives the animation via Signal.
+
+    Using a Python thread + Signal (QueuedConnection) ensures the repaint request
+    reaches the main thread even when it is briefly busy at startup, without any
+    dependency on QTimer delivery timing.
+    """
+
+    _SEGS = 8
+    _RING_R = 26
+    _DOT_R = 5
+    _INTERVAL_S = 0.09   # ~11 fps
+    _MAX_MS = 12_000
+
+    _tick_signal = Signal()  # emitted from bg thread → received on main thread
+
+    def __init__(self, main_window: QWidget, content_frame: QWidget) -> None:
+        super().__init__(main_window)
+        self._content_frame = content_frame
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self._step = 0
+        self._alive = False
+        self._tick_signal.connect(self._on_tick, Qt.ConnectionType.QueuedConnection)
+        self._guard = QTimer(self)
+        self._guard.setSingleShot(True)
+        self._guard.setInterval(self._MAX_MS)
+        self._guard.timeout.connect(self.hide)
+        content_frame.installEventFilter(self)
+        main_window.installEventFilter(self)
+
+    # ── geometry sync ──────────────────────────────────────────────────────────
+
+    def _update_geometry(self) -> None:
+        p = self._content_frame
+        mw = self.parent()
+        if p is None or mw is None:
+            return
+        tl = p.mapTo(mw, QPoint(0, 0))
+        self.setGeometry(tl.x(), tl.y(), p.width(), p.height())
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.Move):
+            self._update_geometry()
+            if self.isVisible():
+                self.raise_()
+        return False
+
+    # ── show / hide ────────────────────────────────────────────────────────────
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._update_geometry()
+        self.raise_()
+        self._guard.start()
+        self._alive = True
+        t = threading.Thread(target=self._anim_loop, daemon=True, name="overlay-anim")
+        t.start()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self._alive = False
+        self._guard.stop()
+
+    # ── animation thread ───────────────────────────────────────────────────────
+
+    def _anim_loop(self) -> None:
+        while self._alive:
+            self._tick_signal.emit()
+            time.sleep(self._INTERVAL_S)
+
+    def _on_tick(self) -> None:
+        if not self.isVisible():
+            return
+        self._step = (self._step + 1) % self._SEGS
+        self.raise_()
+        self.repaint()
+
+    # ── painting ───────────────────────────────────────────────────────────────
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        painter.fillRect(self.rect(), self.palette().color(QPalette.ColorRole.Base))
+
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0 - 20
+
+        hi = self.palette().color(QPalette.ColorRole.Highlight)
+        for i in range(self._SEGS):
+            age = (i - self._step) % self._SEGS
+            alpha = int(40 + 215 * age / (self._SEGS - 1))
+            ang = 2 * math.pi * i / self._SEGS - math.pi / 2
+            dx = self._RING_R * math.cos(ang)
+            dy = self._RING_R * math.sin(ang)
+            c = QColor(hi)
+            c.setAlpha(alpha)
+            painter.setBrush(c)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(
+                int(cx + dx - self._DOT_R),
+                int(cy + dy - self._DOT_R),
+                self._DOT_R * 2,
+                self._DOT_R * 2,
+            )
+
+        font = painter.font()
+        font.setPointSize(11)
+        painter.setFont(font)
+        painter.setPen(self.palette().color(QPalette.ColorRole.Text))
+        text_top = int(cy) + self._RING_R + 14
+        painter.drawText(
+            QRect(0, text_top, self.width(), 32),
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+            _("Start Scanning…"),
+        )
+        painter.end()
 
 
 class NetNeighborMainWindow(QMainWindow):
@@ -468,6 +591,9 @@ class NetNeighborMainWindow(QMainWindow):
         self._apply_stack_page()
         self._rebuild_sidebar()
         QTimer.singleShot(0, self._apply_initial_sidebar_geometry)
+
+        self._scanning_overlay = _ScanningOverlay(self, self._content_frame)
+        self._scanning_overlay.show()
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
@@ -1170,6 +1296,8 @@ class NetNeighborMainWindow(QMainWindow):
         self._apply_devices_snapshot(snapshot)
         if len(self._last_devices) > 0:
             self._first_device_ui_flush_done = True
+            if self._scanning_overlay.isVisible():
+                self._scanning_overlay.hide()
 
     def _apply_devices_snapshot(self, devices: list[Device]) -> None:
         """Apply a device list to bundles, sidebar, and main views (always merge like GTK)."""

@@ -21,7 +21,7 @@ def send_activate_to_primary(server_name: str = SINGLETON_SERVER_NAME) -> bool:
     """
     sock = QLocalSocket()
     sock.connectToServer(server_name)
-    if not sock.waitForConnected(800):
+    if not sock.waitForConnected(200):
         return False
     sock.write(b"ACTIVATE")
     sock.flush()
