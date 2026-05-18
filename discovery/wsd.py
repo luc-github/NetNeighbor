@@ -468,6 +468,10 @@ class WSDiscovery(BaseDiscovery):
         self._wake_event = threading.Event()
         self._probe_thread: threading.Thread | None = None
         self._engine: object | None = None
+        # TTL tracking: emit offline for hosts absent ≥ _wsd_grace_sweeps consecutive sweeps.
+        self._wsd_known_eprs: dict[str, dict] = {}  # epr/key → last payload
+        self._wsd_miss_counts: dict[str, int] = {}  # epr/key → consecutive missed sweeps
+        self._wsd_grace_sweeps: int = 2
 
     def start(self) -> None:
         if self._running:
@@ -507,6 +511,8 @@ class WSDiscovery(BaseDiscovery):
         if self._probe_thread is not None:
             self._probe_thread.join(timeout=1.0)
             self._probe_thread = None
+        self._wsd_known_eprs.clear()
+        self._wsd_miss_counts.clear()
         self._logger.info("WSD discovery stopped")
 
     def refresh(self) -> None:
@@ -526,10 +532,14 @@ class WSDiscovery(BaseDiscovery):
         eng = self._engine
         if eng is None or not self._running:
             return
+        # Clear accumulated remote services before each sweep so only devices that respond in
+        # THIS cycle are counted.  The grace period of _wsd_grace_sweeps absorbs hosts that
+        # occasionally skip a probe due to network timing.
         try:
-            # Do not call clearRemoteServices() each cycle — Windows hosts often reply slower or skip a
-            # probe entirely; wiping _remoteServices would drop the PC from the merged set while leaving
-            # faster responders (e.g. printers) as the sole entry until the next lucky reply window.
+            eng.clearRemoteServices()
+        except Exception:
+            self._logger.debug("WSD clearRemoteServices failed", exc_info=True)
+        try:
             # Typed DPWS probe first, broad probe last: ThreadedWSDiscovery stores one ``Service`` per
             # EPR — a later ProbeMatch overwrites the earlier. A narrow typed match can carry thinner
             # metadata than a broad ProbeMatch; running broad last keeps fuller ``Types`` / ``XAddrs``.
@@ -542,6 +552,7 @@ class WSDiscovery(BaseDiscovery):
             try:
                 eng.searchServices(timeout=broad_s)
             except Exception:
+                # Transient failure — don't penalise known hosts with a miss-count increment.
                 self._logger.debug("WSD broad searchServices failed", exc_info=True)
                 return
             # Second broad sweep — some stacks (esp. mobile / Wi‑Fi) answer after the first window.
@@ -563,17 +574,43 @@ class WSDiscovery(BaseDiscovery):
                 "WSD: no responses (firewall may block UDP 3702; many Windows PCs do not expose a "
                 "useful WSD endpoint — NetBIOS browse may still be required)"
             )
-            return
-        self._logger.debug("WSD: combined service count=%d", len(services))
+        else:
+            self._logger.debug("WSD: combined service count=%d", len(services))
+
+        # Build payloads for devices found in this sweep.
+        current_payloads: dict[str, dict] = {}
         for svc in services:
             try:
                 payload = self._service_to_payload(svc)
                 if payload:
-                    self._emit("device", payload)
+                    md = payload.get("metadata") or {}
+                    epr = (md.get("wsd_epr") or "").strip().lower()
+                    key = epr if epr else f"{payload['ip']}:{payload['port']}"
+                    current_payloads[key] = payload
                 else:
                     self._log_skip_reason(svc, "no usable LAN IP")
             except Exception:
                 self._logger.debug("WSD service→payload failed", exc_info=True)
+
+        # TTL: emit offline for previously-known devices absent this sweep for ≥ grace sweeps.
+        for k in list(self._wsd_known_eprs):
+            if k not in current_payloads:
+                miss = self._wsd_miss_counts.get(k, 0) + 1
+                self._wsd_miss_counts[k] = miss
+                if miss >= self._wsd_grace_sweeps:
+                    offline_payload = dict(self._wsd_known_eprs[k])
+                    offline_payload["online"] = False
+                    self._emit("device", offline_payload)
+                    self._logger.info("WSD: %s offline after %d missed sweep(s)", k, miss)
+                    del self._wsd_known_eprs[k]
+                    self._wsd_miss_counts.pop(k, None)
+            else:
+                self._wsd_miss_counts.pop(k, None)
+
+        # Emit live devices and update known.
+        for k, payload in current_payloads.items():
+            self._wsd_known_eprs[k] = payload
+            self._emit("device", payload)
 
     def _prune_sticky_epr_map(self) -> None:
         now = time.monotonic()

@@ -927,3 +927,310 @@ msgstr ""
 #: discovery/wsd.py:110 discovery/wsdd_client.py:87
 msgid "Unknown Devices"
 msgstr ""
+
+#: ui_qt/
+msgid "About NetNeighbor"
+msgstr ""
+
+#: ui_qt/
+msgid "App logo under assets/icons: Luc LEBOSSE"
+msgstr ""
+
+#: ui_qt/
+msgid "Applications"
+msgstr ""
+
+#: ui_qt/
+msgid "Apply"
+msgstr ""
+
+#: ui_qt/
+msgid "Author: Luc"
+msgstr ""
+
+#: ui_qt/
+msgid "Close to system tray / panel instead of exiting"
+msgstr ""
+
+#: ui_qt/
+msgid "Command"
+msgstr ""
+
+#: ui_qt/
+msgid ""
+"Command templates for opening device connections. Leave empty to use t"
+"he system default."
+msgstr ""
+
+#: ui_qt/
+msgid "Commands"
+msgstr ""
+
+#: ui_qt/
+msgid "Custom command (additional)"
+msgstr ""
+
+#: ui_qt/
+msgid "Dark"
+msgstr ""
+
+#: ui_qt/
+msgid "Date / Time"
+msgstr ""
+
+#: ui_qt/
+msgid "Delete"
+msgstr ""
+
+#: ui_qt/
+msgid "Desktop notifications"
+msgstr ""
+
+#: ui_qt/
+msgid "Discovery refresh requested"
+msgstr ""
+
+#: ui_qt/
+msgid "Edit"
+msgstr ""
+
+#: ui_qt/
+msgid "Edit type preset"
+msgstr ""
+
+#: ui_qt/
+msgid "Error"
+msgstr ""
+
+#: ui_qt/
+msgid "Extra large"
+msgstr ""
+
+#: ui_qt/
+msgid "Field mapping rules"
+msgstr ""
+
+#: ui_qt/
+msgid "GNU Lesser General Public License version 3 or later"
+msgstr ""
+
+#: ui_qt/
+msgid "General"
+msgstr ""
+
+#: ui_qt/
+msgid "Hidden devices"
+msgstr ""
+
+#: ui_qt/
+msgid "Hide device"
+msgstr ""
+
+#: ui_qt/
+msgid "Hide sidebar"
+msgstr ""
+
+#: ui_qt/
+msgid "Hide window"
+msgstr ""
+
+#: ui_qt/
+msgid "Icons size"
+msgstr ""
+
+#: ui_qt/
+msgid "Invalid command template for this protocol."
+msgstr ""
+
+#: ui_qt/
+msgid "Large"
+msgstr ""
+
+#: ui_qt/
+msgid "Last seen: {n} d ago"
+msgstr ""
+
+#: ui_qt/
+msgid "Last seen: {n} h ago"
+msgstr ""
+
+#: ui_qt/
+msgid "Last seen: {n} min ago"
+msgstr ""
+
+#: ui_qt/
+msgid "Light"
+msgstr ""
+
+#: ui_qt/
+msgid "Location name:"
+msgstr ""
+
+#: ui_qt/
+msgid "Locations"
+msgstr ""
+
+#: ui_qt/
+msgid "Manage location presets shown in the right-click menu."
+msgstr ""
+
+#: ui_qt/
+msgid "Medium"
+msgstr ""
+
+#: ui_qt/
+msgid "Mode"
+msgstr ""
+
+#: ui_qt/
+msgid "NetNeighbor {}"
+msgstr ""
+
+#: ui_qt/
+msgid "New name:"
+msgstr ""
+
+#: ui_qt/
+msgid "No devices yet"
+msgstr ""
+
+#: ui_qt/
+msgid "No hidden devices"
+msgstr ""
+
+#: ui_qt/
+msgid ""
+"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
+"config/netneighbor/custom_icons/."
+msgstr ""
+
+#: ui_qt/
+msgid ""
+"Notification delivery depends on the OS and session. Tray-backed behav"
+"iour (close to tray, minimized start) will align once the system tray "
+"is implemented."
+msgstr ""
+
+#: ui_qt/
+msgid "Notifications"
+msgstr ""
+
+#: ui_qt/
+msgid "Offline"
+msgstr ""
+
+#: ui_qt/
+msgid "Online"
+msgstr ""
+
+#: ui_qt/
+msgid ""
+"Override or add connection endpoints per protocol. For 'custom' scheme"
+", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
+"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
+" schemes."
+msgstr ""
+
+#: ui_qt/
+msgid "Preferences…"
+msgstr ""
+
+#: ui_qt/
+msgid "Qt for Python bindings"
+msgstr ""
+
+#: ui_qt/
+msgid "Reload discovery"
+msgstr ""
+
+#: ui_qt/
+msgid "Scheme"
+msgstr ""
+
+#: ui_qt/
+msgid "See the"
+msgstr ""
+
+#: ui_qt/
+msgid "Select an icon, then OK. IDs are stored in your preferences."
+msgstr ""
+
+#: ui_qt/
+msgid "Service type"
+msgstr ""
+
+#: ui_qt/
+msgid "Session"
+msgstr ""
+
+#: ui_qt/
+msgid "Show sidebar"
+msgstr ""
+
+#: ui_qt/
+msgid "Show window"
+msgstr ""
+
+#: ui_qt/
+msgid "Sidebar"
+msgstr ""
+
+#: ui_qt/
+msgid "Small"
+msgstr ""
+
+#: ui_qt/
+msgid "Start Scanning…"
+msgstr ""
+
+#: ui_qt/
+msgid "Theme"
+msgstr ""
+
+#: ui_qt/
+msgid "This program comes with absolutely no warranty."
+msgstr ""
+
+#: ui_qt/
+msgid "Types"
+msgstr ""
+
+#: ui_qt/
+msgid "Use as Friendly name"
+msgstr ""
+
+#: ui_qt/
+msgid "Use as Information"
+msgstr ""
+
+#: ui_qt/
+msgid "Use as Location"
+msgstr ""
+
+#: ui_qt/
+msgid "Use icon from"
+msgstr ""
+
+#: ui_qt/
+msgid "Version {version}"
+msgstr ""
+
+#: ui_qt/
+msgid "WS-Discovery (Windows devices)"
+msgstr ""
+
+#: ui_qt/
+msgid "for details."
+msgstr ""
+
+#: ui_qt/
+msgid "mDNS/DNS-SD discovery"
+msgstr ""
+
+#: ui_qt/
+msgid "not yet downloaded"
+msgstr ""
+
+#: ui_qt/
+msgid "{} devices"
+msgstr ""

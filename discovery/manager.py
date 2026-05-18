@@ -19,7 +19,7 @@ from discovery.netbios import NetbiosDiscovery
 from discovery.wsdd_client import WsddSocketDiscovery
 from discovery.wsd import WSDiscovery, is_synthetic_wsd_display_name
 from model.device import Device
-from utils.discovery_cache import load_discovery_cache
+from utils.discovery_cache import CACHE_MAX_AGE_HOURS, load_discovery_cache
 from utils.discovery_config import normalize_information_precedence_list
 from utils.device_bundles import normalize_mac_for_bundle_merge
 from utils.discovery_identity import (
@@ -316,6 +316,7 @@ class DiscoveryManager:
         self._stopped = False
         self._logger.info("Starting discovery protocols: %s", [p.source for p in self._protocols])
         self._emit_cached_devices()
+        self._start_tcp_probes_for_cached_devices()
         if not self._protocols:
             self._logger.warning("No discovery protocols enabled (check ~/.config/netneighbor/discovery.json)")
             return
@@ -633,18 +634,21 @@ class DiscoveryManager:
         Device key (``ssdp:udn:…`` when a UDN is present, else ``ssdp:{ip}:{port}``) and simply
         replaces the pre-populated entry via the normal ``add_or_update_device`` pipeline.
         """
-        _CACHE_MAX_AGE_S = 86_400  # 24 h
         now = datetime.now(timezone.utc)
+        _cache_max_age_s = CACHE_MAX_AGE_HOURS * 3600
         emitted = 0
         for sip, row in self._ssdp_profile_cache_emit_rows:
             if not isinstance(row, dict):
                 continue
-            # TTL guard — skip entries not updated in the last 24 h.
+            # TTL guard — skip entries not updated within the retention window.
             updated_raw = row.get("updated_at")
+            updated_dt: datetime | None = None
             if isinstance(updated_raw, str):
                 try:
                     updated_dt = datetime.fromisoformat(updated_raw)
-                    if (now - updated_dt).total_seconds() > _CACHE_MAX_AGE_S:
+                    if updated_dt.tzinfo is None:
+                        updated_dt = updated_dt.replace(tzinfo=timezone.utc)
+                    if (now - updated_dt).total_seconds() > _cache_max_age_s:
                         self._logger.debug("_emit_cached_devices: skipping stale entry ip=%s updated_at=%s", sip, updated_raw)
                         continue
                 except ValueError:
@@ -691,6 +695,7 @@ class DiscoveryManager:
                 source="ssdp",
                 url=url if isinstance(url, str) and url.strip() else None,
                 metadata=metadata,
+                last_seen=updated_dt if updated_dt is not None else datetime.now(timezone.utc),
                 online=True,
             )
             self.add_or_update_device(device)
@@ -700,6 +705,70 @@ class DiscoveryManager:
             emitted,
             len(self._ssdp_profile_cache_emit_rows),
         )
+
+    def _start_tcp_probes_for_cached_devices(self) -> None:
+        """Background TCP probe to quickly validate cached devices at startup.
+
+        Devices that do not respond within 1.5 s are marked offline before live protocol
+        discovery completes, giving the UI a clean picture within ~5 s of startup.
+        Only devices with a usable port (>0, non-loopback, non-link-local) are probed.
+        If a live protocol has already confirmed a device online since the probe started,
+        the TCP result is discarded to avoid a false offline flip.
+        """
+        from utils.tcp_probe import probe_devices_background
+
+        targets: list[tuple[str, int]] = []
+        seen: set[tuple[str, int]] = set()
+        for d in list(self._devices.values()):
+            if not d.online:
+                continue
+            ip = str(d.ip).strip()
+            port = int(d.port or 0)
+            if not ip or port <= 0:
+                continue
+            try:
+                addr = ipaddress.ip_address(ip)
+                if addr.is_loopback:
+                    continue
+                if isinstance(addr, ipaddress.IPv6Address) and addr.is_link_local:
+                    continue
+            except ValueError:
+                continue
+            key = (ip, port)
+            if key not in seen:
+                seen.add(key)
+                targets.append(key)
+
+        if not targets:
+            return
+
+        self._logger.info("TCP probe: validating %d cached endpoint(s)", len(targets))
+        probe_start = datetime.now(timezone.utc)
+
+        def _on_result(ip: str, port: int, reachable: bool) -> None:
+            changed = False
+            now = datetime.now(timezone.utc)
+            for d in list(self._devices.values()):
+                sip = str(d.ip).strip()
+                dport = int(d.port or 0)
+                if sip != ip or dport != port:
+                    continue
+                if reachable:
+                    if d.online:
+                        d.last_seen = now
+                        changed = True
+                elif d.online and not (d.last_seen and d.last_seen > probe_start):
+                    # Only mark offline if no protocol has confirmed online since probe start.
+                    d.online = False
+                    changed = True
+            if changed:
+                if reachable:
+                    self._logger.debug("TCP probe: %s:%s reachable", ip, port)
+                else:
+                    self._logger.info("TCP probe: %s:%s unreachable → offline", ip, port)
+                self._notify()
+
+        probe_devices_background(targets, _on_result, timeout_s=1.5, max_workers=8)
 
     def _ssdp_profile_display_name(self, row: dict) -> str:
         """Best-effort human label from persisted SSDP profile (disk cache)."""

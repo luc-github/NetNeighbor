@@ -156,6 +156,10 @@ class WsddSocketDiscovery(BaseDiscovery):
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._last_warned_missing = 0.0
+        # TTL tracking: emit offline for hosts absent ≥ _wsdd_grace_polls consecutive polls.
+        self._wsdd_known: dict[str, dict] = {}  # uri → last payload
+        self._wsdd_miss_counts: dict[str, int] = {}  # uri → consecutive missed polls
+        self._wsdd_grace_polls: int = 2
 
     def start(self) -> None:
         if not self._listen:
@@ -174,6 +178,8 @@ class WsddSocketDiscovery(BaseDiscovery):
         self._thread = None
         if t is not None:
             t.join(timeout=2.0)
+        self._wsdd_known.clear()
+        self._wsdd_miss_counts.clear()
         self._logger.info("wsdd socket discovery stopped")
 
     def refresh(self) -> None:
@@ -205,11 +211,13 @@ class WsddSocketDiscovery(BaseDiscovery):
                     self._listen,
                     e,
                 )
-            return
+            return  # socket failure — don't penalise known hosts
         except Exception:
             self._logger.debug("wsdd list exchange failed", exc_info=True)
             return
 
+        # Build payloads for devices in the current list response.
+        current_payloads: dict[str, dict] = {}
         for row in _parse_list_response(text):
             uri, name, belongs, _last_seen, addr_field, types_csv = row
             addrs = _parse_address_field(addr_field)
@@ -225,18 +233,36 @@ class WsddSocketDiscovery(BaseDiscovery):
                 "wsdd_types": (types_csv or "").strip(),
                 "wsdd_addresses": (addr_field or "").strip(),
             }
-            self._emit(
-                "device",
-                {
-                    "name": display,
-                    "ip": ip_s,
-                    "port": _WSDD_DEVICE_PORT,
-                    "type": dev_type,
-                    "category": category,
-                    "source": "wsdd",
-                    "url": None,
-                    "metadata": meta,
-                    "online": True,
-                    "icon": None,
-                },
-            )
+            key = uri.strip().lower()
+            current_payloads[key] = {
+                "name": display,
+                "ip": ip_s,
+                "port": _WSDD_DEVICE_PORT,
+                "type": dev_type,
+                "category": category,
+                "source": "wsdd",
+                "url": None,
+                "metadata": meta,
+                "online": True,
+                "icon": None,
+            }
+
+        # TTL: emit offline for devices absent from the current list for ≥ grace polls.
+        for k in list(self._wsdd_known):
+            if k not in current_payloads:
+                miss = self._wsdd_miss_counts.get(k, 0) + 1
+                self._wsdd_miss_counts[k] = miss
+                if miss >= self._wsdd_grace_polls:
+                    offline_payload = dict(self._wsdd_known[k])
+                    offline_payload["online"] = False
+                    self._emit("device", offline_payload)
+                    self._logger.info("wsdd: %s offline after %d missed poll(s)", k, miss)
+                    del self._wsdd_known[k]
+                    self._wsdd_miss_counts.pop(k, None)
+            else:
+                self._wsdd_miss_counts.pop(k, None)
+
+        # Emit live devices and update known.
+        for k, payload in current_payloads.items():
+            self._wsdd_known[k] = payload
+            self._emit("device", payload)

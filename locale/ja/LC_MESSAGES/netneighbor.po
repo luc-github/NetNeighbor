@@ -1179,3 +1179,315 @@ msgstr "不明なデバイス"
 
 #~ msgid "Command:"
 #~ msgstr "コマンド:"
+
+#: ui_qt/
+msgid "About NetNeighbor"
+msgstr "NetNeighbor について"
+
+#: ui_qt/
+msgid "App logo under assets/icons: Luc LEBOSSE"
+msgstr "アプリロゴ（assets/icons）: Luc LEBOSSE"
+
+#: ui_qt/
+msgid "Applications"
+msgstr "アプリケーション"
+
+#: ui_qt/
+msgid "Apply"
+msgstr "適用"
+
+#: ui_qt/
+msgid "Author: Luc"
+msgstr "作者: Luc"
+
+#: ui_qt/
+msgid "Close to system tray / panel instead of exiting"
+msgstr "終了の代わりにシステムトレイに閉じる"
+
+#: ui_qt/
+msgid "Command"
+msgstr "コマンド"
+
+#: ui_qt/
+msgid ""
+"Command templates for opening device connections. Leave empty to use t"
+"he system default."
+msgstr "デバイス接続を開くためのコマンドテンプレート。システムのデフォルトを使用するには空白のままにしてください。"
+
+#: ui_qt/
+msgid "Commands"
+msgstr "コマンド"
+
+#: ui_qt/
+msgid "Custom command (additional)"
+msgstr "カスタムコマンド（追加）"
+
+#: ui_qt/
+msgid "Dark"
+msgstr "ダーク"
+
+#: ui_qt/
+msgid "Date / Time"
+msgstr "日付 / 時刻"
+
+#: ui_qt/
+msgid "Delete"
+msgstr "削除"
+
+#: ui_qt/
+msgid "Desktop notifications"
+msgstr "デスクトップ通知"
+
+#: ui_qt/
+msgid "Discovery refresh requested"
+msgstr "検出の更新を要求しました"
+
+#: ui_qt/
+msgid "Edit"
+msgstr "編集"
+
+#: ui_qt/
+msgid "Edit type preset"
+msgstr "タイププリセットを編集"
+
+#: ui_qt/
+msgid "Error"
+msgstr "エラー"
+
+#: ui_qt/
+msgid "Extra large"
+msgstr "特大"
+
+#: ui_qt/
+msgid "Field mapping rules"
+msgstr "フィールドマッピングルール"
+
+#: ui_qt/
+msgid "GNU Lesser General Public License version 3 or later"
+msgstr "GNU劣等一般公衆利用許諾書 バージョン3以降"
+
+#: ui_qt/
+msgid "General"
+msgstr "一般"
+
+#: ui_qt/
+msgid "Hidden devices"
+msgstr "非表示デバイス"
+
+#: ui_qt/
+msgid "Hide device"
+msgstr "デバイスを非表示"
+
+#: ui_qt/
+msgid "Hide sidebar"
+msgstr "サイドバーを非表示"
+
+#: ui_qt/
+msgid "Hide window"
+msgstr "ウィンドウを非表示"
+
+#: ui_qt/
+msgid "Icons size"
+msgstr "アイコンサイズ"
+
+#: ui_qt/
+msgid "Invalid command template for this protocol."
+msgstr "このプロトコルに対するコマンドテンプレートが無効です。"
+
+#: ui_qt/
+msgid "Large"
+msgstr "大"
+
+#: ui_qt/
+msgid "Last seen: {n} d ago"
+msgstr "最終確認: {n} 日前"
+
+#: ui_qt/
+msgid "Last seen: {n} h ago"
+msgstr "最終確認: {n} 時間前"
+
+#: ui_qt/
+msgid "Last seen: {n} min ago"
+msgstr "最終確認: {n} 分前"
+
+#: ui_qt/
+msgid "Light"
+msgstr "ライト"
+
+#: ui_qt/
+msgid "Location name:"
+msgstr "場所の名前："
+
+#: ui_qt/
+msgid "Locations"
+msgstr "場所"
+
+#: ui_qt/
+msgid "Manage location presets shown in the right-click menu."
+msgstr "右クリックメニューに表示される場所プリセットを管理します。"
+
+#: ui_qt/
+msgid "Medium"
+msgstr "中"
+
+#: ui_qt/
+msgid "Mode"
+msgstr "モード"
+
+#: ui_qt/
+msgid "NetNeighbor {}"
+msgstr "NetNeighbor {}"
+
+#: ui_qt/
+msgid "New name:"
+msgstr "新しい名前："
+
+#: ui_qt/
+msgid "No devices yet"
+msgstr "デバイスがありません"
+
+#: ui_qt/
+msgid "No hidden devices"
+msgstr "非表示デバイスなし"
+
+#: ui_qt/
+msgid ""
+"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
+"config/netneighbor/custom_icons/."
+msgstr ""
+"アイコンが見つかりません。assets/icons/bundled-freedesktop または ~/.config/netneighbo"
+"r/custom_icons/ に PNG を追加してください。"
+
+#: ui_qt/
+msgid ""
+"Notification delivery depends on the OS and session. Tray-backed behav"
+"iour (close to tray, minimized start) will align once the system tray "
+"is implemented."
+msgstr "通知の配信はOSとセッションに依存します。トレイベースの動作（トレイに閉じる、最小化起動）はシステムトレイが実装されると揃います。"
+
+#: ui_qt/
+msgid "Notifications"
+msgstr "通知"
+
+#: ui_qt/
+msgid "Offline"
+msgstr "オフライン"
+
+#: ui_qt/
+msgid "Online"
+msgstr "オンライン"
+
+#: ui_qt/
+msgid ""
+"Override or add connection endpoints per protocol. For 'custom' scheme"
+", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
+"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
+" schemes."
+msgstr ""
+"プロトコルごとに接続エンドポイントを上書きまたは追加します。'custom' スキームの場合、IP/ホスト ({ip}, {ip_raw},"
+" {port}, {name}, {type}, {category}, {url}) のコマンドテンプレートを入力してください。IP/ホス"
+"トとポートは他のスキームでは省略可能です。"
+
+#: ui_qt/
+msgid "Preferences…"
+msgstr "設定…"
+
+#: ui_qt/
+msgid "Qt for Python bindings"
+msgstr "Qt for Python バインディング"
+
+#: ui_qt/
+msgid "Reload discovery"
+msgstr "検出を再読み込み"
+
+#: ui_qt/
+msgid "Scheme"
+msgstr "スキーム"
+
+#: ui_qt/
+msgid "See the"
+msgstr "詳細については"
+
+#: ui_qt/
+msgid "Select an icon, then OK. IDs are stored in your preferences."
+msgstr "アイコンを選択してOKを押してください。IDは設定に保存されます。"
+
+#: ui_qt/
+msgid "Service type"
+msgstr "サービスタイプ"
+
+#: ui_qt/
+msgid "Session"
+msgstr "セッション"
+
+#: ui_qt/
+msgid "Show sidebar"
+msgstr "サイドバーを表示"
+
+#: ui_qt/
+msgid "Show window"
+msgstr "ウィンドウを表示"
+
+#: ui_qt/
+msgid "Sidebar"
+msgstr "サイドバー"
+
+#: ui_qt/
+msgid "Small"
+msgstr "小"
+
+#: ui_qt/
+msgid "Start Scanning…"
+msgstr "スキャン中…"
+
+#: ui_qt/
+msgid "Theme"
+msgstr "テーマ"
+
+#: ui_qt/
+msgid "This program comes with absolutely no warranty."
+msgstr "このプログラムには一切の保証がありません。"
+
+#: ui_qt/
+msgid "Types"
+msgstr "タイプ"
+
+#: ui_qt/
+msgid "Use as Friendly name"
+msgstr "フレンドリー名として使用"
+
+#: ui_qt/
+msgid "Use as Information"
+msgstr "情報として使用"
+
+#: ui_qt/
+msgid "Use as Location"
+msgstr "場所として使用"
+
+#: ui_qt/
+msgid "Use icon from"
+msgstr "アイコンを使用する場所："
+
+#: ui_qt/
+msgid "Version {version}"
+msgstr "バージョン {version}"
+
+#: ui_qt/
+msgid "WS-Discovery (Windows devices)"
+msgstr "WS-Discovery（Windowsデバイス）"
+
+#: ui_qt/
+msgid "for details."
+msgstr "を参照してください。"
+
+#: ui_qt/
+msgid "mDNS/DNS-SD discovery"
+msgstr "mDNS/DNS-SD 検出"
+
+#: ui_qt/
+msgid "not yet downloaded"
+msgstr "まだダウンロードされていません"
+
+#: ui_qt/
+msgid "{} devices"
+msgstr "{} デバイス"

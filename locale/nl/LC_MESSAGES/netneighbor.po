@@ -1198,3 +1198,323 @@ msgstr "Onbekende Apparaten"
 
 #~ msgid "Command:"
 #~ msgstr "Opdracht:"
+
+#: ui_qt/
+msgid "About NetNeighbor"
+msgstr "Over NetNeighbor"
+
+#: ui_qt/
+msgid "App logo under assets/icons: Luc LEBOSSE"
+msgstr "App-logo onder assets/icons: Luc LEBOSSE"
+
+#: ui_qt/
+msgid "Applications"
+msgstr "Toepassingen"
+
+#: ui_qt/
+msgid "Apply"
+msgstr "Toepassen"
+
+#: ui_qt/
+msgid "Author: Luc"
+msgstr "Auteur: Luc"
+
+#: ui_qt/
+msgid "Close to system tray / panel instead of exiting"
+msgstr "Sluiten naar systeemvak in plaats van afsluiten"
+
+#: ui_qt/
+msgid "Command"
+msgstr "Opdracht"
+
+#: ui_qt/
+msgid ""
+"Command templates for opening device connections. Leave empty to use t"
+"he system default."
+msgstr ""
+"Opdrachtsjablonen voor het openen van apparaatverbindingen. Leeg laten"
+" om de systeemstandaard te gebruiken."
+
+#: ui_qt/
+msgid "Commands"
+msgstr "Opdrachten"
+
+#: ui_qt/
+msgid "Custom command (additional)"
+msgstr "Aangepaste opdracht (aanvullend)"
+
+#: ui_qt/
+msgid "Dark"
+msgstr "Donker"
+
+#: ui_qt/
+msgid "Date / Time"
+msgstr "Datum / Tijd"
+
+#: ui_qt/
+msgid "Delete"
+msgstr "Verwijderen"
+
+#: ui_qt/
+msgid "Desktop notifications"
+msgstr "Bureaubladmeldingen"
+
+#: ui_qt/
+msgid "Discovery refresh requested"
+msgstr "Ontdekkingsvernieuwing aangevraagd"
+
+#: ui_qt/
+msgid "Edit"
+msgstr "Bewerken"
+
+#: ui_qt/
+msgid "Edit type preset"
+msgstr "Typepreset bewerken"
+
+#: ui_qt/
+msgid "Error"
+msgstr "Fout"
+
+#: ui_qt/
+msgid "Extra large"
+msgstr "Extra groot"
+
+#: ui_qt/
+msgid "Field mapping rules"
+msgstr "Veldtoewijzingsregels"
+
+#: ui_qt/
+msgid "GNU Lesser General Public License version 3 or later"
+msgstr "GNU Lesser General Public License versie 3 of later"
+
+#: ui_qt/
+msgid "General"
+msgstr "Algemeen"
+
+#: ui_qt/
+msgid "Hidden devices"
+msgstr "Verborgen apparaten"
+
+#: ui_qt/
+msgid "Hide device"
+msgstr "Apparaat verbergen"
+
+#: ui_qt/
+msgid "Hide sidebar"
+msgstr "Zijbalk verbergen"
+
+#: ui_qt/
+msgid "Hide window"
+msgstr "Venster verbergen"
+
+#: ui_qt/
+msgid "Icons size"
+msgstr "Pictogramgrootte"
+
+#: ui_qt/
+msgid "Invalid command template for this protocol."
+msgstr "Ongeldig opdrachtsjabloon voor dit protocol."
+
+#: ui_qt/
+msgid "Large"
+msgstr "Groot"
+
+#: ui_qt/
+msgid "Last seen: {n} d ago"
+msgstr "Gezien: {n} dagen geleden"
+
+#: ui_qt/
+msgid "Last seen: {n} h ago"
+msgstr "Gezien: {n} uur geleden"
+
+#: ui_qt/
+msgid "Last seen: {n} min ago"
+msgstr "Gezien: {n} min geleden"
+
+#: ui_qt/
+msgid "Light"
+msgstr "Licht"
+
+#: ui_qt/
+msgid "Location name:"
+msgstr "Locatienaam:"
+
+#: ui_qt/
+msgid "Locations"
+msgstr "Locaties"
+
+#: ui_qt/
+msgid "Manage location presets shown in the right-click menu."
+msgstr "Locatiepresets beheren die worden weergegeven in het contextmenu."
+
+#: ui_qt/
+msgid "Medium"
+msgstr "Middel"
+
+#: ui_qt/
+msgid "Mode"
+msgstr "Modus"
+
+#: ui_qt/
+msgid "NetNeighbor {}"
+msgstr "NetNeighbor {}"
+
+#: ui_qt/
+msgid "New name:"
+msgstr "Nieuwe naam:"
+
+#: ui_qt/
+msgid "No devices yet"
+msgstr "Nog geen apparaten"
+
+#: ui_qt/
+msgid "No hidden devices"
+msgstr "Geen verborgen apparaten"
+
+#: ui_qt/
+msgid ""
+"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
+"config/netneighbor/custom_icons/."
+msgstr ""
+"Geen pictogrammen gevonden. Voeg PNG's toe onder assets/icons/bundled-"
+"freedesktop of ~/.config/netneighbor/custom_icons/."
+
+#: ui_qt/
+msgid ""
+"Notification delivery depends on the OS and session. Tray-backed behav"
+"iour (close to tray, minimized start) will align once the system tray "
+"is implemented."
+msgstr ""
+"Meldingslevering is afhankelijk van het besturingssysteem en de sessie"
+". Het tray-gebaseerde gedrag (sluiten naar tray, geminimaliseerd start"
+"en) wordt uitgelijnd zodra de systeemtray is geïmplementeerd."
+
+#: ui_qt/
+msgid "Notifications"
+msgstr "Meldingen"
+
+#: ui_qt/
+msgid "Offline"
+msgstr "Offline"
+
+#: ui_qt/
+msgid "Online"
+msgstr "Online"
+
+#: ui_qt/
+msgid ""
+"Override or add connection endpoints per protocol. For 'custom' scheme"
+", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
+"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
+" schemes."
+msgstr ""
+"Verbindingseindpunten per protocol overschrijven of toevoegen. Voor he"
+"t schema 'custom' voert u de opdrachtsjabloon in IP/Host ({ip}, {ip_ra"
+"w}, {port}, {name}, {type}, {category}, {url}) in. IP/Host en poort zi"
+"jn optioneel voor andere schema's."
+
+#: ui_qt/
+msgid "Preferences…"
+msgstr "Voorkeuren…"
+
+#: ui_qt/
+msgid "Qt for Python bindings"
+msgstr "Qt voor Python-bindingen"
+
+#: ui_qt/
+msgid "Reload discovery"
+msgstr "Ontdekking herladen"
+
+#: ui_qt/
+msgid "Scheme"
+msgstr "Schema"
+
+#: ui_qt/
+msgid "See the"
+msgstr "Zie de"
+
+#: ui_qt/
+msgid "Select an icon, then OK. IDs are stored in your preferences."
+msgstr ""
+"Selecteer een pictogram, dan OK. ID's worden opgeslagen in uw voorkeur"
+"en."
+
+#: ui_qt/
+msgid "Service type"
+msgstr "Servicetype"
+
+#: ui_qt/
+msgid "Session"
+msgstr "Sessie"
+
+#: ui_qt/
+msgid "Show sidebar"
+msgstr "Zijbalk tonen"
+
+#: ui_qt/
+msgid "Show window"
+msgstr "Venster tonen"
+
+#: ui_qt/
+msgid "Sidebar"
+msgstr "Zijbalk"
+
+#: ui_qt/
+msgid "Small"
+msgstr "Klein"
+
+#: ui_qt/
+msgid "Start Scanning…"
+msgstr "Scannen starten…"
+
+#: ui_qt/
+msgid "Theme"
+msgstr "Thema"
+
+#: ui_qt/
+msgid "This program comes with absolutely no warranty."
+msgstr "Dit programma wordt geleverd zonder enige garantie."
+
+#: ui_qt/
+msgid "Types"
+msgstr "Types"
+
+#: ui_qt/
+msgid "Use as Friendly name"
+msgstr "Gebruiken als beschrijvende naam"
+
+#: ui_qt/
+msgid "Use as Information"
+msgstr "Gebruiken als informatie"
+
+#: ui_qt/
+msgid "Use as Location"
+msgstr "Gebruiken als locatie"
+
+#: ui_qt/
+msgid "Use icon from"
+msgstr "Pictogram gebruiken van"
+
+#: ui_qt/
+msgid "Version {version}"
+msgstr "Versie {version}"
+
+#: ui_qt/
+msgid "WS-Discovery (Windows devices)"
+msgstr "WS-Discovery (Windows-apparaten)"
+
+#: ui_qt/
+msgid "for details."
+msgstr "voor details."
+
+#: ui_qt/
+msgid "mDNS/DNS-SD discovery"
+msgstr "mDNS/DNS-SD-ontdekking"
+
+#: ui_qt/
+msgid "not yet downloaded"
+msgstr "nog niet gedownload"
+
+#: ui_qt/
+msgid "{} devices"
+msgstr "{} apparaten"

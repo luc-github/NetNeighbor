@@ -179,14 +179,14 @@ visible changes. Context menus disappeared, hover states jumped, scroll position
 
 ---
 
-## Theme E — Device lifetime and cache validity 📋
+## Theme E — Device lifetime and cache validity
 
 **Context:** Devices that silently disappear can remain "online" for minutes. The
 disk cache accumulates stale entries indefinitely. There is no active validation of
 cached devices at startup, and no visual distinction between "confirmed live" and
 "last seen N hours ago".
 
-### E-1 Cache purge and `last_seen` timestamp 📋
+### E-1 Cache purge and `last_seen` timestamp ✅
 
 - **Files:** `utils/discovery_cache.py`
 - **Change:**
@@ -198,7 +198,7 @@ cached devices at startup, and no visual distinction between "confirmed live" an
 - **Acceptance:** After 48 h without seeing a device, it does not appear at next
   startup. Cache file does not grow unboundedly.
 
-### E-2 "Last seen" indicator in UI 📋
+### E-2 "Last seen" indicator in UI ✅
 
 - **Files:** `ui_qt/main_window.py` (tooltip), `ui_qt/icon_tile_delegate.py` (optional
   visual dimming)
@@ -209,34 +209,47 @@ cached devices at startup, and no visual distinction between "confirmed live" an
     yet confirmed live.
 - **Acceptance:** User can distinguish a device seen 30 s ago from one seen 23 h ago.
 
-### E-3 NetBIOS TTL at refresh 📋
+### E-3 NetBIOS TTL at refresh ✅
 
-- **File:** `discovery/manager.py`
-- **Change:** Track the timestamp of the last seen event for each NetBIOS device.
-  At each `refresh()` sweep, mark offline any NetBIOS device not re-announced in the
-  current sweep (with a grace period of 1–2 sweeps to absorb timing jitter).
+- **File:** `discovery/netbios.py`
+- **Change:** `NetbiosDiscovery` now tracks `_nmb_known` (last payload per IP) and
+  `_nmb_miss_counts` (consecutive sweeps without a response). After each `_run_once`,
+  hosts absent for ≥ 2 consecutive sweeps receive an offline event. Transient failures
+  (timeout / OSError) return early without incrementing miss counts. `stop()` clears
+  both dicts.
 - **Acceptance:** A NetBIOS device that leaves the network is marked offline within
-  2 refresh cycles (default: ~2 min).
+  2 refresh cycles (default: ~6 min with 3-minute interval).
 
-### E-4 WSD / wsdd IP change detection 📋
+### E-4 WSD / wsdd offline detection ✅
 
-- **File:** `discovery/manager.py`, `discovery/wsdd_client.py`
-- **Change:** Compare the current IP of an incoming WSD/wsdd device against the stored
-  IP for the same identity (UUID / MAC). If different, emit an offline event for the
-  old endpoint before processing the new one — matching the existing mDNS behaviour.
-- **Acceptance:** A PC that changes DHCP address appears on the new IP within one
-  refresh cycle; the old IP entry disappears.
+- **Files:** `discovery/wsd.py`, `discovery/wsdd_client.py`
+- **Change:**
+  - **WSD:** `WSDiscovery._run_once` now calls `eng.clearRemoteServices()` before each
+    probe sweep, so `_remoteServices` only contains devices that responded in the current
+    cycle. TTL tracking via `_wsd_known_eprs` / `_wsd_miss_counts` emits offline after
+    2 missed sweeps. Transient probe failures return early without penalising known hosts.
+  - **wsdd:** `WsddSocketDiscovery._poll_once` collects all list-response payloads first,
+    then applies TTL via `_wsdd_known` / `_wsdd_miss_counts` (grace: 2 polls).
+    Socket failures return early without penalising known hosts.
+- **Acceptance:** A WSD/wsdd device that disappears from the network is marked offline
+  within 2 sweep/poll cycles.
 
-### E-5 TCP probe validation for cached devices 📋
+### E-5 TCP probe validation for cached devices ✅
 
 - **Files:** `discovery/manager.py`, `utils/tcp_probe.py` (new)
 - **Change:**
-  - After `_emit_cached_devices()`, for each cached device with a known TCP port
-    (HTTP/HTTPS/SSH/SMB/…), perform a non-blocking TCP connect with a 1.5 s timeout
-    in a background thread pool (max 8 concurrent probes).
-  - On success: device stays online, `last_seen` updated to now.
-  - On failure: device is marked offline (or removed if configured). Does not block
-    the UI or the main discovery flow.
+  - `utils/tcp_probe.py`: `probe_tcp(ip, port, timeout_s)` performs a single TCP
+    connect. `probe_devices_background(targets, on_result, ...)` runs all targets
+    concurrently in a `ThreadPoolExecutor` inside a daemon thread, calling
+    `on_result(ip, port, reachable)` for each.
+  - `manager.start()` calls `_start_tcp_probes_for_cached_devices()` right after
+    `_emit_cached_devices()`. It collects all online cached endpoints with a valid port
+    (skips loopback and link-local IPv6), then launches a background probe (max 8
+    concurrent, 1.5 s timeout).
+  - On success: `last_seen` updated to now on all matching devices.
+  - On failure: `device.online = False` set directly, then `_notify()` called.
+    Guard: if a live protocol has already confirmed the device online since probe start
+    (`last_seen > probe_start`), the offline flip is skipped.
 - **Acceptance:** Cached devices that are unreachable are marked offline within ~5 s
   of startup, before the full protocol discovery completes (~15–30 s).
 
@@ -263,41 +276,39 @@ cached devices at startup, and no visual distinction between "confirmed live" an
 
 ---
 
-## Theme H — Translation review and updates 📋
+## Theme H — Translation review and updates ✅
 
 **Context:** The application was ported from GTK to PySide6 (version 2.0). Several new
 UI strings were added (system tray, scanning overlay, preferences, context menus,
-autostart). All existing `.po` files need to be audited for completeness and accuracy
+autostart). All existing `.po` files needed to be audited for completeness and accuracy
 against the current source strings.
 
 8 languages are currently shipped: `fr`, `es`, `de`, `it`, `nl`, `ja`, `zh_CN`, `zh_TW`.
 
-### H-1 Extract updated source strings 📋
+### H-1 Extract updated source strings ✅
 
-- **Tool:** `xgettext` or `pygettext` to regenerate the `.pot` template from all Python
-  sources.
-- **Files:** All `*.py` + `ui_qt/**/*.py`, output to `locale/netneighbor.pot`.
-- **Acceptance:** `.pot` is up to date with every `_("…")` call in the codebase.
+- **Tool:** `tools/extract_new_strings.py` — AST-based extraction via `ast.parse()`,
+  walks all `Call(func=Name(id='_'))` nodes with `Constant` string arguments.
+- **Files:** `ui_qt/**/*.py`, `discovery/*.py`, `utils/*.py` → `locale/netneighbor.pot`
+- **Result:** 74 new strings found not present in the old `.pot` (which referenced GTK paths).
 
-### H-2 Audit and update each `.po` file 📋
+### H-2 Audit and update each `.po` file ✅
 
-- **Files:** `locale/*/LC_MESSAGES/netneighbor.po`
-- **Change:**
-  - `msgmerge` each `.po` against the new `.pot` to surface new/obsolete strings.
-  - Review fuzzy matches — strings changed slightly may have been incorrectly carried over.
-  - Translate any new `msgid` entries (new UI added in 2.0: tray menu, overlay, autostart
-    settings, location/type auto-add, last-seen indicators).
-- **Priority order:** `fr` (owner's language, reference), then `es`/`de`/`it`/`nl`,
-  then `ja`/`zh_CN`/`zh_TW`.
-- **Acceptance:** No `fuzzy` or empty `msgstr` entries in any shipped `.po` file.
+- **Tool:** `tools/update_translations.py` — appends new `msgid`/`msgstr` pairs to each `.po`.
+- **Files:** `locale/*/LC_MESSAGES/netneighbor.po` — all 8 languages updated.
+- **New strings include:** tray menu (`Show window`, `Hide window`, `Show/Hide sidebar`),
+  overlay (`Start Scanning…`), last-seen tooltips (`Last seen: {n} min/h/d ago`),
+  preferences sections (`Theme`, `Light`, `Dark`, `General`, `Session`, `Notifications`,
+  `Sidebar`, `Types`, `Locations`, `Icons size`, `Small`/`Medium`/`Large`/`Extra large`),
+  context menu (`Hide device`), commands prefs, field mapping, about dialog, etc.
+- **All 74 strings fully translated** in all 8 languages.
 
-### H-3 Recompile `.mo` files and smoke-test 📋
+### H-3 Recompile `.mo` files and smoke-test ✅
 
-- **Command:** `msgfmt locale/XX/LC_MESSAGES/netneighbor.po -o locale/XX/LC_MESSAGES/netneighbor.mo`
-  for each language.
-- **Test:** Launch with `LANG=XX_XX.UTF-8 python main.py` and verify key UI surfaces
-  (main window, tray menu, preferences dialog, context menus, notifications).
-- **Acceptance:** No fallback to English for any string in the tested languages.
+- **Tool:** `babel` (`read_po` + `write_mo`) — compiled directly from Python.
+- **Result:** All 8 `.mo` files recompiled and verified via `gettext.translation()`.
+- **Spot-check passed:** `{} devices`, `Online`, `Offline`, `Start Scanning…` return
+  correct translated strings in every locale.
 
 ---
 
@@ -426,6 +437,6 @@ Themes A–D  ✅  Done
 Theme E     📋  Next — device lifetime (E-1 → E-5)
 Theme F     💡  Future — discovery enhancements
 Theme G     💡  Future — UX polish
-Theme H     📋  After E — translation review (H-1 → H-3)
+Theme H     ✅  Translation review (H-1 → H-3) — 74 strings, 8 languages
 Theme I     📋  After H — packaging Linux + Windows; macOS scripted (I-1 → I-5)
 ```

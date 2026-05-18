@@ -250,6 +250,10 @@ class NetbiosDiscovery(BaseDiscovery):
         # IPs to probe with ``nmblookup -A`` (e.g. suggested when WSD only has a synthetic label).
         self._extra_directed: OrderedDict[str, None] = OrderedDict()
         self._max_extra_directed = 64
+        # TTL tracking: emit offline for hosts absent ≥ _nmb_grace_sweeps consecutive sweeps.
+        self._nmb_known: dict[str, dict] = {}  # ip → last emitted payload
+        self._nmb_miss_counts: dict[str, int] = {}  # ip → consecutive missed sweeps
+        self._nmb_grace_sweeps: int = 2
 
     def suggest_directed_ip(self, ip_s: str) -> None:
         """Queue ``nmblookup -A`` for this IP on the next probe (LAN PCs missed by broadcast sweep)."""
@@ -299,6 +303,8 @@ class NetbiosDiscovery(BaseDiscovery):
         if self._probe_thread is not None:
             self._probe_thread.join(timeout=2.0)
             self._probe_thread = None
+        self._nmb_known.clear()
+        self._nmb_miss_counts.clear()
         self._logger.info("NetBIOS discovery stopped")
 
     def refresh(self) -> None:
@@ -328,6 +334,7 @@ class NetbiosDiscovery(BaseDiscovery):
                 **_NMB_SUBPROCESS_KW,
             )
         except subprocess.TimeoutExpired:
+            # Transient failure — don't penalise hosts with a miss count increment.
             self._logger.debug("nmblookup timed out after %.1fs", self._timeout_s)
             return
         except OSError:
@@ -372,14 +379,11 @@ class NetbiosDiscovery(BaseDiscovery):
                     "NetBIOS: directed_ips=%s returned no usable names — check ``nmblookup -A <ip>`` from this host",
                     self._directed_ips,
                 )
-            return
-        self._logger.info("NetBIOS: publishing %d host row(s)", len(merged))
-        self._logger.debug(
-            "NetBIOS host rows (ip=name): %s",
-            ", ".join(f"{ip}={name}" for ip, name, _suf in merged),
-        )
+
+        # Build payloads for hosts found in this sweep.
+        current_payloads: dict[str, dict] = {}
         for ip_s, name, suffix_primary in merged:
-            payload = {
+            current_payloads[ip_s] = {
                 "name": name,
                 "ip": ip_s,
                 "port": 445,
@@ -395,4 +399,30 @@ class NetbiosDiscovery(BaseDiscovery):
                 "online": True,
                 "icon": None,
             }
+
+        # TTL: emit offline for previously-known hosts absent from this sweep for ≥ grace sweeps.
+        for ip in list(self._nmb_known):
+            if ip not in current_payloads:
+                miss = self._nmb_miss_counts.get(ip, 0) + 1
+                self._nmb_miss_counts[ip] = miss
+                if miss >= self._nmb_grace_sweeps:
+                    offline_payload = dict(self._nmb_known[ip])
+                    offline_payload["online"] = False
+                    self._emit("device", offline_payload)
+                    self._logger.info(
+                        "NetBIOS: ip=%s offline after %d missed sweep(s)", ip, miss
+                    )
+                    del self._nmb_known[ip]
+                    self._nmb_miss_counts.pop(ip, None)
+            else:
+                self._nmb_miss_counts.pop(ip, None)
+
+        if current_payloads:
+            self._logger.info("NetBIOS: publishing %d host row(s)", len(current_payloads))
+            self._logger.debug(
+                "NetBIOS host rows (ip=name): %s",
+                ", ".join(f"{ip}={p['name']}" for ip, p in current_payloads.items()),
+            )
+        for ip_s, payload in current_payloads.items():
+            self._nmb_known[ip_s] = payload
             self._emit("device", payload)

@@ -1204,3 +1204,324 @@ msgstr "Dispositivos desconocidos"
 
 #~ msgid "Command:"
 #~ msgstr "Comando:"
+
+#: ui_qt/
+msgid "About NetNeighbor"
+msgstr "Acerca de NetNeighbor"
+
+#: ui_qt/
+msgid "App logo under assets/icons: Luc LEBOSSE"
+msgstr "Logo de la app en assets/icons: Luc LEBOSSE"
+
+#: ui_qt/
+msgid "Applications"
+msgstr "Aplicaciones"
+
+#: ui_qt/
+msgid "Apply"
+msgstr "Aplicar"
+
+#: ui_qt/
+msgid "Author: Luc"
+msgstr "Autor: Luc"
+
+#: ui_qt/
+msgid "Close to system tray / panel instead of exiting"
+msgstr "Cerrar al área de notificación en lugar de salir"
+
+#: ui_qt/
+msgid "Command"
+msgstr "Comando"
+
+#: ui_qt/
+msgid ""
+"Command templates for opening device connections. Leave empty to use t"
+"he system default."
+msgstr ""
+"Plantillas de comandos para abrir conexiones de dispositivos. Dejar va"
+"cío para usar el valor predeterminado del sistema."
+
+#: ui_qt/
+msgid "Commands"
+msgstr "Comandos"
+
+#: ui_qt/
+msgid "Custom command (additional)"
+msgstr "Comando personalizado (adicional)"
+
+#: ui_qt/
+msgid "Dark"
+msgstr "Oscuro"
+
+#: ui_qt/
+msgid "Date / Time"
+msgstr "Fecha / Hora"
+
+#: ui_qt/
+msgid "Delete"
+msgstr "Eliminar"
+
+#: ui_qt/
+msgid "Desktop notifications"
+msgstr "Notificaciones de escritorio"
+
+#: ui_qt/
+msgid "Discovery refresh requested"
+msgstr "Actualización de detección solicitada"
+
+#: ui_qt/
+msgid "Edit"
+msgstr "Editar"
+
+#: ui_qt/
+msgid "Edit type preset"
+msgstr "Editar preajuste de tipo"
+
+#: ui_qt/
+msgid "Error"
+msgstr "Error"
+
+#: ui_qt/
+msgid "Extra large"
+msgstr "Muy grande"
+
+#: ui_qt/
+msgid "Field mapping rules"
+msgstr "Reglas de mapeo de campos"
+
+#: ui_qt/
+msgid "GNU Lesser General Public License version 3 or later"
+msgstr "Licencia Pública General Reducida de GNU versión 3 o posterior"
+
+#: ui_qt/
+msgid "General"
+msgstr "General"
+
+#: ui_qt/
+msgid "Hidden devices"
+msgstr "Dispositivos ocultos"
+
+#: ui_qt/
+msgid "Hide device"
+msgstr "Ocultar dispositivo"
+
+#: ui_qt/
+msgid "Hide sidebar"
+msgstr "Ocultar barra lateral"
+
+#: ui_qt/
+msgid "Hide window"
+msgstr "Ocultar ventana"
+
+#: ui_qt/
+msgid "Icons size"
+msgstr "Tamaño de iconos"
+
+#: ui_qt/
+msgid "Invalid command template for this protocol."
+msgstr "Plantilla de comando no válida para este protocolo."
+
+#: ui_qt/
+msgid "Large"
+msgstr "Grande"
+
+#: ui_qt/
+msgid "Last seen: {n} d ago"
+msgstr "Visto hace: {n} d"
+
+#: ui_qt/
+msgid "Last seen: {n} h ago"
+msgstr "Visto hace: {n} h"
+
+#: ui_qt/
+msgid "Last seen: {n} min ago"
+msgstr "Visto hace: {n} min"
+
+#: ui_qt/
+msgid "Light"
+msgstr "Claro"
+
+#: ui_qt/
+msgid "Location name:"
+msgstr "Nombre de ubicación:"
+
+#: ui_qt/
+msgid "Locations"
+msgstr "Ubicaciones"
+
+#: ui_qt/
+msgid "Manage location presets shown in the right-click menu."
+msgstr ""
+"Administrar los preajustes de ubicación mostrados en el menú contextua"
+"l."
+
+#: ui_qt/
+msgid "Medium"
+msgstr "Mediano"
+
+#: ui_qt/
+msgid "Mode"
+msgstr "Modo"
+
+#: ui_qt/
+msgid "NetNeighbor {}"
+msgstr "NetNeighbor {}"
+
+#: ui_qt/
+msgid "New name:"
+msgstr "Nuevo nombre:"
+
+#: ui_qt/
+msgid "No devices yet"
+msgstr "Aún no hay dispositivos"
+
+#: ui_qt/
+msgid "No hidden devices"
+msgstr "No hay dispositivos ocultos"
+
+#: ui_qt/
+msgid ""
+"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
+"config/netneighbor/custom_icons/."
+msgstr ""
+"No se encontraron iconos. Agregue PNGs en assets/icons/bundled-freedes"
+"ktop o ~/.config/netneighbor/custom_icons/."
+
+#: ui_qt/
+msgid ""
+"Notification delivery depends on the OS and session. Tray-backed behav"
+"iour (close to tray, minimized start) will align once the system tray "
+"is implemented."
+msgstr ""
+"La entrega de notificaciones depende del sistema operativo y la sesión"
+". El comportamiento respaldado por la bandeja (cerrar en la bandeja, i"
+"nicio minimizado) se alineará una vez que se implemente la bandeja del"
+" sistema."
+
+#: ui_qt/
+msgid "Notifications"
+msgstr "Notificaciones"
+
+#: ui_qt/
+msgid "Offline"
+msgstr "Sin conexión"
+
+#: ui_qt/
+msgid "Online"
+msgstr "En línea"
+
+#: ui_qt/
+msgid ""
+"Override or add connection endpoints per protocol. For 'custom' scheme"
+", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
+"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
+" schemes."
+msgstr ""
+"Anular o agregar puntos de conexión por protocolo. Para el esquema 'cu"
+"stom', ingrese la plantilla de comando en IP/Host ({ip}, {ip_raw}, {po"
+"rt}, {name}, {type}, {category}, {url}). IP/Host y Puerto son opcional"
+"es para otros esquemas."
+
+#: ui_qt/
+msgid "Preferences…"
+msgstr "Preferencias…"
+
+#: ui_qt/
+msgid "Qt for Python bindings"
+msgstr "Enlaces Qt para Python"
+
+#: ui_qt/
+msgid "Reload discovery"
+msgstr "Recargar detección"
+
+#: ui_qt/
+msgid "Scheme"
+msgstr "Esquema"
+
+#: ui_qt/
+msgid "See the"
+msgstr "Consulte la"
+
+#: ui_qt/
+msgid "Select an icon, then OK. IDs are stored in your preferences."
+msgstr "Seleccione un icono, luego OK. Los IDs se guardan en sus preferencias."
+
+#: ui_qt/
+msgid "Service type"
+msgstr "Tipo de servicio"
+
+#: ui_qt/
+msgid "Session"
+msgstr "Sesión"
+
+#: ui_qt/
+msgid "Show sidebar"
+msgstr "Mostrar barra lateral"
+
+#: ui_qt/
+msgid "Show window"
+msgstr "Mostrar ventana"
+
+#: ui_qt/
+msgid "Sidebar"
+msgstr "Barra lateral"
+
+#: ui_qt/
+msgid "Small"
+msgstr "Pequeño"
+
+#: ui_qt/
+msgid "Start Scanning…"
+msgstr "Iniciando escaneo…"
+
+#: ui_qt/
+msgid "Theme"
+msgstr "Tema"
+
+#: ui_qt/
+msgid "This program comes with absolutely no warranty."
+msgstr "Este programa no ofrece ningún tipo de garantía."
+
+#: ui_qt/
+msgid "Types"
+msgstr "Tipos"
+
+#: ui_qt/
+msgid "Use as Friendly name"
+msgstr "Usar como nombre descriptivo"
+
+#: ui_qt/
+msgid "Use as Information"
+msgstr "Usar como información"
+
+#: ui_qt/
+msgid "Use as Location"
+msgstr "Usar como ubicación"
+
+#: ui_qt/
+msgid "Use icon from"
+msgstr "Usar icono de"
+
+#: ui_qt/
+msgid "Version {version}"
+msgstr "Versión {version}"
+
+#: ui_qt/
+msgid "WS-Discovery (Windows devices)"
+msgstr "WS-Discovery (dispositivos Windows)"
+
+#: ui_qt/
+msgid "for details."
+msgstr "para más detalles."
+
+#: ui_qt/
+msgid "mDNS/DNS-SD discovery"
+msgstr "Detección mDNS/DNS-SD"
+
+#: ui_qt/
+msgid "not yet downloaded"
+msgstr "aún no descargado"
+
+#: ui_qt/
+msgid "{} devices"
+msgstr "{} dispositivos"

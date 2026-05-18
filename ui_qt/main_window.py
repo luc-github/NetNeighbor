@@ -10,7 +10,7 @@ import os
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 
 from gettext import gettext as _
 from PySide6.QtCore import QDateTime, QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, Signal
@@ -1930,11 +1930,13 @@ class NetNeighborMainWindow(QMainWindow):
     def _bundle_tooltip(self, bundle: DeviceBundle) -> str:
         d = bundle.primary
         loc = bundle_location_label(bundle, no_location_label=self._no_location_label())
-        return "{}\n{}\n{}".format(
-            _safe_str(d.ip),
-            format_device_type_for_details(d),
-            loc,
-        )
+        parts = [_safe_str(d.ip), format_device_type_for_details(d)]
+        if loc:
+            parts.append(loc)
+        last_seen_str = _format_last_seen(d.last_seen)
+        if last_seen_str:
+            parts.append(last_seen_str)
+        return "\n".join(parts)
 
     def _run_flat_icon_list_batched(self, work: Callable[[], None]) -> None:
         """Batch list mutations without disabling the widget (avoids stray Windows taskbar entries)."""
@@ -2117,6 +2119,29 @@ def _disabled_title_action(parent: QMainWindow, text: str) -> QAction:
     a = QAction(text, parent)
     a.setEnabled(False)
     return a
+
+
+def _format_last_seen(last_seen: datetime | None) -> str:
+    """Return a human-readable 'Last seen: X ago' string, or '' if seen very recently."""
+    if last_seen is None:
+        return ""
+    try:
+        now = datetime.now(timezone.utc)
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        delta_s = (now - last_seen).total_seconds()
+        if delta_s < 120:
+            return ""  # seen in the last 2 min → no label needed
+        if delta_s < 3600:
+            mins = int(delta_s // 60)
+            return _("Last seen: {n} min ago").format(n=mins)
+        if delta_s < 86400:
+            hrs = int(delta_s // 3600)
+            return _("Last seen: {n} h ago").format(n=hrs)
+        days = int(delta_s // 86400)
+        return _("Last seen: {n} d ago").format(n=days)
+    except Exception:
+        return ""
 
 
 def _device_snapshot_ui_fingerprint(devices: Iterable[Device]) -> tuple:
