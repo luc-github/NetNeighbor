@@ -700,11 +700,14 @@ class NetNeighborMainWindow(QMainWindow):
 
     def _rebuild_sidebar(self) -> None:
         sidebar_mode = self._sidebar_group_mode()
-        bundles = self._filtered_bundles()
+        if self._discovery_manager is not None:
+            all_bundles = [b for b in self._bundles if not self._discovery_manager.bundle_is_hidden(b.ip, b.port)]
+        else:
+            all_bundles = list(self._bundles)
         counts: dict[str, int] = {}
         bundle_filter_keys: dict[str, str] = {}
 
-        for bundle in bundles:
+        for bundle in all_bundles:
             if sidebar_mode == "location":
                 location = bundle_location_label(bundle, no_location_label=self._no_location_label())
                 counts[location] = counts.get(location, 0) + 1
@@ -715,14 +718,14 @@ class NetNeighborMainWindow(QMainWindow):
                 counts[slug] = counts.get(slug, 0) + 1
                 bundle_filter_keys[slug] = slug
 
-        signature = (sidebar_mode, len(bundles), tuple(sorted(counts.items())))
+        signature = (sidebar_mode, len(all_bundles), tuple(sorted(counts.items())))
         if signature == self._sidebar_signature:
             return
         self._sidebar_signature = signature
 
         type_slug_labels: dict[str, str] = {}
         if sidebar_mode != "location":
-            for b in bundles:
+            for b in all_bundles:
                 slug = (b.primary.type or "unknown").strip().lower()
                 if slug not in type_slug_labels:
                     type_slug_labels[slug] = format_device_type_for_details(b.primary)
@@ -737,7 +740,7 @@ class NetNeighborMainWindow(QMainWindow):
         self._sidebar_list.clear()
 
         all_text = _("All Locations") if sidebar_mode == "location" else _("All Types")
-        all_label = f"{all_text} ({len(bundles)})"
+        all_label = f"{all_text} ({len(all_bundles)})"
         first = QListWidgetItem(all_label)
         first.setData(self._FILTER_ROLE, None)
         self._sidebar_list.addItem(first)
@@ -1023,12 +1026,7 @@ class NetNeighborMainWindow(QMainWindow):
         QTimer.singleShot(0, self._sync_sidebar_top_spacer)
 
     def _sync_sidebar_top_spacer(self) -> None:
-        """Align sidebar list top with table body / icon area (table header row in list mode)."""
-        if self._view_mode == "list":
-            h = max(0, self._table.horizontalHeader().height())
-            self._sidebar_top_spacer.setFixedHeight(h)
-        else:
-            self._sidebar_top_spacer.setFixedHeight(0)
+        self._sidebar_top_spacer.setFixedHeight(0)
 
     def _sync_icon_page_stack_index(self) -> None:
         if self._icon_sort_mode == "appearance":
