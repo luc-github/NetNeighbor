@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
 
 from gettext import gettext as _
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QDateTime, QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPainter, QPalette, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -250,6 +250,32 @@ class _ScanningOverlay(QWidget):
         painter.end()
 
 
+class _UserActivityGuard(QObject):
+    """Application-level event filter that tracks the last user input timestamp."""
+
+    _WATCHED = frozenset({
+        QEvent.Type.MouseMove,
+        QEvent.Type.MouseButtonPress,
+        QEvent.Type.MouseButtonRelease,
+        QEvent.Type.MouseButtonDblClick,
+        QEvent.Type.Wheel,
+        QEvent.Type.KeyPress,
+    })
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._last_ms: int = 0
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() in self._WATCHED:
+            self._last_ms = QDateTime.currentMSecsSinceEpoch()
+        return False
+
+    def idle_ms(self) -> int:
+        """Milliseconds since the last user input event."""
+        return QDateTime.currentMSecsSinceEpoch() - self._last_ms
+
+
 class NetNeighborMainWindow(QMainWindow):
     """Table (list) and icon-mode list; view options stored in ``ui_prefs.json``."""
 
@@ -400,6 +426,11 @@ class NetNeighborMainWindow(QMainWindow):
         self._persist_prefs_timer = QTimer(self)
         self._persist_prefs_timer.setSingleShot(True)
         self._persist_prefs_timer.timeout.connect(self._persist_ui_prefs)
+
+        self._activity_guard = _UserActivityGuard(self)
+        _app = QApplication.instance()
+        if _app is not None:
+            _app.installEventFilter(self._activity_guard)
 
         self._remote_icon_cache = QtRemoteIconCache(self)
         self._remote_icon_cache.icons_ready.connect(self._on_remote_icons_ready)
@@ -1289,6 +1320,15 @@ class NetNeighborMainWindow(QMainWindow):
     def _flush_pending_devices(self) -> None:
         if self._pending_devices is None:
             return
+        # Defer while a popup (context menu) is open — rebuilding would close it.
+        _app = QApplication.instance()
+        if _app is not None and _app.activePopupWidget() is not None:
+            self._device_refresh_timer.start(400)
+            return
+        # Defer while the user is actively interacting (mouse moving, typing).
+        if self._activity_guard.idle_ms() < 200:
+            self._device_refresh_timer.start(250)
+            return
         snapshot = self._pending_devices
         self._pending_devices = None
         _LOG.debug("_flush_pending_devices: applying n=%s", len(snapshot))
@@ -1301,13 +1341,19 @@ class NetNeighborMainWindow(QMainWindow):
     def _apply_devices_snapshot(self, devices: list[Device]) -> None:
         """Apply a device list to bundles, sidebar, and main views (always merge like GTK)."""
         device_list = list(devices)
+        device_fp = _device_snapshot_ui_fingerprint(device_list)
+        new_fp_prefix = (tuple(self._information_precedence), device_fp)
+        if (
+            isinstance(self._last_snapshot_fp, tuple)
+            and len(self._last_snapshot_fp) >= 2
+            and self._last_snapshot_fp[:2] == new_fp_prefix
+            and self._last_device_view_sig is not None
+        ):
+            _LOG.debug("_apply_devices_snapshot: skipped (fingerprint unchanged) n=%s", len(device_list))
+            return
         self._last_devices = device_list
         self._bundles = build_device_bundles(device_list, self._information_precedence)
-        self._last_snapshot_fp = (
-            tuple(self._information_precedence),
-            _device_snapshot_ui_fingerprint(device_list),
-            bundle_snapshot_ui_fingerprint(self._bundles),
-        )
+        self._last_snapshot_fp = new_fp_prefix + (bundle_snapshot_ui_fingerprint(self._bundles),)
         _LOG.debug("_apply_devices_snapshot: n=%s", len(device_list))
         self._maybe_auto_add_discovered_locations()
         self._rebuild_sidebar()
@@ -1857,6 +1903,7 @@ class NetNeighborMainWindow(QMainWindow):
         self._sync_menu_checks_from_state()
 
     def _fill_table(self, rows: list[DeviceBundle]) -> None:
+        saved_scroll = self._table.verticalScrollBar().value()
         self._table.setSortingEnabled(False)
         self._table.setRowCount(len(rows))
         for row, bundle in enumerate(rows):
@@ -1877,6 +1924,8 @@ class NetNeighborMainWindow(QMainWindow):
             self._apply_list_table_sort_for_arrange_mode()
         else:
             self._table.setSortingEnabled(False)
+        if saved_scroll > 0:
+            self._table.verticalScrollBar().setValue(saved_scroll)
 
     def _bundle_tooltip(self, bundle: DeviceBundle) -> str:
         d = bundle.primary
@@ -1902,6 +1951,8 @@ class NetNeighborMainWindow(QMainWindow):
             lst.blockSignals(False)
 
     def _fill_flat_icon_list(self, rows: list[DeviceBundle]) -> None:
+        saved_scroll = self._icon_list.verticalScrollBar().value()
+
         def _fill() -> None:
             self._icon_list.clear()
             for bundle in rows:
@@ -1914,6 +1965,8 @@ class NetNeighborMainWindow(QMainWindow):
 
         self._run_flat_icon_list_batched(_fill)
         self._relayout_flat_icon_list(force=True)
+        if saved_scroll > 0:
+            QTimer.singleShot(0, lambda: self._icon_list.verticalScrollBar().setValue(saved_scroll))
 
     def _resync_flat_icon_list_pixmaps(self) -> None:
         """Refresh icons after preset change without rebuilding the whole list."""
@@ -2070,6 +2123,7 @@ def _device_snapshot_ui_fingerprint(devices: Iterable[Device]) -> tuple:
     """Stable fingerprint of fields that affect the Qt table and icon labels (not raw metadata noise)."""
     rows: list[tuple] = []
     for d in sorted(devices, key=lambda x: x.key):
+        md = d.metadata if isinstance(d.metadata, dict) else {}
         rows.append(
             (
                 d.key,
@@ -2079,6 +2133,7 @@ def _device_snapshot_ui_fingerprint(devices: Iterable[Device]) -> tuple:
                 int(d.port or 0),
                 (d.type or "unknown").strip().lower(),
                 bool(d.online),
+                (md.get("user_location") or "").strip(),
             )
         )
     return (len(rows), tuple(rows))
