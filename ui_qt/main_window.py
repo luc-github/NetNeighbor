@@ -1309,9 +1309,30 @@ class NetNeighborMainWindow(QMainWindow):
             bundle_snapshot_ui_fingerprint(self._bundles),
         )
         _LOG.debug("_apply_devices_snapshot: n=%s", len(device_list))
+        self._maybe_auto_add_discovered_locations()
         self._rebuild_sidebar()
         self._last_device_view_sig = None
         self._schedule_view_refresh()
+
+    def _maybe_auto_add_discovered_locations(self) -> None:
+        prefs = load_ui_preferences()
+        if not prefs.get("auto_add_discovered_locations", False):
+            return
+        discovered: list[str] = []
+        for bundle in self._bundles:
+            for device in bundle.devices:
+                md = device.metadata if isinstance(device.metadata, dict) else {}
+                loc = md.get("user_location")
+                if isinstance(loc, str) and loc.strip():
+                    discovered.append(loc.strip())
+        if not discovered:
+            return
+        merged = normalize_location_options(self._location_options + discovered)
+        if merged == self._location_options:
+            return
+        self._location_options = merged
+        prefs["location_options"] = merged
+        save_ui_preferences(prefs)
 
     def _filtered_bundles(self) -> list[DeviceBundle]:
         bundles = apply_bundle_category_filter(
@@ -1478,12 +1499,17 @@ class NetNeighborMainWindow(QMainWindow):
         has_cmd = bool(
             bundle_custom_command(bundle) or (self._custom_command_template or "").strip()
         )
+        current_loc = bundle_location_label(bundle, no_location_label="")
+        if current_loc and current_loc not in self._location_options:
+            loc_opts = normalize_location_options(self._location_options + [current_loc])
+        else:
+            loc_opts = self._location_options
         show_device_context_menu(
             self,
             global_pos,
             bundle,
             connect_targets=self._bundle_connect_targets(bundle),
-            location_options=self._location_options,
+            location_options=loc_opts,
             type_options=self._type_options,
             has_custom_command=has_cmd,
             on_open_uri=lambda uri: launch_open_uri(
