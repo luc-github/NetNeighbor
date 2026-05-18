@@ -651,6 +651,13 @@ def merge_ssdp_mdns_detail_fields(
             continue
         mdns_for_merge.append((key, value))
 
+    # Build a value-lookup dict for SSDP fields (first occurrence wins, keys already normalised above).
+    ssdp_val_by_key: dict[str, str] = {}
+    for _k, _v in ssdp_fields:
+        nk0 = _norm_key(_k)
+        if nk0 not in ssdp_val_by_key:
+            ssdp_val_by_key[nk0] = _v
+
     prefer_ssdp_only = {"ip", "port", "ports", "location", "last seen"}
     out: list[tuple[str, str]] = list(ssdp_fields)
     for key, value in mdns_for_merge:
@@ -658,6 +665,10 @@ def merge_ssdp_mdns_detail_fields(
         if nk in prefer_ssdp_only and nk in ssdp_keys:
             continue
         if nk in ssdp_keys:
+            # Same key and same value → SSDP already covers it; skip the mDNS duplicate.
+            ssdp_val = ssdp_val_by_key.get(nk, "")
+            if (ssdp_val or "").strip().lower() == (value or "").strip().lower():
+                continue
             out.append((f"{key} (mDNS)", value))
         else:
             out.append((key, value))
