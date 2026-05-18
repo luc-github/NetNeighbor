@@ -886,7 +886,7 @@ class NetNeighborMainWindow(QMainWindow):
 
         act_prefs = QAction(_("Preferences…"), self)
         act_prefs.setShortcut(QKeySequence.StandardKey.Preferences)
-        act_prefs.setMenuRole(QAction.MenuRole.PreferencesRole)
+        act_prefs.setMenuRole(QAction.MenuRole.NoRole)
         act_prefs.triggered.connect(self._open_preferences)
         view_menu.addAction(act_prefs)
 
@@ -894,7 +894,7 @@ class NetNeighborMainWindow(QMainWindow):
 
         act_quit = QAction(_("Quit"), self)
         act_quit.setShortcut(QKeySequence.StandardKey.Quit)
-        act_quit.setMenuRole(QAction.MenuRole.QuitRole)
+        act_quit.setMenuRole(QAction.MenuRole.NoRole)
         act_quit.triggered.connect(self._quit_application)
         view_menu.addAction(act_quit)
 

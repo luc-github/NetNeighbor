@@ -76,6 +76,21 @@ def main(argv: list[str] | None = None) -> int:
     _log.info("NetNeighbor Qt bootstrap (logging to ~/.cache/netneighbor/netneighbor.log)")
 
     app = QApplication(argv)
+
+    # Load Qt's own translations so standard buttons (Ok, Cancel, Close, Save…) are localised.
+    # Use the same language as gettext (env vars LANGUAGE/LANG), not QLocale.system() which
+    # reads the Windows locale and ignores LANGUAGE.
+    from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+    from i18n import active_language
+    _qt_translator = QTranslator(app)
+    _qt_translations_path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    _active_lang = active_language()
+    _qt_locale = QLocale(_active_lang) if _active_lang else QLocale.system()
+    if _qt_translator.load(_qt_locale, "qtbase", "_", _qt_translations_path):
+        app.installTranslator(_qt_translator)
+        _log.debug("Qt base translator loaded for %s", _qt_locale.name())
+    else:
+        _log.debug("Qt base translator not found for %s (standard buttons stay in English)", _qt_locale.name())
     if not args.qt_native_style:
         from PySide6.QtCore import Qt
         from ui_qt.app_theme import setup_fusion_theme

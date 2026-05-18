@@ -395,7 +395,14 @@ class DeviceDetailsDialog(QDialog):
         model: DeviceDetailsViewModel,
     ) -> QWidget:
         page = QWidget()
-        layout = QVBoxLayout(page)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
 
         if icon is not None:
             icon_box = QGroupBox(_("Use icon from"))
@@ -465,6 +472,8 @@ class DeviceDetailsDialog(QDialog):
             layout.addWidget(self._build_device_commands_box(cmd))
 
         layout.addStretch(1)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
         return page
 
     def _build_device_commands_box(self, cmd: DeviceCommandSettings) -> QGroupBox:

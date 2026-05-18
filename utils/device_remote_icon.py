@@ -9,6 +9,7 @@ import ipaddress
 import json
 import os
 import ssl
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -17,8 +18,17 @@ from urllib.request import urlopen
 from model.device import Device
 from utils.device_bundles import DeviceBundle
 
-_REMOTE_ICON_DISK_DIR = Path.home() / ".cache" / "netneighbor" / "remote_icons"
-_REMOTE_ICON_INDEX_PATH = Path.home() / ".cache" / "netneighbor" / "remote_icon_index.json"
+
+def _netneighbor_cache_dir() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        return base / "netneighbor" / "cache"
+    return Path.home() / ".cache" / "netneighbor"
+
+
+_CACHE_BASE = _netneighbor_cache_dir()
+_REMOTE_ICON_DISK_DIR = _CACHE_BASE / "remote_icons"
+_REMOTE_ICON_INDEX_PATH = _CACHE_BASE / "remote_icon_index.json"
 _index_cache: dict[str, dict[str, str]] | None = None
 
 

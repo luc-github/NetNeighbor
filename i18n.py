@@ -51,7 +51,16 @@ def _detect_languages() -> list[str]:
     return langs
 
 
+_active_language: str | None = None
+
+
+def active_language() -> str | None:
+    """Return the language code that was actually installed (e.g. ``'zh_CN'``, ``'fr'``), or None for English."""
+    return _active_language
+
+
 def setup_i18n() -> None:
+    global _active_language
     locale_dir = Path(__file__).resolve().parent / "locale"
     languages = _detect_languages()
 
@@ -71,6 +80,8 @@ def setup_i18n() -> None:
             languages=languages if languages else None,
         )
         translation.install()
+        _active_language = languages[0] if languages else None
     except FileNotFoundError:
         # No .mo file for the detected language — fall back to English (no-op)
         gettext.install(APP_DOMAIN, localedir=str(locale_dir))
+        _active_language = None
