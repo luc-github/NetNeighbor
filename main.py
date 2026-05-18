@@ -4,7 +4,7 @@
 # License: LGPL3
 """Application entry point."""
 
-from app import main
+from app_qt import main
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
+    QSystemTrayIcon,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -1924,7 +1925,7 @@ class NetNeighborMainWindow(QMainWindow):
 
     def _rebuild_grouped_icon_page(self, ordered: list[DeviceBundle]) -> None:
         page = self._grouped_icons_page
-        was_page_visible = page.isVisible()
+        was_page_visible = not page.isHidden()
 
         saved_scroll = 0
         if self._grouped_icons_layout.count():
@@ -1965,6 +1966,15 @@ class NetNeighborMainWindow(QMainWindow):
 
         if saved_scroll > 0 and new_scroll is not None:
             QTimer.singleShot(0, lambda: new_scroll.verticalScrollBar().setValue(saved_scroll))
+
+    def closeEvent(self, event) -> None:
+        from utils.ui_prefs import load_ui_preferences
+        prefs = load_ui_preferences()
+        if prefs.get("close_to_tray", True) and QSystemTrayIcon.isSystemTrayAvailable():
+            event.ignore()
+            self.hide()
+        else:
+            event.accept()
 
     def bring_to_front(self) -> None:
         self.raise_()

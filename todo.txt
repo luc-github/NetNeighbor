@@ -4,7 +4,7 @@ en incluant la custom commande dams la liste = plusieurs custom commandes=>OK
 3 - ajout des regles users mDNS ajout + suppression ==> OK 
 4 - Notification history=>Ok
 5 - add Hidden devices in context menu + tables in tools=>Ok
-5 - systray
+5 - systray =>
 6 - gestion des non presents
 7 - traductions
 8 - packaging
@@ -16,3 +16,4 @@ Bugs:
 2 - bug sonos ne popule pas la liste de location
 3 - on a un reset du scrolling a chaque event et un impact sur la saisie des menus 
 4 - all lists les affiches pas la liste all
+List all => select types => select 1 type => click show by type => only type  

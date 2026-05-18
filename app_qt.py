@@ -39,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Force dark theme (overrides OS setting, Fusion only)",
     )
+    parser.add_argument(
+        "--start-minimized-to-tray",
+        action="store_true",
+        help="Start hidden in the system tray (autostart mode)",
+    )
     args, _unknown = parser.parse_known_args(argv[1:])
     if args.qt_diag_toplevels:
         os.environ["NETNEIGHBOR_DEBUG_TOPLEVEL"] = "1"
@@ -54,13 +59,13 @@ def main(argv: list[str] | None = None) -> int:
 
     from PySide6.QtCore import QTimer
     from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
     from discovery.manager import DiscoveryManager
     from i18n import setup_i18n
     from model.device import Device
     from ui.icons import resolve_app_icon_paths_in_order
-    from ui_qt import MainThreadScheduler, NetNeighborMainWindow
+    from ui_qt import MainThreadScheduler, NetNeighborMainWindow, NetNeighborTray
     from utils.app_logging import setup_logging
     from utils.discovery_config import discovery_manager_kwargs, load_discovery_protocol_config
     from utils.qt_single_instance import create_activation_listener, send_activate_to_primary
@@ -134,7 +139,16 @@ def main(argv: list[str] | None = None) -> int:
     app_icon = app.windowIcon()
     if not app_icon.isNull():
         window.setWindowIcon(app_icon)
-    window.show()
+
+    _tray: NetNeighborTray | None = None
+    if QSystemTrayIcon.isSystemTrayAvailable():
+        _tray = NetNeighborTray(app.windowIcon(), window, parent=app)
+        _tray.show()
+        app._qt_tray = _tray
+
+    _start_hidden = args.start_minimized_to_tray and _tray is not None
+    if not _start_hidden:
+        window.show()
 
     if os.environ.get("NETNEIGHBOR_DEBUG_TOPLEVEL"):
         from ui_qt.main_window import _debug_log_extra_top_level_widgets

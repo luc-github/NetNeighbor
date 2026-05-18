@@ -1,7 +1,6 @@
 # NetNeighbor
 
-NetNeighbor is a Linux desktop application that discovers and monitors devices on your
-local network — a modern equivalent of the Windows Network Neighborhood experience.
+NetNeighbor discovers and monitors devices on your local network — a modern equivalent of the Windows Network Neighborhood experience. Runs on Linux and Windows.
 
 **Current release: 1.0.0**
 
@@ -26,33 +25,25 @@ Available formats: `.deb` · `.AppImage` · `.tar.gz`
 
 ## Requirements
 
-- Linux desktop with GTK 3
 - Python 3.10+
+- PySide6 6.5+
 
-### Ubuntu / Linux Mint / Debian
-
-```bash
-sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0
-sudo apt install -y samba-common-bin                             # NetBIOS names
-sudo apt install -y gir1.2-ayatanaappindicator3-0.1             # system tray
-```
-
-These dependencies are installed automatically when using the `.deb` package.
+No system-level GUI libraries required beyond what PySide6 brings.
 
 ## Install
 
-**`.deb` package (recommended):**
+**`.deb` package (recommended, Linux):**
 ```bash
 sudo dpkg -i netneighbor_1.0.0_amd64.deb
 ```
 
-**`.AppImage`:**
+**`.AppImage` (Linux):**
 ```bash
 chmod +x NetNeighbor-1.0.0-x86_64.AppImage
 ./NetNeighbor-1.0.0-x86_64.AppImage
 ```
 
-**Tarball:**
+**Tarball (Linux):**
 ```bash
 tar -xzf netneighbor-1.0.0.tar.gz
 cd netneighbor-1.0.0
@@ -62,24 +53,20 @@ bash run.sh
 
 ## Run from source
 
+**Linux / macOS:**
 ```bash
-python -m venv .venv --system-site-packages
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-qt.txt
 python main.py
 ```
 
-
-* Windows
+**Windows:**
 ```bash
-.\.venv\Scripts\activate.bat
-python.exe -m pip install -r requirements-qt.txt
-python.exe app_qt.py
-```
-
-Demo data is enabled by default. Disable with:
-```bash
-NETNEIGHBOR_DEMO=0 python main.py
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-qt.txt
+python main.py
 ```
 
 ## Documentation
