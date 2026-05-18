@@ -1965,6 +1965,16 @@ class NetNeighborMainWindow(QMainWindow):
         if saved_scroll > 0 and new_scroll is not None:
             QTimer.singleShot(0, lambda: new_scroll.verticalScrollBar().setValue(saved_scroll))
 
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        if (
+            event.type() == QEvent.Type.WindowStateChange
+            and self.isMinimized()
+            and QSystemTrayIcon.isSystemTrayAvailable()
+        ):
+            event.ignore()
+            QTimer.singleShot(0, self.hide)
+
     def closeEvent(self, event) -> None:
         from utils.ui_prefs import load_ui_preferences
         prefs = load_ui_preferences()
@@ -1975,9 +1985,9 @@ class NetNeighborMainWindow(QMainWindow):
             event.accept()
 
     def bring_to_front(self) -> None:
+        self.showNormal()
         self.raise_()
         self.activateWindow()
-        self.show()
 
 
 def _debug_log_extra_top_level_widgets(context: str) -> None:
