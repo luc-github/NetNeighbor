@@ -78,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
     _log.info("NetNeighbor Qt bootstrap (logging to ~/.cache/netneighbor/netneighbor.log)")
 
     app = QApplication(argv)
+    app.setApplicationName("NetNeighbor")
+    app.setApplicationDisplayName("NetNeighbor")
 
     # Load Qt's own translations so standard buttons (Ok, Cancel, Close, Save…) are localised.
     # Use the same language as gettext (env vars LANGUAGE/LANG), not QLocale.system() which
