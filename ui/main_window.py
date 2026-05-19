@@ -1,4 +1,6 @@
-# File main_window.py for NetNeighbor version 1.0.0
+# File main_window.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Main window — list & icon views (NetNeighbor 2.0)."""
 
@@ -41,24 +43,24 @@ from PySide6.QtWidgets import (
 from discovery.manager import DiscoveryManager
 from model.device import Device
 from ui.icons import resolve_asset_icon_file, resolve_persisted_icon_id_to_path
-from ui_qt.grouped_icon_sections import build_grouped_icon_scroll
-from ui_qt.icon_grid_layout import (
+from ui.grouped_icon_sections import build_grouped_icon_scroll
+from ui.icon_grid_layout import (
     IconListViewportResizeFilter,
     create_icon_tile_list_item,
     relayout_icon_mode_list,
     set_icon_tile_item_label,
 )
-from ui_qt.device_actions import (
+from ui.device_actions import (
     bundle_custom_command,
     launch_open_uri,
     prompt_rename_device,
     run_custom_command_for_bundle,
 )
-from ui_qt.device_context_menu import show_device_context_menu
-from ui_qt.device_details_dialog import DeviceCommandSettings, DeviceIconSettings, show_device_details_dialog
-from ui_qt.icon_picker_dialog import pick_device_icon_id
-from ui_qt.icon_tile_delegate import IconTileItemDelegate
-from ui_qt.no_focus_item_delegate import NoFocusItemDelegate
+from ui.device_context_menu import show_device_context_menu
+from ui.device_details_dialog import DeviceCommandSettings, DeviceIconSettings, show_device_details_dialog
+from ui.icon_picker_dialog import pick_device_icon_id
+from ui.icon_tile_delegate import IconTileItemDelegate
+from ui.no_focus_item_delegate import NoFocusItemDelegate
 from utils.app_version import get_app_version
 from utils.details_payload import format_device_type_for_details
 from utils.device_bundles import (
@@ -83,14 +85,14 @@ from utils.icon_view_prefs import (
     icon_size_preset_to_qsize,
     normalize_icon_size_preset,
 )
-from ui_qt.remote_icon_cache import QtRemoteIconCache
+from ui.remote_icon_cache import QtRemoteIconCache
 from utils.qt_device_icons import qt_icon_for_device_type
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 
 from .icon_list_qss import ICON_MODE_LIST_QSS
 
 
-_LOG = logging.getLogger("ui_qt")
+_LOG = logging.getLogger("ui")
 
 
 _LIST_ITEM_INTERACTION_QSS = (
@@ -1079,13 +1081,14 @@ class NetNeighborMainWindow(QMainWindow):
             app.quit()
 
     def _open_preferences(self) -> None:
-        from ui_qt.preferences_dialog import PreferencesDialog
+        from ui.preferences_dialog import PreferencesDialog
 
         dlg = PreferencesDialog(
             self,
             on_location_presets_saved=self._apply_location_presets,
             on_type_presets_saved=self._apply_type_presets,
             on_connect_templates_saved=self._apply_connect_templates,
+            on_clear_icon_cache=self._clear_icon_cache,
         )
         dlg.exec()
 
@@ -1099,6 +1102,11 @@ class NetNeighborMainWindow(QMainWindow):
         self._connect_command_templates = templates
         self._custom_command_template   = custom
 
+    def _clear_icon_cache(self) -> None:
+        from utils.device_remote_icon import clear_all_app_data
+        clear_all_app_data()
+        self._remote_icon_cache.clear()
+
     def _reload_discovery(self) -> None:
         if self._discovery_manager is None:
             return
@@ -1106,7 +1114,7 @@ class NetNeighborMainWindow(QMainWindow):
         self.statusBar().showMessage(_("Discovery refresh requested"), 3000)
 
     def _show_about(self) -> None:
-        from ui_qt.about_dialog import show_about_dialog
+        from ui.about_dialog import show_about_dialog
 
         show_about_dialog(self)
 
@@ -1123,7 +1131,7 @@ class NetNeighborMainWindow(QMainWindow):
         self._notification_log.append((dt_str, name, status))
 
     def _open_notifications_history(self) -> None:
-        from ui_qt.notifications_history_dialog import show_notifications_history_dialog
+        from ui.notifications_history_dialog import show_notifications_history_dialog
 
         def _clear() -> None:
             self._notification_log.clear()
@@ -1141,7 +1149,7 @@ class NetNeighborMainWindow(QMainWindow):
         }
 
     def _hidden_device_rows(self) -> list:
-        from ui_qt.hidden_devices_dialog import HiddenDeviceRow
+        from ui.hidden_devices_dialog import HiddenDeviceRow
 
         if self._discovery_manager is None:
             return []
@@ -1172,7 +1180,7 @@ class NetNeighborMainWindow(QMainWindow):
         return rows
 
     def _open_hidden_devices(self) -> None:
-        from ui_qt.hidden_devices_dialog import show_hidden_devices_dialog
+        from ui.hidden_devices_dialog import show_hidden_devices_dialog
 
         show_hidden_devices_dialog(
             self,
@@ -1642,13 +1650,18 @@ class NetNeighborMainWindow(QMainWindow):
                 continue
             raw_bytes = self._remote_icon_cache.bytes_for_device(dev)
             if raw_bytes:
-                from ui_qt.remote_icon_cache import pixmap_from_icon_bytes
+                from ui.remote_icon_cache import pixmap_from_icon_bytes
                 pix = pixmap_from_icon_bytes(raw_bytes, 128)
                 if pix is not None and not pix.isNull():
                     provided_native_size = (pix.width(), pix.height())
                     provided_pixmap = pix
                 break
 
+        icon_devices = [
+            dev for dev in (bundle.ssdp_device, bundle.wsdd_device, bundle.wsd_device,
+                            bundle.nmb_device, bundle.mdns_device)
+            if dev is not None
+        ]
         icon_settings = DeviceIconSettings(
             icon_mode=mode,
             has_device_icon_source=bundle_has_device_icon_source(bundle),
@@ -1658,6 +1671,8 @@ class NetNeighborMainWindow(QMainWindow):
             on_pick_custom=_pick_custom,
             provided_icon_pixmap=provided_pixmap,
             provided_icon_native_size=provided_native_size,
+            icon_cache=self._remote_icon_cache,
+            icon_devices=icon_devices,
         )
 
         command_settings: DeviceCommandSettings | None = None

@@ -1178,177 +1178,177 @@ msgstr "未知裝置"
 #~ msgid "Command:"
 #~ msgstr "命令："
 
-#: ui_qt/
+#: ui/
 msgid "About NetNeighbor"
 msgstr "關於 NetNeighbor"
 
-#: ui_qt/
+#: ui/
 msgid "App logo under assets/icons: Luc LEBOSSE"
 msgstr "應用程式圖示位於 assets/icons：Luc LEBOSSE"
 
-#: ui_qt/
+#: ui/
 msgid "Applications"
 msgstr "應用程式"
 
-#: ui_qt/
+#: ui/
 msgid "Apply"
 msgstr "套用"
 
-#: ui_qt/
+#: ui/
 msgid "Author: Luc"
 msgstr "作者：Luc"
 
-#: ui_qt/
+#: ui/
 msgid "Close to system tray / panel instead of exiting"
 msgstr "關閉至系統匣而非結束"
 
-#: ui_qt/
+#: ui/
 msgid "Command"
 msgstr "命令"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Command templates for opening device connections. Leave empty to use t"
 "he system default."
 msgstr "開啟裝置連線的命令範本。留空則使用系統預設值。"
 
-#: ui_qt/
+#: ui/
 msgid "Commands"
 msgstr "命令"
 
-#: ui_qt/
+#: ui/
 msgid "Custom command (additional)"
 msgstr "自訂命令（附加）"
 
-#: ui_qt/
+#: ui/
 msgid "Dark"
 msgstr "深色"
 
-#: ui_qt/
+#: ui/
 msgid "Date / Time"
 msgstr "日期 / 時間"
 
-#: ui_qt/
+#: ui/
 msgid "Delete"
 msgstr "刪除"
 
-#: ui_qt/
+#: ui/
 msgid "Desktop notifications"
 msgstr "桌面通知"
 
-#: ui_qt/
+#: ui/
 msgid "Discovery refresh requested"
 msgstr "已要求重新整理探索"
 
-#: ui_qt/
+#: ui/
 msgid "Edit"
 msgstr "編輯"
 
-#: ui_qt/
+#: ui/
 msgid "Edit type preset"
 msgstr "編輯類型預設"
 
-#: ui_qt/
+#: ui/
 msgid "Error"
 msgstr "錯誤"
 
-#: ui_qt/
+#: ui/
 msgid "Extra large"
 msgstr "特大"
 
-#: ui_qt/
+#: ui/
 msgid "Field mapping rules"
 msgstr "欄位對應規則"
 
-#: ui_qt/
+#: ui/
 msgid "GNU Lesser General Public License version 3 or later"
 msgstr "GNU 寬鬆通用公共授權條款第3版或更高版本"
 
-#: ui_qt/
+#: ui/
 msgid "General"
 msgstr "一般"
 
-#: ui_qt/
+#: ui/
 msgid "Hidden devices"
 msgstr "隱藏的裝置"
 
-#: ui_qt/
+#: ui/
 msgid "Hide device"
 msgstr "隱藏裝置"
 
-#: ui_qt/
+#: ui/
 msgid "Hide sidebar"
 msgstr "隱藏側邊欄"
 
-#: ui_qt/
+#: ui/
 msgid "Hide window"
 msgstr "隱藏視窗"
 
-#: ui_qt/
+#: ui/
 msgid "Icons size"
 msgstr "圖示大小"
 
-#: ui_qt/
+#: ui/
 msgid "Invalid command template for this protocol."
 msgstr "此協議的命令範本無效。"
 
-#: ui_qt/
+#: ui/
 msgid "Large"
 msgstr "大"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} d ago"
 msgstr "最後發現：{n} 天前"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} h ago"
 msgstr "最後發現：{n} 小時前"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} min ago"
 msgstr "最後發現：{n} 分鐘前"
 
-#: ui_qt/
+#: ui/
 msgid "Light"
 msgstr "淺色"
 
-#: ui_qt/
+#: ui/
 msgid "Location name:"
 msgstr "位置名稱："
 
-#: ui_qt/
+#: ui/
 msgid "Locations"
 msgstr "位置"
 
-#: ui_qt/
+#: ui/
 msgid "Manage location presets shown in the right-click menu."
 msgstr "管理右鍵選單中顯示的位置預設。"
 
-#: ui_qt/
+#: ui/
 msgid "Medium"
 msgstr "中"
 
-#: ui_qt/
+#: ui/
 msgid "Mode"
 msgstr "模式"
 
-#: ui_qt/
+#: ui/
 msgid "NetNeighbor {}"
 msgstr "NetNeighbor {}"
 
-#: ui_qt/
+#: ui/
 msgid "New name:"
 msgstr "新名稱："
 
-#: ui_qt/
+#: ui/
 msgid "No devices yet"
 msgstr "尚無裝置"
 
-#: ui_qt/
+#: ui/
 msgid "No hidden devices"
 msgstr "沒有隱藏的裝置"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
 "config/netneighbor/custom_icons/."
@@ -1356,26 +1356,26 @@ msgstr ""
 "找不到圖示。請在 assets/icons/bundled-freedesktop 或 ~/.config/netneighbor/cust"
 "om_icons/ 下新增 PNG。"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Notification delivery depends on the OS and session. Tray-backed behav"
 "iour (close to tray, minimized start) will align once the system tray "
 "is implemented."
 msgstr "通知的發送取決於作業系統和工作階段。基於托盤的行為（關閉至托盤、最小化啟動）將在系統托盤實作後對齊。"
 
-#: ui_qt/
+#: ui/
 msgid "Notifications"
 msgstr "通知"
 
-#: ui_qt/
+#: ui/
 msgid "Offline"
 msgstr "離線"
 
-#: ui_qt/
+#: ui/
 msgid "Online"
 msgstr "線上"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Override or add connection endpoints per protocol. For 'custom' scheme"
 ", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
@@ -1385,106 +1385,141 @@ msgstr ""
 "依協議覆蓋或新增連線端點。對於 'custom' 方案，請在 IP/主機 ({ip}, {ip_raw}, {port}, {name}, "
 "{type}, {category}, {url}) 中輸入命令範本。對於其他方案，IP/主機和連接埠是選擇性的。"
 
-#: ui_qt/
+#: ui/
 msgid "Preferences…"
 msgstr "偏好設定…"
 
-#: ui_qt/
+#: ui/
 msgid "Qt for Python bindings"
 msgstr "Qt for Python 繫結"
 
-#: ui_qt/
+#: ui/
 msgid "Reload discovery"
 msgstr "重新載入探索"
 
-#: ui_qt/
+#: ui/
 msgid "Scheme"
 msgstr "方案"
 
-#: ui_qt/
+#: ui/
 msgid "See the"
 msgstr "請參閱"
 
-#: ui_qt/
+#: ui/
 msgid "Select an icon, then OK. IDs are stored in your preferences."
 msgstr "選擇圖示，然後點擊確定。ID 儲存在您的偏好設定中。"
 
-#: ui_qt/
+#: ui/
 msgid "Service type"
 msgstr "服務類型"
 
-#: ui_qt/
+#: ui/
 msgid "Session"
 msgstr "工作階段"
 
-#: ui_qt/
+#: ui/
 msgid "Show sidebar"
 msgstr "顯示側邊欄"
 
-#: ui_qt/
+#: ui/
 msgid "Show window"
 msgstr "顯示視窗"
 
-#: ui_qt/
+#: ui/
 msgid "Sidebar"
 msgstr "側邊欄"
 
-#: ui_qt/
+#: ui/
 msgid "Small"
 msgstr "小"
 
-#: ui_qt/
+#: ui/
 msgid "Start Scanning…"
 msgstr "正在掃描…"
 
-#: ui_qt/
+#: ui/
 msgid "Theme"
 msgstr "主題"
 
-#: ui_qt/
+#: ui/
 msgid "This program comes with absolutely no warranty."
 msgstr "本程式不提供任何保證。"
 
-#: ui_qt/
+#: ui/
 msgid "Types"
 msgstr "類型"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Friendly name"
 msgstr "用作易記名稱"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Information"
 msgstr "用作資訊"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Location"
 msgstr "用作位置"
 
-#: ui_qt/
+#: ui/
 msgid "Use icon from"
 msgstr "使用圖示來自"
 
-#: ui_qt/
+#: ui/
 msgid "Version {version}"
 msgstr "版本 {version}"
 
-#: ui_qt/
+#: ui/
 msgid "WS-Discovery (Windows devices)"
 msgstr "WS-Discovery（Windows 裝置）"
 
-#: ui_qt/
+#: ui/
 msgid "for details."
 msgstr "以瞭解詳情。"
 
-#: ui_qt/
+#: ui/
 msgid "mDNS/DNS-SD discovery"
 msgstr "mDNS/DNS-SD 探索"
 
-#: ui_qt/
+#: ui/
 msgid "not yet downloaded"
 msgstr "尚未下載"
 
-#: ui_qt/
+#: ui/
 msgid "{} devices"
 msgstr "{} 個裝置"
+
+
+
+#: ui/preferences_dialog.py
+msgid "Maintenance"
+msgstr "維護"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data…"
+msgstr "重設所有應用程式資料…"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data?"
+msgstr "重設所有應用程式資料？"
+
+#: ui/preferences_dialog.py
+msgid ""
+"All preferences, cached icons, discovery data and logs will be permanently "
+"deleted:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor will use default settings on next start.\n"
+"This action cannot be undone."
+msgstr ""
+"所有偏好設定、快取圖示、探索資料和日誌將被永久刪除：\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"下次啟動時 NetNeighbor 將使用預設設定。\n"
+"此操作無法復原。"
+
+#: ui/preferences_dialog.py
+msgid "Reset done — please restart"
+msgstr "重設完成 — 請重新啟動應用程式"

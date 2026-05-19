@@ -1,5 +1,5 @@
-# File add_headers.py for NetNeighbor version 1.0.0
-# Internal version : 1.0.0 date: 2026-05-07 11:44
+# File add_headers.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Add or update the standard file header in every NetNeighbor .py source file.
@@ -16,8 +16,8 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "1.0.0"
-DATE = "2026-05-07 11:44"
+VERSION = "2.0.0"
+DATE = "2026-05-19 00:00"
 
 # Directories to scan (relative to project root)
 SCAN_DIRS = [".", "discovery", "model", "ui", "utils", "tools"]

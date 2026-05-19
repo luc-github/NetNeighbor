@@ -1,3 +1,7 @@
+# File update_translations.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Update .pot and all .po files with new translatable strings, then compile .mo files."""
 import ast
 import io
@@ -5,7 +9,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-SOURCE_DIRS = [ROOT / "ui_qt", ROOT / "discovery", ROOT / "utils"]
+SOURCE_DIRS = [ROOT / "ui", ROOT / "discovery", ROOT / "utils"]
 
 # ---------------------------------------------------------------------------
 # Translations for all 74 new strings.
@@ -763,7 +767,7 @@ def _escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
 
 
-def _po_entry(msgid: str, msgstr: str, comment: str = "#: ui_qt/") -> str:
+def _po_entry(msgid: str, msgstr: str, comment: str = "#: ui/") -> str:
     lines = [comment]
     mid = _escape(msgid)
     mstr = _escape(msgstr)
@@ -849,7 +853,7 @@ print(f"New strings to add: {len(new_strings)}")
 
 pot_additions = []
 for s in new_strings:
-    pot_additions.append(_po_entry(s, "", comment="#: ui_qt/"))
+    pot_additions.append(_po_entry(s, "", comment="#: ui/"))
 
 with open(pot_path, "a", encoding="utf-8") as f:
     f.write("\n")
@@ -871,7 +875,7 @@ for locale in LOCALES:
         if s in existing:
             continue
         msgstr = TRANSLATIONS.get(s, {}).get(locale, "")
-        additions.append(_po_entry(s, msgstr, comment="#: ui_qt/"))
+        additions.append(_po_entry(s, msgstr, comment="#: ui/"))
     if not additions:
         print(f"{locale}: nothing to add")
         continue

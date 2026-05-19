@@ -1,4 +1,4 @@
-# Build NetNeighbor Windows folder distribution with PyInstaller (entry: app.py).
+# Build NetNeighbor Windows folder distribution with PyInstaller (entry: main.py).
 # Prerequisites: Python 3.10+, pip install -r requirements-qt.txt pyinstaller
 #
 #   .\packaging\windows\build.ps1
@@ -54,6 +54,15 @@ finally {
 $outFolder = Join-Path $DistDir "NetNeighbor"
 if (-not (Test-Path $outFolder)) {
     throw "PyInstaller output not found: $outFolder"
+}
+
+# Trim bundled-freedesktop to only the resolutions needed by the Qt UI (saves ~143 MB).
+# Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
+$bfd = Join-Path $outFolder "_internal\assets\icons\bundled-freedesktop"
+if (Test-Path $bfd) {
+    $keep = @("16", "32", "48", "96", "256")
+    Get-ChildItem $bfd -Directory | Where-Object { $_.Name -notin $keep } | Remove-Item -Recurse -Force
+    Write-Host "Trimmed bundled-freedesktop to: $($keep -join ', ')"
 }
 
 $zipName = "NetNeighbor-$Version-win64.zip"

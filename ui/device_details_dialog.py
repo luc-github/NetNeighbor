@@ -1,9 +1,12 @@
-# File device_details_dialog.py for NetNeighbor version 1.0.0
+# File device_details_dialog.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Device details dialog (Qt port of ``ui/device_details.py`` — core tabs)."""
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 from collections.abc import Callable
@@ -11,6 +14,8 @@ from dataclasses import dataclass, field
 from gettext import gettext as _
 import os
 from typing import Any
+
+_LOG = logging.getLogger("ui.device_details")
 
 from PySide6.QtCore import QPoint, QUrl, Qt
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QPixmap
@@ -63,6 +68,8 @@ class DeviceIconSettings:
     on_pick_custom: Callable[[], str | None]
     provided_icon_pixmap: QPixmap | None = None
     provided_icon_native_size: tuple[int, int] | None = None
+    icon_cache: Any = None
+    icon_devices: list = field(default_factory=list)
 
 
 class DeviceDetailsDialog(QDialog):
@@ -97,6 +104,8 @@ class DeviceDetailsDialog(QDialog):
         self._suppress_icon_signals = False
         self._last_icon_mode = "provided"
         self._cmd_table: QTableWidget | None = None
+        self._live_icon_cache: Any = None
+        self._live_icon_settings: DeviceIconSettings | None = None
 
         tabs = QTabWidget()
         tabs.addTab(self._build_overview_tab(model), _("Overview"))
@@ -402,6 +411,8 @@ class DeviceDetailsDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
+        inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        inner.setStyleSheet("background-color: palette(base);")
         layout = QVBoxLayout(inner)
 
         if icon is not None:
@@ -467,6 +478,16 @@ class DeviceDetailsDialog(QDialog):
                 lambda btn_id: self._on_icon_mode_clicked(btn_id, icon)
             )
             layout.addWidget(icon_box)
+
+            if icon.icon_cache is not None:
+                self._live_icon_settings = icon
+                self._live_icon_cache = icon.icon_cache
+                _LOG.warning("dialog: triggering fetch for %d icon_devices", len(icon.icon_devices))
+                for dev in icon.icon_devices:
+                    _LOG.warning("dialog: trigger_fetch ip=%s source=%s", dev.ip, dev.source)
+                    icon.icon_cache.trigger_fetch_for_device(dev)
+                icon.icon_cache.icons_ready.connect(self._on_icon_cache_ready)
+                self.finished.connect(self._disconnect_icon_cache)
 
         if cmd is not None:
             layout.addWidget(self._build_device_commands_box(cmd))
@@ -648,7 +669,19 @@ class DeviceDetailsDialog(QDialog):
         else:
             self._provided_icon_preview.setText("?")
             if nat is None and icon.provided_icon_display:
-                self._provided_icon_size_lbl.setText(_("not yet downloaded"))
+                status = "missing"
+                if icon.icon_cache is not None:
+                    for dev in icon.icon_devices:
+                        s = icon.icon_cache.fetch_status_for_device(dev)
+                        if s != "missing":
+                            status = s
+                            break
+                if status == "fetching":
+                    self._provided_icon_size_lbl.setText(_("Downloading…"))
+                elif status == "failed":
+                    self._provided_icon_size_lbl.setText(_("Download failed"))
+                else:
+                    self._provided_icon_size_lbl.setText(_("not yet downloaded"))
             else:
                 self._provided_icon_size_lbl.setText(_("unavailable"))
 
@@ -699,6 +732,38 @@ class DeviceDetailsDialog(QDialog):
                 subprocess.Popen(["xdg-open", str(folder)])
         except OSError:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def _on_icon_cache_ready(self) -> None:
+        _LOG.warning("dialog: _on_icon_cache_ready fired")
+        icon = self._live_icon_settings
+        cache = self._live_icon_cache
+        if icon is None or cache is None:
+            _LOG.warning("dialog: _on_icon_cache_ready — no live settings/cache, ignoring")
+            return
+        found_bytes = False
+        for dev in icon.icon_devices:
+            raw = cache.bytes_for_device(dev)
+            _LOG.warning("dialog: bytes_for_device ip=%s → %s bytes", dev.ip, len(raw) if raw else None)
+            if raw:
+                from ui.remote_icon_cache import pixmap_from_icon_bytes
+                pix = pixmap_from_icon_bytes(raw, 128)
+                if pix is not None and not pix.isNull():
+                    icon.provided_icon_pixmap = pix
+                    icon.provided_icon_native_size = (pix.width(), pix.height())
+                    found_bytes = True
+                    break
+        _LOG.warning("dialog: _on_icon_cache_ready found_bytes=%s, refreshing preview", found_bytes)
+        self._refresh_provided_icon_preview(icon)
+
+    def _disconnect_icon_cache(self) -> None:
+        cache = self._live_icon_cache
+        if cache is not None:
+            try:
+                cache.icons_ready.disconnect(self._on_icon_cache_ready)
+            except RuntimeError:
+                pass
+        self._live_icon_cache = None
+        self._live_icon_settings = None
 
 
 def _filter_mdns_txt_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:

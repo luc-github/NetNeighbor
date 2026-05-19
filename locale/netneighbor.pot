@@ -928,202 +928,202 @@ msgstr ""
 msgid "Unknown Devices"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "About NetNeighbor"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "App logo under assets/icons: Luc LEBOSSE"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Applications"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Apply"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Author: Luc"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Close to system tray / panel instead of exiting"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Command"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Command templates for opening device connections. Leave empty to use t"
 "he system default."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Commands"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Custom command (additional)"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Dark"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Date / Time"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Delete"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Desktop notifications"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Discovery refresh requested"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Edit"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Edit type preset"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Error"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Extra large"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Field mapping rules"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "GNU Lesser General Public License version 3 or later"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "General"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Hidden devices"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Hide device"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Hide sidebar"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Hide window"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Icons size"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Invalid command template for this protocol."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Large"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} d ago"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} h ago"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} min ago"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Light"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Location name:"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Locations"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Manage location presets shown in the right-click menu."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Medium"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Mode"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "NetNeighbor {}"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "New name:"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "No devices yet"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "No hidden devices"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid ""
 "No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
 "config/netneighbor/custom_icons/."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Notification delivery depends on the OS and session. Tray-backed behav"
 "iour (close to tray, minimized start) will align once the system tray "
 "is implemented."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Notifications"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Offline"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Online"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Override or add connection endpoints per protocol. For 'custom' scheme"
 ", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
@@ -1131,106 +1131,106 @@ msgid ""
 " schemes."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Preferences…"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Qt for Python bindings"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Reload discovery"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Scheme"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "See the"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Select an icon, then OK. IDs are stored in your preferences."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Service type"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Session"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Show sidebar"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Show window"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Sidebar"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Small"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Start Scanning…"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Theme"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "This program comes with absolutely no warranty."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Types"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Use as Friendly name"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Use as Information"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Use as Location"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Use icon from"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "Version {version}"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "WS-Discovery (Windows devices)"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "for details."
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "mDNS/DNS-SD discovery"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "not yet downloaded"
 msgstr ""
 
-#: ui_qt/
+#: ui/
 msgid "{} devices"
 msgstr ""

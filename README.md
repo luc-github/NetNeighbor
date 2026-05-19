@@ -2,7 +2,7 @@
 
 NetNeighbor discovers and monitors devices on your local network — a modern equivalent of the Windows Network Neighborhood experience. Runs on Linux and Windows.
 
-**Current release: 1.0.0**
+**Current release: 2.0.0**
 
 ![NetNeighbor main window](docs/screenshots/overview-hero.png)
 
@@ -34,19 +34,19 @@ No system-level GUI libraries required beyond what PySide6 brings.
 
 **`.deb` package (recommended, Linux):**
 ```bash
-sudo dpkg -i netneighbor_1.0.0_amd64.deb
+sudo dpkg -i netneighbor_2.0.0_amd64.deb
 ```
 
 **`.AppImage` (Linux):**
 ```bash
-chmod +x NetNeighbor-1.0.0-x86_64.AppImage
-./NetNeighbor-1.0.0-x86_64.AppImage
+chmod +x NetNeighbor-2.0.0-x86_64.AppImage
+./NetNeighbor-2.0.0-x86_64.AppImage
 ```
 
 **Tarball (Linux):**
 ```bash
-tar -xzf netneighbor-1.0.0.tar.gz
-cd netneighbor-1.0.0
+tar -xzf netneighbor-2.0.0.tar.gz
+cd netneighbor-2.0.0
 bash install-user-desktop.sh   # optional: add menu shortcut
 bash run.sh
 ```

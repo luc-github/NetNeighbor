@@ -1199,35 +1199,35 @@ msgstr "Onbekende Apparaten"
 #~ msgid "Command:"
 #~ msgstr "Opdracht:"
 
-#: ui_qt/
+#: ui/
 msgid "About NetNeighbor"
 msgstr "Over NetNeighbor"
 
-#: ui_qt/
+#: ui/
 msgid "App logo under assets/icons: Luc LEBOSSE"
 msgstr "App-logo onder assets/icons: Luc LEBOSSE"
 
-#: ui_qt/
+#: ui/
 msgid "Applications"
 msgstr "Toepassingen"
 
-#: ui_qt/
+#: ui/
 msgid "Apply"
 msgstr "Toepassen"
 
-#: ui_qt/
+#: ui/
 msgid "Author: Luc"
 msgstr "Auteur: Luc"
 
-#: ui_qt/
+#: ui/
 msgid "Close to system tray / panel instead of exiting"
 msgstr "Sluiten naar systeemvak in plaats van afsluiten"
 
-#: ui_qt/
+#: ui/
 msgid "Command"
 msgstr "Opdracht"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Command templates for opening device connections. Leave empty to use t"
 "he system default."
@@ -1235,143 +1235,143 @@ msgstr ""
 "Opdrachtsjablonen voor het openen van apparaatverbindingen. Leeg laten"
 " om de systeemstandaard te gebruiken."
 
-#: ui_qt/
+#: ui/
 msgid "Commands"
 msgstr "Opdrachten"
 
-#: ui_qt/
+#: ui/
 msgid "Custom command (additional)"
 msgstr "Aangepaste opdracht (aanvullend)"
 
-#: ui_qt/
+#: ui/
 msgid "Dark"
 msgstr "Donker"
 
-#: ui_qt/
+#: ui/
 msgid "Date / Time"
 msgstr "Datum / Tijd"
 
-#: ui_qt/
+#: ui/
 msgid "Delete"
 msgstr "Verwijderen"
 
-#: ui_qt/
+#: ui/
 msgid "Desktop notifications"
 msgstr "Bureaubladmeldingen"
 
-#: ui_qt/
+#: ui/
 msgid "Discovery refresh requested"
 msgstr "Ontdekkingsvernieuwing aangevraagd"
 
-#: ui_qt/
+#: ui/
 msgid "Edit"
 msgstr "Bewerken"
 
-#: ui_qt/
+#: ui/
 msgid "Edit type preset"
 msgstr "Typepreset bewerken"
 
-#: ui_qt/
+#: ui/
 msgid "Error"
 msgstr "Fout"
 
-#: ui_qt/
+#: ui/
 msgid "Extra large"
 msgstr "Extra groot"
 
-#: ui_qt/
+#: ui/
 msgid "Field mapping rules"
 msgstr "Veldtoewijzingsregels"
 
-#: ui_qt/
+#: ui/
 msgid "GNU Lesser General Public License version 3 or later"
 msgstr "GNU Lesser General Public License versie 3 of later"
 
-#: ui_qt/
+#: ui/
 msgid "General"
 msgstr "Algemeen"
 
-#: ui_qt/
+#: ui/
 msgid "Hidden devices"
 msgstr "Verborgen apparaten"
 
-#: ui_qt/
+#: ui/
 msgid "Hide device"
 msgstr "Apparaat verbergen"
 
-#: ui_qt/
+#: ui/
 msgid "Hide sidebar"
 msgstr "Zijbalk verbergen"
 
-#: ui_qt/
+#: ui/
 msgid "Hide window"
 msgstr "Venster verbergen"
 
-#: ui_qt/
+#: ui/
 msgid "Icons size"
 msgstr "Pictogramgrootte"
 
-#: ui_qt/
+#: ui/
 msgid "Invalid command template for this protocol."
 msgstr "Ongeldig opdrachtsjabloon voor dit protocol."
 
-#: ui_qt/
+#: ui/
 msgid "Large"
 msgstr "Groot"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} d ago"
 msgstr "Gezien: {n} dagen geleden"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} h ago"
 msgstr "Gezien: {n} uur geleden"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} min ago"
 msgstr "Gezien: {n} min geleden"
 
-#: ui_qt/
+#: ui/
 msgid "Light"
 msgstr "Licht"
 
-#: ui_qt/
+#: ui/
 msgid "Location name:"
 msgstr "Locatienaam:"
 
-#: ui_qt/
+#: ui/
 msgid "Locations"
 msgstr "Locaties"
 
-#: ui_qt/
+#: ui/
 msgid "Manage location presets shown in the right-click menu."
 msgstr "Locatiepresets beheren die worden weergegeven in het contextmenu."
 
-#: ui_qt/
+#: ui/
 msgid "Medium"
 msgstr "Middel"
 
-#: ui_qt/
+#: ui/
 msgid "Mode"
 msgstr "Modus"
 
-#: ui_qt/
+#: ui/
 msgid "NetNeighbor {}"
 msgstr "NetNeighbor {}"
 
-#: ui_qt/
+#: ui/
 msgid "New name:"
 msgstr "Nieuwe naam:"
 
-#: ui_qt/
+#: ui/
 msgid "No devices yet"
 msgstr "Nog geen apparaten"
 
-#: ui_qt/
+#: ui/
 msgid "No hidden devices"
 msgstr "Geen verborgen apparaten"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
 "config/netneighbor/custom_icons/."
@@ -1379,7 +1379,7 @@ msgstr ""
 "Geen pictogrammen gevonden. Voeg PNG's toe onder assets/icons/bundled-"
 "freedesktop of ~/.config/netneighbor/custom_icons/."
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Notification delivery depends on the OS and session. Tray-backed behav"
 "iour (close to tray, minimized start) will align once the system tray "
@@ -1389,19 +1389,19 @@ msgstr ""
 ". Het tray-gebaseerde gedrag (sluiten naar tray, geminimaliseerd start"
 "en) wordt uitgelijnd zodra de systeemtray is geïmplementeerd."
 
-#: ui_qt/
+#: ui/
 msgid "Notifications"
 msgstr "Meldingen"
 
-#: ui_qt/
+#: ui/
 msgid "Offline"
 msgstr "Offline"
 
-#: ui_qt/
+#: ui/
 msgid "Online"
 msgstr "Online"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Override or add connection endpoints per protocol. For 'custom' scheme"
 ", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
@@ -1413,108 +1413,144 @@ msgstr ""
 "w}, {port}, {name}, {type}, {category}, {url}) in. IP/Host en poort zi"
 "jn optioneel voor andere schema's."
 
-#: ui_qt/
+#: ui/
 msgid "Preferences…"
 msgstr "Voorkeuren…"
 
-#: ui_qt/
+#: ui/
 msgid "Qt for Python bindings"
 msgstr "Qt voor Python-bindingen"
 
-#: ui_qt/
+#: ui/
 msgid "Reload discovery"
 msgstr "Ontdekking herladen"
 
-#: ui_qt/
+#: ui/
 msgid "Scheme"
 msgstr "Schema"
 
-#: ui_qt/
+#: ui/
 msgid "See the"
 msgstr "Zie de"
 
-#: ui_qt/
+#: ui/
 msgid "Select an icon, then OK. IDs are stored in your preferences."
 msgstr ""
 "Selecteer een pictogram, dan OK. ID's worden opgeslagen in uw voorkeur"
 "en."
 
-#: ui_qt/
+#: ui/
 msgid "Service type"
 msgstr "Servicetype"
 
-#: ui_qt/
+#: ui/
 msgid "Session"
 msgstr "Sessie"
 
-#: ui_qt/
+#: ui/
 msgid "Show sidebar"
 msgstr "Zijbalk tonen"
 
-#: ui_qt/
+#: ui/
 msgid "Show window"
 msgstr "Venster tonen"
 
-#: ui_qt/
+#: ui/
 msgid "Sidebar"
 msgstr "Zijbalk"
 
-#: ui_qt/
+#: ui/
 msgid "Small"
 msgstr "Klein"
 
-#: ui_qt/
+#: ui/
 msgid "Start Scanning…"
 msgstr "Scannen starten…"
 
-#: ui_qt/
+#: ui/
 msgid "Theme"
 msgstr "Thema"
 
-#: ui_qt/
+#: ui/
 msgid "This program comes with absolutely no warranty."
 msgstr "Dit programma wordt geleverd zonder enige garantie."
 
-#: ui_qt/
+#: ui/
 msgid "Types"
 msgstr "Types"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Friendly name"
 msgstr "Gebruiken als beschrijvende naam"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Information"
 msgstr "Gebruiken als informatie"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Location"
 msgstr "Gebruiken als locatie"
 
-#: ui_qt/
+#: ui/
 msgid "Use icon from"
 msgstr "Pictogram gebruiken van"
 
-#: ui_qt/
+#: ui/
 msgid "Version {version}"
 msgstr "Versie {version}"
 
-#: ui_qt/
+#: ui/
 msgid "WS-Discovery (Windows devices)"
 msgstr "WS-Discovery (Windows-apparaten)"
 
-#: ui_qt/
+#: ui/
 msgid "for details."
 msgstr "voor details."
 
-#: ui_qt/
+#: ui/
 msgid "mDNS/DNS-SD discovery"
 msgstr "mDNS/DNS-SD-ontdekking"
 
-#: ui_qt/
+#: ui/
 msgid "not yet downloaded"
 msgstr "nog niet gedownload"
 
-#: ui_qt/
+#: ui/
 msgid "{} devices"
 msgstr "{} apparaten"
+
+
+
+#: ui/preferences_dialog.py
+msgid "Maintenance"
+msgstr "Onderhoud"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data…"
+msgstr "Alle applicatiegegevens wissen…"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data?"
+msgstr "Alle applicatiegegevens wissen?"
+
+#: ui/preferences_dialog.py
+msgid ""
+"All preferences, cached icons, discovery data and logs will be permanently "
+"deleted:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor will use default settings on next start.\n"
+"This action cannot be undone."
+msgstr ""
+"Alle voorkeuren, gecachte pictogrammen, ontdekkingsgegevens en logbestanden "
+"worden definitief verwijderd:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor gebruikt standaardinstellingen bij de volgende start.\n"
+"Deze actie kan niet ongedaan worden gemaakt."
+
+#: ui/preferences_dialog.py
+msgid "Reset done — please restart"
+msgstr "Gewist — herstart de applicatie"

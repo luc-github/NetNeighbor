@@ -1,4 +1,6 @@
-# File app_logging.py for NetNeighbor version 1.0.0
+# File app_logging.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Shared file + console logging setup (GTK and Qt entrypoints)."""
 
@@ -18,7 +20,7 @@ _LOG_LEVEL_OFF = 100  # above CRITICAL (50): suppress all standard levels
 _LEGACY_SILENT_STOCK_FILE: dict[str, str] = {
     "default": "NONE",
     "app": "NONE",
-    "ui_qt": "NONE",
+    "ui": "NONE",
     "device_list": "NONE",
     "ssdp": "NONE",
     "mdns": "NONE",
@@ -56,7 +58,7 @@ def _fallback_logging_defaults() -> dict[str, str]:
         "default": "INFO",
         "app": "INFO",
         "app_qt": "INFO",
-        "ui_qt": "WARNING",
+        "ui": "WARNING",
         "device_list": "WARNING",
         "ssdp": "INFO",
         "mdns": "INFO",
@@ -134,12 +136,12 @@ def apply_named_log_levels(config: dict) -> None:
     wsdd_level = _to_level(str(config.get("wsdd", config.get("default", "INFO"))), logging.INFO)
     nmb_level = _to_level(str(config.get("nmb", config.get("default", "INFO"))), logging.INFO)
     device_list_level = _to_level(str(config.get("device_list", config.get("default", "INFO"))), logging.INFO)
-    ui_qt_level = _to_level(str(config.get("ui_qt", config.get("default", "INFO"))), logging.INFO)
+    ui_level = _to_level(str(config.get("ui", config.get("ui_qt", config.get("default", "INFO")))), logging.INFO)
 
-    for logger_name in ("app", "ui", "utils", "discovery.manager", "model"):
+    for logger_name in ("app", "utils", "discovery.manager", "model"):
         logging.getLogger(logger_name).setLevel(app_level)
     logging.getLogger("app_qt").setLevel(app_qt_level)
-    logging.getLogger("ui_qt").setLevel(ui_qt_level)
+    logging.getLogger("ui").setLevel(ui_level)
     logging.getLogger("discovery.ssdp").setLevel(ssdp_level)
     logging.getLogger("discovery.mdns").setLevel(mdns_level)
     logging.getLogger("discovery.wsd").setLevel(wsd_level)
@@ -158,10 +160,10 @@ def _apply_netneighbor_debug_ui_env(*, log_name: str) -> None:
     dbg_ui = str(os.getenv("NETNEIGHBOR_DEBUG_UI", "")).strip().lower()
     if dbg_ui not in ("1", "true", "yes", "on", "debug"):
         return
-    for name in ("ui_qt", "discovery.netbios"):
+    for name in ("ui", "discovery.netbios"):
         logging.getLogger(name).setLevel(logging.DEBUG)
     logging.getLogger(log_name).info(
-        "NETNEIGHBOR_DEBUG_UI: DEBUG for loggers ui_qt, discovery.netbios"
+        "NETNEIGHBOR_DEBUG_UI: DEBUG for loggers ui, discovery.netbios"
     )
 
 

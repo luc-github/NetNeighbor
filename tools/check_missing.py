@@ -1,3 +1,7 @@
+# File check_missing.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Check translation coverage for specific keys in all .po files."""
 import re
 from pathlib import Path

@@ -27,7 +27,7 @@ documentation remains in the repository root [`README.md`](../README.md) and
 ## Quick orientation
 
 - **Discovery**: `discovery/base.py` (contract), `discovery/manager.py` (cache + merges + override system), `discovery/ssdp.py`, `discovery/mdns.py`, `discovery/wsd.py` (WS-Discovery; PyPI `WSDiscovery`), `discovery/netbios.py`.
-- **UI**: `app.py` (GTK — single instance, activation), `ui/main_window.py`, `ui/device_list.py`, `ui/device_details.py`, `ui/tray_indicator.py` (panel icon), `utils/session_autostart.py` (XDG login entry). **2.0 (PySide6)** : `app_qt.py`, `ui_qt/` (`NetNeighborMainWindow`, `MainThreadScheduler`, `PreferencesDialog`), `requirements-qt.txt`.
+- **UI**: `app_qt.py` (single instance, activation), `ui/` (`NetNeighborMainWindow`, `MainThreadScheduler`, `PreferencesDialog`, `NetNeighborTray`, …), `requirements-qt.txt`, `utils/session_autostart.py` (XDG/registry login entry).
 - **Connect**: `utils/double_click_open.py` (target resolution), `utils/connect_launcher.py` (command templates + launch).
 - **Config**:
   - `~/.config/netneighbor/ui_prefs.json` (UI state + user choices/rules/overrides including `device_commands`)

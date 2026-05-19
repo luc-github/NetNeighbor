@@ -6,7 +6,7 @@
   "mdns": "NONE",
   "nmb": "NONE",
   "ssdp": "NONE",
-  "ui_qt": "NONE",
+  "ui": "NONE",
   "wsd": "NONE",
   "wsdd": "NONE"
 }

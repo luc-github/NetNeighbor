@@ -32,7 +32,7 @@ mkdir -p "${ROOT_DIR}" "${DIST_DIR}"
 # modifications (committed or not) are always included — same approach as
 # build_deb.sh.  Using "git archive HEAD" would silently exclude any change
 # not yet committed, making test builds impossible.
-for path in app.py main.py i18n.py requirements.txt \
+for path in main.py app_qt.py i18n.py requirements.txt requirements-qt.txt \
             discovery model ui utils data config assets locale \
             LICENSE README.md USER_DOCUMENTATION.md VERSION; do
   if [[ -e "${PROJECT_ROOT}/${path}" ]]; then
@@ -43,6 +43,18 @@ done
 # Remove dev artifacts that must not land in the tarball.
 find "${ROOT_DIR}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) \
   -exec rm -rf {} + 2>/dev/null || true
+
+# Trim bundled-freedesktop to only the resolutions needed by the Qt UI (saves ~143 MB).
+# Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
+_bfd="${ROOT_DIR}/assets/icons/bundled-freedesktop"
+if [ -d "${_bfd}" ]; then
+    for _d in "${_bfd}"/*/; do
+        case "$(basename "${_d%/}")" in
+            16|32|48|96|256) ;;
+            *) rm -rf "${_d}" ;;
+        esac
+    done
+fi
 
 # Compile .po → .mo for any catalog missing or older than its source.
 if command -v msgfmt >/dev/null 2>&1; then

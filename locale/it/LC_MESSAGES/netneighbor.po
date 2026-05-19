@@ -1204,35 +1204,35 @@ msgstr "Dispositivi Sconosciuti"
 #~ msgid "Command:"
 #~ msgstr "Comando:"
 
-#: ui_qt/
+#: ui/
 msgid "About NetNeighbor"
 msgstr "Informazioni su NetNeighbor"
 
-#: ui_qt/
+#: ui/
 msgid "App logo under assets/icons: Luc LEBOSSE"
 msgstr "Logo app in assets/icons: Luc LEBOSSE"
 
-#: ui_qt/
+#: ui/
 msgid "Applications"
 msgstr "Applicazioni"
 
-#: ui_qt/
+#: ui/
 msgid "Apply"
 msgstr "Applica"
 
-#: ui_qt/
+#: ui/
 msgid "Author: Luc"
 msgstr "Autore: Luc"
 
-#: ui_qt/
+#: ui/
 msgid "Close to system tray / panel instead of exiting"
 msgstr "Chiudi nell'area di notifica invece di uscire"
 
-#: ui_qt/
+#: ui/
 msgid "Command"
 msgstr "Comando"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Command templates for opening device connections. Leave empty to use t"
 "he system default."
@@ -1240,143 +1240,143 @@ msgstr ""
 "Modelli di comandi per aprire connessioni ai dispositivi. Lasciare vuo"
 "to per usare il predefinito di sistema."
 
-#: ui_qt/
+#: ui/
 msgid "Commands"
 msgstr "Comandi"
 
-#: ui_qt/
+#: ui/
 msgid "Custom command (additional)"
 msgstr "Comando personalizzato (aggiuntivo)"
 
-#: ui_qt/
+#: ui/
 msgid "Dark"
 msgstr "Scuro"
 
-#: ui_qt/
+#: ui/
 msgid "Date / Time"
 msgstr "Data / Ora"
 
-#: ui_qt/
+#: ui/
 msgid "Delete"
 msgstr "Elimina"
 
-#: ui_qt/
+#: ui/
 msgid "Desktop notifications"
 msgstr "Notifiche desktop"
 
-#: ui_qt/
+#: ui/
 msgid "Discovery refresh requested"
 msgstr "Aggiornamento rilevamento richiesto"
 
-#: ui_qt/
+#: ui/
 msgid "Edit"
 msgstr "Modifica"
 
-#: ui_qt/
+#: ui/
 msgid "Edit type preset"
 msgstr "Modifica preset tipo"
 
-#: ui_qt/
+#: ui/
 msgid "Error"
 msgstr "Errore"
 
-#: ui_qt/
+#: ui/
 msgid "Extra large"
 msgstr "Extra grande"
 
-#: ui_qt/
+#: ui/
 msgid "Field mapping rules"
 msgstr "Regole di mappatura campi"
 
-#: ui_qt/
+#: ui/
 msgid "GNU Lesser General Public License version 3 or later"
 msgstr "Licenza pubblica generica minore GNU versione 3 o successiva"
 
-#: ui_qt/
+#: ui/
 msgid "General"
 msgstr "Generale"
 
-#: ui_qt/
+#: ui/
 msgid "Hidden devices"
 msgstr "Dispositivi nascosti"
 
-#: ui_qt/
+#: ui/
 msgid "Hide device"
 msgstr "Nascondi dispositivo"
 
-#: ui_qt/
+#: ui/
 msgid "Hide sidebar"
 msgstr "Nascondi barra laterale"
 
-#: ui_qt/
+#: ui/
 msgid "Hide window"
 msgstr "Nascondi finestra"
 
-#: ui_qt/
+#: ui/
 msgid "Icons size"
 msgstr "Dimensione icone"
 
-#: ui_qt/
+#: ui/
 msgid "Invalid command template for this protocol."
 msgstr "Modello di comando non valido per questo protocollo."
 
-#: ui_qt/
+#: ui/
 msgid "Large"
 msgstr "Grande"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} d ago"
 msgstr "Visto: {n} g fa"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} h ago"
 msgstr "Visto: {n} h fa"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} min ago"
 msgstr "Visto: {n} min fa"
 
-#: ui_qt/
+#: ui/
 msgid "Light"
 msgstr "Chiaro"
 
-#: ui_qt/
+#: ui/
 msgid "Location name:"
 msgstr "Nome posizione:"
 
-#: ui_qt/
+#: ui/
 msgid "Locations"
 msgstr "Posizioni"
 
-#: ui_qt/
+#: ui/
 msgid "Manage location presets shown in the right-click menu."
 msgstr "Gestisci i preset di posizione mostrati nel menu contestuale."
 
-#: ui_qt/
+#: ui/
 msgid "Medium"
 msgstr "Medio"
 
-#: ui_qt/
+#: ui/
 msgid "Mode"
 msgstr "Modalità"
 
-#: ui_qt/
+#: ui/
 msgid "NetNeighbor {}"
 msgstr "NetNeighbor {}"
 
-#: ui_qt/
+#: ui/
 msgid "New name:"
 msgstr "Nuovo nome:"
 
-#: ui_qt/
+#: ui/
 msgid "No devices yet"
 msgstr "Nessun dispositivo ancora"
 
-#: ui_qt/
+#: ui/
 msgid "No hidden devices"
 msgstr "Nessun dispositivo nascosto"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
 "config/netneighbor/custom_icons/."
@@ -1384,7 +1384,7 @@ msgstr ""
 "Nessuna icona trovata. Aggiungere PNG in assets/icons/bundled-freedesk"
 "top o ~/.config/netneighbor/custom_icons/."
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Notification delivery depends on the OS and session. Tray-backed behav"
 "iour (close to tray, minimized start) will align once the system tray "
@@ -1395,19 +1395,19 @@ msgstr ""
 " minimizzato) sarà allineato una volta implementato il vassoio di sist"
 "ema."
 
-#: ui_qt/
+#: ui/
 msgid "Notifications"
 msgstr "Notifiche"
 
-#: ui_qt/
+#: ui/
 msgid "Offline"
 msgstr "Offline"
 
-#: ui_qt/
+#: ui/
 msgid "Online"
 msgstr "Online"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Override or add connection endpoints per protocol. For 'custom' scheme"
 ", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
@@ -1419,106 +1419,142 @@ msgstr ""
 "{ip_raw}, {port}, {name}, {type}, {category}, {url}). IP/Host e Porta "
 "sono opzionali per altri schemi."
 
-#: ui_qt/
+#: ui/
 msgid "Preferences…"
 msgstr "Preferenze…"
 
-#: ui_qt/
+#: ui/
 msgid "Qt for Python bindings"
 msgstr "Binding Qt per Python"
 
-#: ui_qt/
+#: ui/
 msgid "Reload discovery"
 msgstr "Ricarica rilevamento"
 
-#: ui_qt/
+#: ui/
 msgid "Scheme"
 msgstr "Schema"
 
-#: ui_qt/
+#: ui/
 msgid "See the"
 msgstr "Vedere la"
 
-#: ui_qt/
+#: ui/
 msgid "Select an icon, then OK. IDs are stored in your preferences."
 msgstr "Seleziona un'icona, poi OK. Gli ID vengono salvati nelle preferenze."
 
-#: ui_qt/
+#: ui/
 msgid "Service type"
 msgstr "Tipo di servizio"
 
-#: ui_qt/
+#: ui/
 msgid "Session"
 msgstr "Sessione"
 
-#: ui_qt/
+#: ui/
 msgid "Show sidebar"
 msgstr "Mostra barra laterale"
 
-#: ui_qt/
+#: ui/
 msgid "Show window"
 msgstr "Mostra finestra"
 
-#: ui_qt/
+#: ui/
 msgid "Sidebar"
 msgstr "Barra laterale"
 
-#: ui_qt/
+#: ui/
 msgid "Small"
 msgstr "Piccolo"
 
-#: ui_qt/
+#: ui/
 msgid "Start Scanning…"
 msgstr "Avvio scansione…"
 
-#: ui_qt/
+#: ui/
 msgid "Theme"
 msgstr "Tema"
 
-#: ui_qt/
+#: ui/
 msgid "This program comes with absolutely no warranty."
 msgstr "Questo programma non fornisce assolutamente alcuna garanzia."
 
-#: ui_qt/
+#: ui/
 msgid "Types"
 msgstr "Tipi"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Friendly name"
 msgstr "Usa come nome descrittivo"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Information"
 msgstr "Usa come informazioni"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Location"
 msgstr "Usa come posizione"
 
-#: ui_qt/
+#: ui/
 msgid "Use icon from"
 msgstr "Usa icona da"
 
-#: ui_qt/
+#: ui/
 msgid "Version {version}"
 msgstr "Versione {version}"
 
-#: ui_qt/
+#: ui/
 msgid "WS-Discovery (Windows devices)"
 msgstr "WS-Discovery (dispositivi Windows)"
 
-#: ui_qt/
+#: ui/
 msgid "for details."
 msgstr "per i dettagli."
 
-#: ui_qt/
+#: ui/
 msgid "mDNS/DNS-SD discovery"
 msgstr "Rilevamento mDNS/DNS-SD"
 
-#: ui_qt/
+#: ui/
 msgid "not yet downloaded"
 msgstr "non ancora scaricato"
 
-#: ui_qt/
+#: ui/
 msgid "{} devices"
 msgstr "{} dispositivi"
+
+
+
+#: ui/preferences_dialog.py
+msgid "Maintenance"
+msgstr "Manutenzione"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data…"
+msgstr "Reimposta tutti i dati dell'applicazione…"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data?"
+msgstr "Reimpostare tutti i dati dell'applicazione?"
+
+#: ui/preferences_dialog.py
+msgid ""
+"All preferences, cached icons, discovery data and logs will be permanently "
+"deleted:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor will use default settings on next start.\n"
+"This action cannot be undone."
+msgstr ""
+"Tutte le preferenze, le icone nella cache, i dati di rilevamento e i log "
+"verranno eliminati definitivamente:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor utilizzerà le impostazioni predefinite al prossimo avvio.\n"
+"Questa azione non può essere annullata."
+
+#: ui/preferences_dialog.py
+msgid "Reset done — please restart"
+msgstr "Reimpostazione eseguita — riavviare l'applicazione"

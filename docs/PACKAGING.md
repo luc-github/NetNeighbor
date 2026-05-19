@@ -1,7 +1,6 @@
 # Packaging
 
-NetNeighbor ships platform-specific build scripts under `packaging/`.  
-**Linux** scripts currently produce **GTK 1.x** packages; **Windows** and **macOS** skeletons target **2.0** via **`app.py`** (PySide6). During migration, builds fall back to `app_qt.py` if `app.py` is not present yet. After the port, follow [`packaging/POST_PORT.md`](../packaging/POST_PORT.md).
+NetNeighbor 2.0 ships platform-specific build scripts under `packaging/` — all targets use **PySide6** (`app_qt.py`).
 
 Layout: [`packaging/README.md`](../packaging/README.md).
 
@@ -44,11 +43,20 @@ Version defaults to the first line of `VERSION`; override with `./packaging/linu
 | `NetNeighbor-<version>-<arch>.AppImage` | Optional; skipped if appimagetool missing |
 | `SHA256SUMS-<version>.txt` | Checksums (via `packaging/checksums.sh`) |
 
-### Runtime dependencies (`.deb`, GTK 1.x)
+### Runtime dependencies (`.deb`)
 
-**Depends:** `python3`, `python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`, `python3-zeroconf`, `samba-common-bin`, AppIndicator bindings.
+**Depends:** `python3 (>= 3.10)`, `python3-pip`, `samba-common-bin` (NetBIOS name resolution).  
+PySide6, zeroconf, and WSDiscovery are installed via pip into the package prefix — no system GUI library dependencies.
 
 See `packaging/linux/build_deb.sh` for the full file list and icon layout.
+
+### Bundled icon set — size trimming
+
+`assets/icons/bundled-freedesktop/` is ~151 MB in the source tree (10 resolution
+directories). All three Linux build scripts automatically trim the directory to the
+5 sizes used by the Qt icon-view presets (16, 32, 48, 96, 256), reducing the packaged
+size by ~143 MB. The Windows build does the same after the PyInstaller `onedir` step.
+See [`MAINTENANCE.md`](MAINTENANCE.md#bundled-device-icons-bundled-freedesktop) for details.
 
 ### Install / cleanup
 
@@ -73,7 +81,7 @@ Tarball: extract, `./run.sh`, optional `./install-desktop.sh`.
 
 - Windows 10/11, Python 3.10+
 - `pip install -r requirements-qt.txt pyinstaller`
-- **Inno Setup 6** (`ISCC.exe` on `PATH`, or set `INNO_SETUP_DIR`)
+- **Inno Setup 6** (`ISCC.exe` on `PATH`, or `winget install JRSoftware.InnoSetup --source winget`)
 - **VC++ Redistributable** on end-user machines — see [`QT_DEV_REQUIREMENTS.md`](QT_DEV_REQUIREMENTS.md)
 
 ### Build
@@ -93,7 +101,68 @@ Optional: `-Version 2.0.0` on both scripts. Uses `.venv\Scripts\python.exe` when
 | `NetNeighbor-<version>-win64.zip` | Zipped folder |
 | `NetNeighbor-<version>-win64-setup.exe` | Inno Setup installer |
 
-PyInstaller spec: `packaging/windows/netneighbor.spec` — entry `app.py` (review `hiddenimports` / `datas` after port).
+PyInstaller spec: `packaging/windows/netneighbor.spec` — entry `main.py`.
+
+---
+
+### ⚠️ CRITICAL — Windows PyInstaller gotchas (read before any build)
+
+Two bugs that make the frozen app behave like malware if not addressed. Both are fixed
+in the current codebase; **do not remove or move these fixes**.
+
+#### Bug 1 — `multiprocessing.freeze_support()` missing → hundreds of windows
+
+**Symptom:** Launching the `.exe` immediately opens dozens or hundreds of semi-transparent
+windows that cannot be closed. Task Manager shows the process tree growing out of control.
+Killing the main process leaves orphaned child-process windows on screen.
+
+**Root cause:** On Windows, PyInstaller frozen apps use the `spawn` multiprocessing start
+method. When any dependency (zeroconf, ThreadPoolExecutor, …) spawns a child process,
+Windows re-executes the frozen `.exe` from scratch. Without `freeze_support()` the child
+re-runs the full application — which spawns another child — infinitely.
+
+**Fix (in `main.py`):**
+```python
+import multiprocessing
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()   # ← MUST be first, before any other code
+    from app_qt import main
+    raise SystemExit(main())
+```
+
+`freeze_support()` detects the special command-line token that PyInstaller injects for
+child processes and calls `sys.exit()` immediately, preventing the full app from running.
+
+**Rule:** `freeze_support()` must remain the very first statement inside
+`if __name__ == "__main__":`, before any import or application code.
+
+---
+
+#### Bug 2 — `subprocess` calls without `CREATE_NO_WINDOW` → console window spam
+
+**Symptom:** Many black or semi-transparent console (terminal) windows flash on screen
+every few seconds while the app is running. Each window appears and disappears rapidly.
+
+**Root cause:** When a frozen app built with `console=False` calls `subprocess.run()` or
+`subprocess.Popen()` without `creationflags=subprocess.CREATE_NO_WINDOW`, Windows creates
+a visible console window for every subprocess. NetNeighbor looks up MAC addresses via
+`arp -a` for each discovered device on every UI refresh — potentially 10–30 calls per
+cycle — producing a storm of console flashes.
+
+**Fix (in `utils/neighbor_mac.py`):**
+```python
+_cflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+proc = subprocess.run([...], creationflags=_cflags, ...)
+```
+
+A 850 ms cache on the `arp -a` output also prevents redundant subprocess calls within
+the same refresh cycle (one `arp -a` covers all devices).
+
+**Rule:** Every `subprocess.run()` / `Popen()` call in Windows-reachable code paths must
+pass `creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)`. The `getattr` fallback
+keeps the code portable (the constant is Windows-only). `discovery/netbios.py` already
+uses `_subprocess_no_window_kwargs()` for this — follow the same pattern.
 
 ---
 

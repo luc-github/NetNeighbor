@@ -1,6 +1,6 @@
 # NetNeighbor — Implementation Roadmap
 
-Last updated: 2026-05-18
+Last updated: 2026-05-19
 
 This document tracks planned and completed improvements, grouped by theme.
 Each section lists the motivation, the files involved, the acceptance criteria,
@@ -47,7 +47,7 @@ and by `manager.start()` running synchronously.
 
 ### A-4 Scanning overlay ✅
 
-- **File:** `ui_qt/main_window.py` — class `_ScanningOverlay`
+- **File:** `ui/main_window.py` — class `_ScanningOverlay`
 - **Change:** Centered translucent overlay with animated spinner and "Start Scanning…"
   text, shown while waiting for the first devices. Animation runs in a background thread
   emitting a `Signal(QueuedConnection)` at 11 Hz to stay independent of main-thread load.
@@ -62,21 +62,21 @@ tray instead of the taskbar, and optionally start automatically at session login
 
 ### B-1 System tray icon ✅
 
-- **File:** `ui_qt/systray.py` (new), `ui_qt/__init__.py`, `app_qt.py`
+- **File:** `ui/systray.py` (new), `ui/__init__.py`, `app_qt.py`
 - **Change:** `NetNeighborTray(QSystemTrayIcon)` with Show/Hide + Quit context menu.
   Left-click toggles window visibility. Label stays in sync with window state.
   Created in `app_qt.py` when `QSystemTrayIcon.isSystemTrayAvailable()`.
 
 ### B-2 Minimize to tray instead of taskbar ✅
 
-- **File:** `ui_qt/main_window.py` — `changeEvent`
+- **File:** `ui/main_window.py` — `changeEvent`
 - **Change:** Intercepts `WindowStateChange` when `isMinimized()`. Schedules
   `self.hide()` via `QTimer.singleShot(0, ...)` to avoid in-transition side effects.
   `bring_to_front()` uses `showNormal()` to clear the minimized state on restore.
 
 ### B-3 Close to tray ✅
 
-- **File:** `ui_qt/main_window.py` — `closeEvent`
+- **File:** `ui/main_window.py` — `closeEvent`
 - **Change:** If `close_to_tray` preference is `True` (default) and a tray is available,
   `closeEvent` calls `event.ignore()` + `self.hide()` instead of accepting the close.
 
@@ -100,7 +100,7 @@ tray instead of the taskbar, and optionally start automatically at session login
 
 ### C-1 Icon view empty after restore from tray ✅
 
-- **File:** `ui_qt/main_window.py` — `_rebuild_grouped_icon_page`
+- **File:** `ui/main_window.py` — `_rebuild_grouped_icon_page`
 - **Root cause:** `was_page_visible = page.isVisible()` returned `False` while the
   window was hidden. The page was then explicitly hidden via `setVisible(False)`,
   preventing Qt from showing it when the window was restored.
@@ -109,7 +109,7 @@ tray instead of the taskbar, and optionally start automatically at session login
 
 ### C-2 Sidebar loses all types when a filter is active ✅
 
-- **File:** `ui_qt/main_window.py` — `_rebuild_sidebar`
+- **File:** `ui/main_window.py` — `_rebuild_sidebar`
 - **Root cause:** Sidebar was built from `_filtered_bundles()` which already applied
   `_selected_category`. Clicking "by Type" (already selected) triggered a rebuild
   where only the filtered type remained visible; other types were dropped.
@@ -118,14 +118,14 @@ tray instead of the taskbar, and optionally start automatically at session login
 
 ### C-3 Empty line at top of sidebar in list mode ✅
 
-- **File:** `ui_qt/main_window.py` — `_sync_sidebar_top_spacer`
+- **File:** `ui/main_window.py` — `_sync_sidebar_top_spacer`
 - **Root cause:** A spacer equal to the table header height was added to align the
   sidebar list with the table body. It appeared as a blank row.
 - **Fix:** Removed the list-mode special case; spacer is always 0.
 
 ### C-4 Location auto-add not implemented ✅
 
-- **File:** `ui_qt/main_window.py`
+- **File:** `ui/main_window.py`
 - **Root cause:** The `auto_add_discovered_locations` preference was saved but never
   read to actually populate `_location_options`.
 - **Fix:** `_maybe_auto_add_discovered_locations()` is called after each device
@@ -134,7 +134,7 @@ tray instead of the taskbar, and optionally start automatically at session login
 
 ### C-5 Current device location missing from context menu ✅
 
-- **File:** `ui_qt/main_window.py` — `_show_device_context_menu`
+- **File:** `ui/main_window.py` — `_show_device_context_menu`
 - **Root cause:** If `_location_options` is empty (fresh config), the location menu
   was empty even for devices that already had a location assigned.
 - **Fix:** The device's current `bundle_location_label` is injected into `loc_opts`
@@ -149,21 +149,21 @@ visible changes. Context menus disappeared, hover states jumped, scroll position
 
 ### D-1 Active popup guard ✅
 
-- **File:** `ui_qt/main_window.py` — `_flush_pending_devices`
+- **File:** `ui/main_window.py` — `_flush_pending_devices`
 - **Change:** If `QApplication.activePopupWidget()` is not None (a context menu is
   open), the flush is rescheduled 400 ms later. Prevents widget rebuilds from closing
   an active menu.
 
 ### D-2 User activity guard ✅
 
-- **File:** `ui_qt/main_window.py` — `_UserActivityGuard`, `_flush_pending_devices`
+- **File:** `ui/main_window.py` — `_UserActivityGuard`, `_flush_pending_devices`
 - **Change:** Application-level event filter tracks last mouse/keyboard timestamp.
   Flush is deferred by 250 ms if `idle_ms() < 200`. Prevents hover-state jumps while
   the user is navigating.
 
 ### D-3 Fingerprint early bail ✅
 
-- **File:** `ui_qt/main_window.py` — `_apply_devices_snapshot`,
+- **File:** `ui/main_window.py` — `_apply_devices_snapshot`,
   `_device_snapshot_ui_fingerprint`
 - **Change:** `user_location` added to the device fingerprint. If the device fingerprint
   and the precedence list are unchanged and the view has already been rendered
@@ -172,7 +172,7 @@ visible changes. Context menus disappeared, hover states jumped, scroll position
 
 ### D-4 Scroll position preserved ✅
 
-- **Files:** `ui_qt/main_window.py` — `_fill_table`, `_fill_flat_icon_list`
+- **Files:** `ui/main_window.py` — `_fill_table`, `_fill_flat_icon_list`
 - **Change:** Vertical scroll position is saved before and restored after each rebuild.
   For the flat icon list, restoration is deferred via `QTimer.singleShot(0, ...)` to
   allow the relayout pass to complete first.
@@ -200,7 +200,7 @@ cached devices at startup, and no visual distinction between "confirmed live" an
 
 ### E-2 "Last seen" indicator in UI ✅
 
-- **Files:** `ui_qt/main_window.py` (tooltip), `ui_qt/icon_tile_delegate.py` (optional
+- **Files:** `ui/main_window.py` (tooltip), `ui/icon_tile_delegate.py` (optional
   visual dimming)
 - **Change:**
   - Device tooltip includes "Last seen: 3 h ago" when `last_seen` is available and the
@@ -267,7 +267,19 @@ cached devices at startup, and no visual distinction between "confirmed live" an
 
 ---
 
-## Theme G — UX polish 💡
+## Theme G — UX polish
+
+### G-1 Reset all application data ✅
+
+- **Files:** `utils/device_remote_icon.py`, `ui/preferences_dialog.py`, `ui/main_window.py`
+- **Change:** Added "Maintenance" section in Preferences → General with a
+  "Reset all application data…" button. Confirmation dialog warns that
+  `~/.config/netneighbor` and `~/.cache/netneighbor` will be permanently deleted.
+  On confirm, calls `clear_all_app_data()` which clears both directories, then
+  disables the button with "Reset done — please restart".
+  Translated in all 8 languages (fr, es, de, it, nl, ja, zh_CN, zh_TW).
+
+*Ideas (not yet scheduled):*
 
 - Context menu "Open" submenu: keyboard navigation improvement
 - Per-device command label in tile tooltip
@@ -289,7 +301,7 @@ against the current source strings.
 
 - **Tool:** `tools/extract_new_strings.py` — AST-based extraction via `ast.parse()`,
   walks all `Call(func=Name(id='_'))` nodes with `Constant` string arguments.
-- **Files:** `ui_qt/**/*.py`, `discovery/*.py`, `utils/*.py` → `locale/netneighbor.pot`
+- **Files:** `ui/**/*.py`, `discovery/*.py`, `utils/*.py` → `locale/netneighbor.pot`
 - **Result:** 74 new strings found not present in the old `.pot` (which referenced GTK paths).
 
 ### H-2 Audit and update each `.po` file ✅
@@ -312,7 +324,7 @@ against the current source strings.
 
 ---
 
-## Theme I — Packaging 📋
+## Theme I — Packaging 🔄
 
 **Context:** The packaging scripts under `packaging/` were written for the GTK 1.x
 version and reference `app.py` (which no longer exists) and GTK runtime dependencies.
@@ -321,17 +333,40 @@ All three platform targets need to be updated for PySide6 / `main.py`.
 Test targets: **Windows** and **Linux**. macOS packaging will be scripted but cannot
 be validated without a macOS test machine.
 
-### I-1 Audit and update existing packaging scripts 📋
+### I-0 Pre-release audit and header update ✅
+
+- **Files:** all `*.py` source files (66 updated + 3 tools), `README.md`,
+  `USER_DOCUMENTATION.md`, `docs/PACKAGING.md`, `docs/UI_ARCHITECTURE.md` (archived),
+  `docs/ROADMAP_QT_2_0.md`, `packaging/README.md`, `docs/MAINTENANCE.md`
+- **Change:** All Python file headers updated to version 2.0.0 / date 2026-05-19.
+  Remaining GTK references removed. `USER_DOCUMENTATION.md` completely rewritten
+  for the Qt 2.0 UI (menus, context menu, dialog tabs, preferences, tray).
+  `.gitkeep` files removed from non-empty directories.
+
+### I-1 Audit and update existing packaging scripts ✅
 
 - **Files:** `packaging/linux/build_deb.sh`, `packaging/linux/build_tarball.sh`,
   `packaging/linux/build_appimage.sh`, `packaging/windows/build.ps1`,
-  `packaging/macos/build_app.sh`, `docs/PACKAGING.md`
+  `packaging/windows/netneighbor.spec`, `packaging/POST_PORT.md`
 - **Change:**
-  - Replace all references to `app.py` with `main.py` (unified entry point).
-  - Remove GTK runtime dependencies (`python3-gi`, `python3-gi-cairo`, `gir1.2-gtk-3.0`,
-    AppIndicator bindings) from `.deb` control file and install docs.
-  - Add PySide6 runtime dependency notes.
-  - Update `docs/PACKAGING.md` to reflect 2.0 reality.
+  - Entry point updated to `main.py` in all scripts and the PyInstaller spec.
+  - GTK runtime dependencies removed from `.deb` control file; replaced with
+    `python3 (>= 3.10), python3-pip, samba-common-bin`.
+  - `postinst` now pip-installs `requirements-qt.txt` (PySide6, zeroconf, WSDiscovery).
+  - File copy lists updated: `ui/`, `app_qt.py`, `requirements-qt.txt` added; `ui/` (GTK) removed.
+  - PyInstaller `hiddenimports` updated: added `PySide6.QtNetwork`, `PySide6.QtSvg`.
+  - `.deb` description updated (GTK → Qt/PySide6).
+
+### I-1b bundled-freedesktop icon trimming in packages ✅
+
+- **Files:** `packaging/linux/build_deb.sh`, `packaging/linux/build_tarball.sh`,
+  `packaging/linux/build_appimage.sh`, `packaging/windows/build.ps1`
+- **Change:** The `assets/icons/bundled-freedesktop/` directory contains ~151 MB across
+  10 resolution subdirectories. Source tree retains all resolutions for archival.
+  All four packaging scripts now trim the directory to the 5 sizes actually used by
+  the Qt UI (16, 32, 48, 96, 256), saving ~143 MB per package artifact.
+  The `bundled_freedesktop_png_side_sizes()` helper discovers available sizes dynamically
+  at runtime, so no code change is needed.
 
 ### I-2 Linux packaging (`.deb` + `AppImage` + tarball) 📋
 
@@ -350,22 +385,41 @@ be validated without a macOS test machine.
 - **Acceptance:** `sudo dpkg -i netneighbor_2.0.0_amd64.deb && netneighbor` launches
   the application with tray and discovery working.
 
-### I-3 Windows packaging (PyInstaller + Inno Setup installer) 📋
+### I-3 Windows packaging (PyInstaller + Inno Setup installer) ✅
 
 - **Files:** `packaging/windows/build.ps1`, `packaging/windows/build_installer.ps1`,
-  `packaging/windows/*.iss` (Inno Setup spec)
+  `packaging/windows/netneighbor.spec`, `packaging/windows/netneighbor.iss`
 - **Change:**
-  - PyInstaller spec: update entry point to `main.py`, include `locale/` tree,
-    `assets/`, `config/` (JSON configs), PySide6 Qt plugins (platform, imageformats,
-    iconengines).
-  - Add `--windowed` flag (no console window on launch).
-  - Include VC++ redistributable check in Inno Setup installer.
-  - Verify autostart registry entry written by the app survives an installed-package
-    path (absolute path to the installed `netneighbor.exe`).
-  - Code-signing: document the step even if not automated (placeholder for future CI).
-- **Test platform:** Windows 10 22H2, Windows 11 23H2.
-- **Acceptance:** Installer runs cleanly, application launches from Start menu,
-  system tray visible, autostart survives reboot.
+  - PyInstaller spec: entry point updated to `main.py`; `hiddenimports` corrected
+    (`wsdiscovery`/`wsdiscovery.discovery` replacing wrong `WSDiscovery`; added
+    `PySide6.QtNetwork`, `PySide6.QtSvg`).
+  - Inno Setup 6 installed via `winget install JRSoftware.InnoSetup --source winget`.
+  - Two critical Windows-only bugs discovered and fixed during testing (see below).
+- **Test platform:** Windows 11 23H2.
+- **Artifacts:** `dist/NetNeighbor-2.0.0-win64.zip` (203 MB), `dist/NetNeighbor-2.0.0-win64-setup.exe` (187 MB).
+
+#### ⚠️ CRITICAL bugs fixed — document for all future maintainers
+
+**Bug 1 — `multiprocessing.freeze_support()` missing** (`main.py`)
+
+Without this call, launching the frozen `.exe` spawns hundreds of windows:
+PyInstaller uses the `spawn` multiprocessing method on Windows; any child process
+re-executes the full `.exe`, which spawns another child, infinitely.
+The app looked like malware — dozens of semi-transparent windows that could not be
+closed, requiring Task Manager to kill the process tree.
+
+Fix: `multiprocessing.freeze_support()` must be the **first statement** inside
+`if __name__ == "__main__":`, before any import. See `main.py` and `docs/PACKAGING.md`.
+
+**Bug 2 — `subprocess` without `CREATE_NO_WINDOW`** (`utils/neighbor_mac.py`)
+
+`arp -a` was called without `creationflags=subprocess.CREATE_NO_WINDOW` for every
+device on every UI refresh (~10–30 calls/cycle). Each call created a visible console
+window, flooding the desktop with flashing terminal windows.
+
+Fix: added `CREATE_NO_WINDOW` flag + an 850 ms cache so `arp -a` runs at most once
+per refresh cycle regardless of device count. See `docs/PACKAGING.md` for the rule
+that applies to all future `subprocess` calls on Windows code paths.
 
 ### I-4 macOS packaging (PyInstaller `.app` + `.dmg`) 📋
 
@@ -434,9 +488,13 @@ I-5 should only be wired once I-2 and I-3 produce verified artifacts.
 
 ```
 Themes A–D  ✅  Done
-Theme E     📋  Next — device lifetime (E-1 → E-5)
+Theme E     ✅  Device lifetime (E-1 → E-5)
 Theme F     💡  Future — discovery enhancements
-Theme G     💡  Future — UX polish
+Theme G     ✅  G-1 (reset app data) + ideas not yet scheduled
 Theme H     ✅  Translation review (H-1 → H-3) — 74 strings, 8 languages
-Theme I     📋  After H — packaging Linux + Windows; macOS scripted (I-1 → I-5)
+Theme I     🔄  Packaging — I-0 ✅  I-1 ✅  I-1b ✅  I-3 ✅  I-2 📋 (Linux .deb)  I-4/I-5 💡
 ```
+
+> **Windows maintainers:** read the ⚠️ CRITICAL section in I-3 and `docs/PACKAGING.md`
+> before any PyInstaller build. The `freeze_support()` and `CREATE_NO_WINDOW` bugs
+> cause the app to appear as malware on first launch.

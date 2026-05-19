@@ -1205,35 +1205,35 @@ msgstr "Dispositivos desconocidos"
 #~ msgid "Command:"
 #~ msgstr "Comando:"
 
-#: ui_qt/
+#: ui/
 msgid "About NetNeighbor"
 msgstr "Acerca de NetNeighbor"
 
-#: ui_qt/
+#: ui/
 msgid "App logo under assets/icons: Luc LEBOSSE"
 msgstr "Logo de la app en assets/icons: Luc LEBOSSE"
 
-#: ui_qt/
+#: ui/
 msgid "Applications"
 msgstr "Aplicaciones"
 
-#: ui_qt/
+#: ui/
 msgid "Apply"
 msgstr "Aplicar"
 
-#: ui_qt/
+#: ui/
 msgid "Author: Luc"
 msgstr "Autor: Luc"
 
-#: ui_qt/
+#: ui/
 msgid "Close to system tray / panel instead of exiting"
 msgstr "Cerrar al área de notificación en lugar de salir"
 
-#: ui_qt/
+#: ui/
 msgid "Command"
 msgstr "Comando"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Command templates for opening device connections. Leave empty to use t"
 "he system default."
@@ -1241,145 +1241,145 @@ msgstr ""
 "Plantillas de comandos para abrir conexiones de dispositivos. Dejar va"
 "cío para usar el valor predeterminado del sistema."
 
-#: ui_qt/
+#: ui/
 msgid "Commands"
 msgstr "Comandos"
 
-#: ui_qt/
+#: ui/
 msgid "Custom command (additional)"
 msgstr "Comando personalizado (adicional)"
 
-#: ui_qt/
+#: ui/
 msgid "Dark"
 msgstr "Oscuro"
 
-#: ui_qt/
+#: ui/
 msgid "Date / Time"
 msgstr "Fecha / Hora"
 
-#: ui_qt/
+#: ui/
 msgid "Delete"
 msgstr "Eliminar"
 
-#: ui_qt/
+#: ui/
 msgid "Desktop notifications"
 msgstr "Notificaciones de escritorio"
 
-#: ui_qt/
+#: ui/
 msgid "Discovery refresh requested"
 msgstr "Actualización de detección solicitada"
 
-#: ui_qt/
+#: ui/
 msgid "Edit"
 msgstr "Editar"
 
-#: ui_qt/
+#: ui/
 msgid "Edit type preset"
 msgstr "Editar preajuste de tipo"
 
-#: ui_qt/
+#: ui/
 msgid "Error"
 msgstr "Error"
 
-#: ui_qt/
+#: ui/
 msgid "Extra large"
 msgstr "Muy grande"
 
-#: ui_qt/
+#: ui/
 msgid "Field mapping rules"
 msgstr "Reglas de mapeo de campos"
 
-#: ui_qt/
+#: ui/
 msgid "GNU Lesser General Public License version 3 or later"
 msgstr "Licencia Pública General Reducida de GNU versión 3 o posterior"
 
-#: ui_qt/
+#: ui/
 msgid "General"
 msgstr "General"
 
-#: ui_qt/
+#: ui/
 msgid "Hidden devices"
 msgstr "Dispositivos ocultos"
 
-#: ui_qt/
+#: ui/
 msgid "Hide device"
 msgstr "Ocultar dispositivo"
 
-#: ui_qt/
+#: ui/
 msgid "Hide sidebar"
 msgstr "Ocultar barra lateral"
 
-#: ui_qt/
+#: ui/
 msgid "Hide window"
 msgstr "Ocultar ventana"
 
-#: ui_qt/
+#: ui/
 msgid "Icons size"
 msgstr "Tamaño de iconos"
 
-#: ui_qt/
+#: ui/
 msgid "Invalid command template for this protocol."
 msgstr "Plantilla de comando no válida para este protocolo."
 
-#: ui_qt/
+#: ui/
 msgid "Large"
 msgstr "Grande"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} d ago"
 msgstr "Visto hace: {n} d"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} h ago"
 msgstr "Visto hace: {n} h"
 
-#: ui_qt/
+#: ui/
 msgid "Last seen: {n} min ago"
 msgstr "Visto hace: {n} min"
 
-#: ui_qt/
+#: ui/
 msgid "Light"
 msgstr "Claro"
 
-#: ui_qt/
+#: ui/
 msgid "Location name:"
 msgstr "Nombre de ubicación:"
 
-#: ui_qt/
+#: ui/
 msgid "Locations"
 msgstr "Ubicaciones"
 
-#: ui_qt/
+#: ui/
 msgid "Manage location presets shown in the right-click menu."
 msgstr ""
 "Administrar los preajustes de ubicación mostrados en el menú contextua"
 "l."
 
-#: ui_qt/
+#: ui/
 msgid "Medium"
 msgstr "Mediano"
 
-#: ui_qt/
+#: ui/
 msgid "Mode"
 msgstr "Modo"
 
-#: ui_qt/
+#: ui/
 msgid "NetNeighbor {}"
 msgstr "NetNeighbor {}"
 
-#: ui_qt/
+#: ui/
 msgid "New name:"
 msgstr "Nuevo nombre:"
 
-#: ui_qt/
+#: ui/
 msgid "No devices yet"
 msgstr "Aún no hay dispositivos"
 
-#: ui_qt/
+#: ui/
 msgid "No hidden devices"
 msgstr "No hay dispositivos ocultos"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
 "config/netneighbor/custom_icons/."
@@ -1387,7 +1387,7 @@ msgstr ""
 "No se encontraron iconos. Agregue PNGs en assets/icons/bundled-freedes"
 "ktop o ~/.config/netneighbor/custom_icons/."
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Notification delivery depends on the OS and session. Tray-backed behav"
 "iour (close to tray, minimized start) will align once the system tray "
@@ -1398,19 +1398,19 @@ msgstr ""
 "nicio minimizado) se alineará una vez que se implemente la bandeja del"
 " sistema."
 
-#: ui_qt/
+#: ui/
 msgid "Notifications"
 msgstr "Notificaciones"
 
-#: ui_qt/
+#: ui/
 msgid "Offline"
 msgstr "Sin conexión"
 
-#: ui_qt/
+#: ui/
 msgid "Online"
 msgstr "En línea"
 
-#: ui_qt/
+#: ui/
 msgid ""
 "Override or add connection endpoints per protocol. For 'custom' scheme"
 ", enter the command template in IP/Host ({ip}, {ip_raw}, {port}, {name"
@@ -1422,106 +1422,142 @@ msgstr ""
 "rt}, {name}, {type}, {category}, {url}). IP/Host y Puerto son opcional"
 "es para otros esquemas."
 
-#: ui_qt/
+#: ui/
 msgid "Preferences…"
 msgstr "Preferencias…"
 
-#: ui_qt/
+#: ui/
 msgid "Qt for Python bindings"
 msgstr "Enlaces Qt para Python"
 
-#: ui_qt/
+#: ui/
 msgid "Reload discovery"
 msgstr "Recargar detección"
 
-#: ui_qt/
+#: ui/
 msgid "Scheme"
 msgstr "Esquema"
 
-#: ui_qt/
+#: ui/
 msgid "See the"
 msgstr "Consulte la"
 
-#: ui_qt/
+#: ui/
 msgid "Select an icon, then OK. IDs are stored in your preferences."
 msgstr "Seleccione un icono, luego OK. Los IDs se guardan en sus preferencias."
 
-#: ui_qt/
+#: ui/
 msgid "Service type"
 msgstr "Tipo de servicio"
 
-#: ui_qt/
+#: ui/
 msgid "Session"
 msgstr "Sesión"
 
-#: ui_qt/
+#: ui/
 msgid "Show sidebar"
 msgstr "Mostrar barra lateral"
 
-#: ui_qt/
+#: ui/
 msgid "Show window"
 msgstr "Mostrar ventana"
 
-#: ui_qt/
+#: ui/
 msgid "Sidebar"
 msgstr "Barra lateral"
 
-#: ui_qt/
+#: ui/
 msgid "Small"
 msgstr "Pequeño"
 
-#: ui_qt/
+#: ui/
 msgid "Start Scanning…"
 msgstr "Iniciando escaneo…"
 
-#: ui_qt/
+#: ui/
 msgid "Theme"
 msgstr "Tema"
 
-#: ui_qt/
+#: ui/
 msgid "This program comes with absolutely no warranty."
 msgstr "Este programa no ofrece ningún tipo de garantía."
 
-#: ui_qt/
+#: ui/
 msgid "Types"
 msgstr "Tipos"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Friendly name"
 msgstr "Usar como nombre descriptivo"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Information"
 msgstr "Usar como información"
 
-#: ui_qt/
+#: ui/
 msgid "Use as Location"
 msgstr "Usar como ubicación"
 
-#: ui_qt/
+#: ui/
 msgid "Use icon from"
 msgstr "Usar icono de"
 
-#: ui_qt/
+#: ui/
 msgid "Version {version}"
 msgstr "Versión {version}"
 
-#: ui_qt/
+#: ui/
 msgid "WS-Discovery (Windows devices)"
 msgstr "WS-Discovery (dispositivos Windows)"
 
-#: ui_qt/
+#: ui/
 msgid "for details."
 msgstr "para más detalles."
 
-#: ui_qt/
+#: ui/
 msgid "mDNS/DNS-SD discovery"
 msgstr "Detección mDNS/DNS-SD"
 
-#: ui_qt/
+#: ui/
 msgid "not yet downloaded"
 msgstr "aún no descargado"
 
-#: ui_qt/
+#: ui/
 msgid "{} devices"
 msgstr "{} dispositivos"
+
+
+
+#: ui/preferences_dialog.py
+msgid "Maintenance"
+msgstr "Mantenimiento"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data…"
+msgstr "Restablecer todos los datos de la aplicación…"
+
+#: ui/preferences_dialog.py
+msgid "Reset all application data?"
+msgstr "¿Restablecer todos los datos de la aplicación?"
+
+#: ui/preferences_dialog.py
+msgid ""
+"All preferences, cached icons, discovery data and logs will be permanently "
+"deleted:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor will use default settings on next start.\n"
+"This action cannot be undone."
+msgstr ""
+"Todas las preferencias, iconos en caché, datos de descubrimiento y registros "
+"se eliminarán permanentemente:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor usará la configuración predeterminada en el próximo inicio.\n"
+"Esta acción no se puede deshacer."
+
+#: ui/preferences_dialog.py
+msgid "Reset done — please restart"
+msgstr "Restablecimiento completado — reinicie la aplicación"

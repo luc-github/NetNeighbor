@@ -2,7 +2,7 @@
 
 | Path | Role |
 |------|------|
-| [`linux/`](linux/) | `.deb`, `tar.gz`, AppImage, `release.sh` (GTK 1.x until Qt port) |
+| [`linux/`](linux/) | `.deb`, `tar.gz`, AppImage, `release.sh` (PySide6/Qt, 2.0) |
 | [`windows/`](windows/) | PyInstaller → `.exe`, Inno Setup → installer (Qt skeleton) |
 | [`macos/`](macos/) | PyInstaller → `.app` bundle (Qt skeleton) |
 | [`checksums.sh`](checksums.sh) | `SHA256SUMS-<version>.txt` for `dist/` artifacts |

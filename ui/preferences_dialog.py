@@ -1,4 +1,6 @@
-# File preferences_dialog.py for NetNeighbor version 1.0.0
+# File preferences_dialog.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Preferences dialog — General, Notifications, Locations, Types, Applications."""
 
@@ -21,6 +23,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -37,7 +40,7 @@ from utils.location_label import normalize_location_options
 from utils.session_autostart import apply_autostart_pref, autostart_enabled_on_disk
 from utils.ui_prefs import load_ui_preferences, save_ui_preferences
 
-from ui_qt.preset_editors import (
+from ui.preset_editors import (
     _TypeEntryDialog,
     _LIST_QSS,
     _TREE_QSS,
@@ -80,6 +83,7 @@ class PreferencesDialog(QDialog):
         on_location_presets_saved: Callable[[list[str], bool], None] | None = None,
         on_type_presets_saved: Callable[[list[tuple[str, str]]], None] | None = None,
         on_connect_templates_saved: Callable[[dict[str, str], str], None] | None = None,
+        on_clear_icon_cache: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(_("Preferences"))
@@ -88,6 +92,7 @@ class PreferencesDialog(QDialog):
         self._on_location_presets_saved  = on_location_presets_saved
         self._on_type_presets_saved      = on_type_presets_saved
         self._on_connect_templates_saved = on_connect_templates_saved
+        self._on_clear_icon_cache        = on_clear_icon_cache
 
         self._prefs = load_ui_preferences()
         self._original_theme = str(self._prefs.get("theme", "auto"))
@@ -153,8 +158,16 @@ class PreferencesDialog(QDialog):
         sl.addWidget(self._start_minimized)
         sl.addWidget(self._start_at_login)
 
+        maintenance = QGroupBox(_("Maintenance"))
+        ml = QVBoxLayout(maintenance)
+        self._btn_clear_icon_cache = QPushButton(_("Reset all application data…"))
+        self._btn_clear_icon_cache.setMaximumWidth(240)
+        self._btn_clear_icon_cache.clicked.connect(self._on_clear_icon_cache_clicked)
+        ml.addWidget(self._btn_clear_icon_cache)
+
         outer.addWidget(theme_box)
         outer.addWidget(session)
+        outer.addWidget(maintenance)
         outer.addStretch(1)
         return page
 
@@ -333,6 +346,31 @@ class PreferencesDialog(QDialog):
         layout.addStretch(1)
         return page
 
+    def _on_clear_icon_cache_clicked(self) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(_("Reset all application data?"))
+        box.setText(
+            _(
+                "All preferences, cached icons, discovery data and logs will be "
+                "permanently deleted:\n"
+                "• ~/.config/netneighbor\n"
+                "• ~/.cache/netneighbor\n\n"
+                "NetNeighbor will use default settings on next start.\n"
+                "This action cannot be undone."
+            )
+        )
+        box.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        if box.exec() != QMessageBox.StandardButton.Ok:
+            return
+        if self._on_clear_icon_cache is not None:
+            self._on_clear_icon_cache()
+        self._btn_clear_icon_cache.setEnabled(False)
+        self._btn_clear_icon_cache.setText(_("Reset done — please restart"))
+
     # ------------------------------------------------------------------
     # Load / save
     # ------------------------------------------------------------------
@@ -467,7 +505,7 @@ class PreferencesDialog(QDialog):
 
     def _apply_theme(self, theme: str) -> None:
         from PySide6.QtWidgets import QApplication
-        from ui_qt.app_theme import apply_color_scheme
+        from ui.app_theme import apply_color_scheme
         app = QApplication.instance()
         if app is None:
             return

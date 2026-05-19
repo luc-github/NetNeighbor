@@ -1,4 +1,6 @@
-# File qt_device_icons.py for NetNeighbor version 1.0.0
+# File qt_device_icons.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Per-device-type icons: only ``assets/icons/bundled-freedesktop`` (see ``config/icons.json``).
 

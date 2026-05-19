@@ -1,3 +1,7 @@
+# File extract_new_strings.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
+# License: LGPL3
 """Extract all _() strings from source files and show which are missing from .pot."""
 import ast
 import sys
@@ -5,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 SOURCE_DIRS = [
-    ROOT / "ui_qt",
+    ROOT / "ui",
     ROOT / "discovery",
     ROOT / "utils",
 ]

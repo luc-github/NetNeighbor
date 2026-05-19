@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GTK 1.x .deb builder (system Python + PyGObject). After port: app.py + PySide6 — POST_PORT.md.
+# NetNeighbor 2.0 .deb builder — PySide6/Qt, pip-installed deps, app_qt.py entrypoint.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,10 +40,12 @@ set -e
 # Older packages shipped a 64px bitmap under 256x256, which breaks hicolor lookups.
 rm -f /usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png || true
 # Remove any __pycache__ directories left over from a previous installation.
-# apt-remove only removes files listed in the package manifest; __pycache__ dirs
-# are created at runtime by Python and survive uninstall, causing stale bytecode
-# to be loaded on the next run.
 find /usr/share/netneighbor -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+# Install Python dependencies (PySide6, zeroconf, WSDiscovery) via pip.
+# --break-system-packages is required on Python 3.11+ (Ubuntu 24.04 / Mint 22+).
+_reqs=/usr/share/netneighbor/requirements-qt.txt
+pip3 install --quiet --break-system-packages -r "$_reqs" 2>/dev/null \
+  || pip3 install --quiet -r "$_reqs" || true
 # Precompile all sources so the app starts without a write to /usr/share at runtime.
 python3 -m compileall -q /usr/share/netneighbor 2>/dev/null || true
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -89,7 +91,7 @@ EOF
 
 # Copy application sources directly from the working tree.
 # This ensures local modifications (committed or not) are always included.
-for path in app.py main.py i18n.py requirements.txt discovery model ui utils data config assets locale LICENSE README.md USER_DOCUMENTATION.md VERSION; do
+for path in main.py app_qt.py i18n.py requirements.txt requirements-qt.txt discovery model ui utils data config assets locale LICENSE README.md USER_DOCUMENTATION.md VERSION; do
   if [[ -e "${PROJECT_ROOT}/${path}" ]]; then
     cp -a "${PROJECT_ROOT}/${path}" "${APP_ROOT}/"
   fi
@@ -102,6 +104,18 @@ find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) -
 # installed under /usr/share/netneighbor/.  The actual hicolor icons are
 # installed explicitly to /usr/share/icons/hicolor/ by the lines below.
 rm -rf "${APP_ROOT}/assets/icons/hicolor"
+
+# Trim bundled-freedesktop to only the resolutions needed by the Qt UI (saves ~143 MB).
+# Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
+_bfd="${APP_ROOT}/assets/icons/bundled-freedesktop"
+if [ -d "${_bfd}" ]; then
+    for _d in "${_bfd}"/*/; do
+        case "$(basename "${_d%/}")" in
+            16|32|48|96|256) ;;
+            *) rm -rf "${_d}" ;;
+        esac
+    done
+fi
 
 # Compile .po → .mo for any catalog missing or older than its source.
 if command -v msgfmt >/dev/null 2>&1; then
@@ -146,14 +160,15 @@ Section: net
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${INSTALLED_SIZE_KB}
-Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, python3-zeroconf, samba-common-bin, gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1
+Depends: python3 (>= 3.10), python3-pip, samba-common-bin
 Maintainer: Luc LEBOSSE (luc@esp3d.io)
 Description: Discover and monitor devices on your local network
- NetNeighbor is a GTK desktop application that automatically discovers
+ NetNeighbor is a Qt (PySide6) desktop application that automatically discovers
  all devices on your local network, displays them with icons or in a list,
  and lets you monitor, connect to, and manage them. Supports system tray.
  NetBIOS names use nmblookup from samba-common-bin (Samba server daemons
- are not required). System tray uses Ayatana or GNOME AppIndicator.
+ are not required). Python dependencies (PySide6, zeroconf, WSDiscovery)
+ are installed automatically via pip during package installation.
 EOF
 
 OUTPUT_DEB="${PROJECT_ROOT}/dist/${PKG_NAME}_${VERSION}_${ARCH}.deb"

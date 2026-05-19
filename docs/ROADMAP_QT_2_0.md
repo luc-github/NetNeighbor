@@ -20,8 +20,8 @@ Accord de travail pour la migration 2.0 :
 
 - **Poste principal** : développement au quotidien sous **Windows** (vélocité, Qt, chemins utilisateur, packaging).
 - **Linux** : **relecture / smoke test** aux jalons suivants (cocher quand fait) :
-  - [ ] Après **bootstrap Qt** utilisable (`DiscoveryManager` + fenêtre minimale, démarrage/arrêt discovery).
-  - [ ] Après **liste + détails** utilisables (menus contextuels, ouverture liens/commandes, config `~/.config/netneighbor/`).
+  - [x] Après **bootstrap Qt** utilisable (`DiscoveryManager` + fenêtre minimale, démarrage/arrêt discovery).
+  - [x] Après **liste + détails** utilisables (menus contextuels, ouverture liens/commandes, config `~/.config/netneighbor/`).
   - [ ] **Avant release candidate** : tray (X11/Wayland selon votre bureau), autostart XDG, parcours complet utilisateur.
 - **macOS** : pas d’environnement pour l’instant — prévoir une **passe dédiée** (machine, VM ou CI macOS) **avant** une release publique ciblant macOS ; cela ne bloque pas l’avancement Windows/Linux.
 
@@ -29,20 +29,20 @@ Accord de travail pour la migration 2.0 :
 
 ## Objectifs 2.0 (rappel)
 
-- [ ] Une seule stack UI : **PySide6** sur les trois OS cibles.
-- [ ] **Aucune** dépendance runtime à `gi` / GTK / GLib pour l’application graphique.
-- [ ] Découverte réseau (`discovery/`, `model/`) réutilisée ; synchronisation **thread discovery → thread UI** sans `GLib.idle_add`.
-- [ ] Parité fonctionnelle raisonnable avec 1.x (liste + grille, détails, préférences, tray où pertinent, raccourcis, i18n).
-- [ ] Packaging ou instructions d’installation documentés pour **Windows** et **macOS** (en plus du Linux déjà couvert par l’existant).
+- [x] Une seule stack UI : **PySide6** sur les trois OS cibles.
+- [x] **Aucune** dépendance runtime à `gi` / GTK / GLib pour l’application graphique.
+- [x] Découverte réseau (`discovery/`, `model/`) réutilisée ; synchronisation **thread discovery → thread UI** sans `GLib.idle_add`.
+- [x] Parité fonctionnelle raisonnable avec 1.x (liste + grille, détails, préférences, tray où pertinent, raccourcis, i18n).
+- [x] Packaging ou instructions d’installation documentés pour **Windows** et **macOS** (en plus du Linux déjà couvert par l’existant).
 
 ---
 
 ## Phase 0 — Préparation du chantier
 
-- [ ] Branche de travail dédiée (ex. `v2/qt` ou équivalent) et politique de merge vers `main`.
-- [ ] Décision sur le **numéro de version** dans `VERSION` : garder 1.x sur `main` tant que l’artefact par défaut est GTK, ou basculer dès que `main` = Qt-only (à trancher en équipe).
+- [x] Branche de travail dédiée (`2.0`) et politique de merge vers `main`.
+- [x] Décision sur le **numéro de version** dans `VERSION` : `2.0.0` dès que `main` = Qt-only.
 - [ ] CI : matrice cible (ex. Linux + Windows ; macOS si runner disponible) pour **tests** et **lint** avec PySide6 installé.
-- [ ] Inventaire des **fonctionnalités 1.x** à reproduire (checklist de parité), dérivé de `USER_DOCUMENTATION.md` et des menus actuels.
+- [x] Inventaire des **fonctionnalités 1.x** à reproduire, dérivé de `USER_DOCUMENTATION.md` et des menus actuels.
 
 ---
 
@@ -70,51 +70,52 @@ Objectif : le cœur discovery peut tourner et être testé **sans** boucle GLib,
 
 ## Phase 3 — Fenêtre principale et chrome
 
-- [ ] `QMainWindow` (ou équivalent) : barre de menus, état fenêtre, raccourci **F11** plein écran.
-- [ ] Chargement / persistance des préférences existantes (`utils/ui_prefs.py`, chemins inchangés si possible).
-- [ ] Préférences utilisateur (équivalent des dialogs / onglets nécessaires) — périmètre minimal puis itérations.
-- [ ] Boîte **À propos** (version depuis `VERSION`, crédits bibliothèques mises à jour : PySide6, zeroconf, WSDiscovery, etc.).
+- [x] `QMainWindow` : barre de menus (View/Tools/Help), état fenêtre, raccourci **F11** plein écran.
+- [x] Chargement / persistance des préférences existantes (`utils/ui_prefs.py`, chemins inchangés).
+- [x] Préférences utilisateur (General, Notifications, Locations, Types, Applications + Maintenance).
+- [x] Boîte **À propos** (version depuis `VERSION`, crédits PySide6, zeroconf, WSDiscovery, etc.).
 
 ---
 
 ## Phase 4 — Liste des appareils et navigation
 
-- [ ] Vue **liste** (colonnes / modèle) équivalente au `Gtk.TreeView` actuel.
-- [ ] Vue **icônes** / sections (type ou emplacement) équivalente à la grille + sidebar.
-- [ ] Menus contextuels : Open (sous-menus), Détails, Options, Monitor, Renommer, Emplacement, Type — branchement vers `DiscoveryManager` / `utils/double_click_open.py` / lanceurs existants.
-- [ ] Icônes appareils : réutiliser `ui/icons.py`, assets et cache remote comme aujourd’hui ; intégration `QIcon` / pixmaps.
+- [x] Vue **liste** (colonnes triables) équivalente au `Gtk.TreeView` actuel.
+- [x] Vue **icônes** / sections groupées (type ou emplacement) équivalente à la grille + sidebar.
+- [x] Menus contextuels : Open (sous-menus), Details, Options, Monitor/Unfollow, Rename, Location, Device type, Hide device, Run custom command.
+- [x] Icônes appareils : assets bundled-freedesktop + cache remote ; intégration `QIcon` / pixmaps via `ui/`.
 
 ---
 
 ## Phase 5 — Détails appareil
 
-- [ ] Fenêtre ou dialog **Détails** avec onglets (aperçu, services, dépannage, TXT, données brutes, options / commandes) alignés sur le comportement 1.x.
-- [ ] Règles de mapping, commandes personnalisées, validations — réutiliser la logique métier déjà centralisée où possible.
+- [x] Dialog **Détails** avec onglets (Overview, Services, Device data, Options) alignés sur le comportement 1.x.
+- [x] Règles de mapping TXT, commandes personnalisées par appareil (Override / Additional), validations.
 
 ---
 
 ## Phase 6 — Plateforme : tray, notifications, démarrage session
 
-- [ ] **Zone de notification** : `QSystemTrayIcon` + menu (Ouvrir, Réduire, Quitter).
-- [ ] **Notifications** desktop : API Qt ou intégration par OS ; remplacer / adapter `utils/notifications.py`.
-- [ ] **Démarrage à la connexion** : remplacer ou compléter `utils/session_autostart.py` (XDG Linux ; Startup Windows ; LaunchAgents macOS si applicable).
-- [ ] Options **fermer vers le tray**, **démarrer minimisé**, cohérentes avec 1.x.
+- [x] **Zone de notification** : `QSystemTrayIcon` + menu (Show window, Hide window, Quit).
+- [x] **Notifications** desktop : via `utils/notifications.py` (Qt/OS natif selon la plateforme).
+- [x] **Démarrage à la connexion** : `utils/session_autostart.py` — XDG Linux, `winreg` Windows, LaunchAgents macOS ; flag `--start-minimized-to-tray`.
+- [x] Options **fermer vers le tray**, **démarrer minimisé**, cohérentes avec 1.x.
 
 ---
 
 ## Phase 7 — Retrait GTK et documentation
 
-- [ ] Supprimer modules et utilitaires GTK-only : `app.py` (shell GTK), `ui/*.py` GTK, `utils/gtk_dialog.py`, imports `gi` restants.
-- [ ] Nettoyer **`i18n.py`** des branches spécifiques GTK si devenues inutiles.
-- [ ] Mettre à jour **`README.md`**, **`USER_DOCUMENTATION.md`**, **`docs/PACKAGING.md`**, **`docs/README.md`** (index), et remplacer ou archiver **`docs/UI_ARCHITECTURE.md`** par une **UI Qt** équivalente.
-- [ ] Scripts / `.deb` / release : plus de dépendances `python3-gi`, AppIndicator, etc. ; ajouter notes **Windows / macOS**.
+- [x] Supprimer modules GTK-only : `app.py`, `ui/*.py` GTK (seul `ui/icons.py` conservé comme utilitaire partagé), `utils/gtk_dialog.py`, imports `gi` retirés.
+- [x] **`i18n.py`** nettoyé des branches spécifiques GTK.
+- [x] **`README.md`**, **`USER_DOCUMENTATION.md`**, **`docs/PACKAGING.md`** mis à jour ; **`docs/UI_ARCHITECTURE.md`** archivé (mention GTK 3).
+- [x] Scripts `.deb` / AppImage / tarball / Windows : dépendances GTK retirées ; `python3-pip`, `samba-common-bin` ; notes Windows/macOS documentées.
 
 ---
 
 ## Phase 8 — Qualification et release 2.0.0
 
-- [ ] Checklist **smoke test** manuelle sur les trois OS (découverte, ouverture URL, tray, préférences, redémarrage).
-- [ ] Tests automatisés ciblés (non régression discovery ; tests UI optionnels avec offscreen Qt si pertinent).
+- [x] Checklist **smoke test** Windows 11 : découverte, ouverture URL, tray, préférences, redémarrage — validé (2026-05-19).
+- [ ] Checklist **smoke test** Linux : tray (X11/Wayland), autostart XDG, parcours complet utilisateur.
+- [ ] Tests automatisés ciblés (non régression discovery ; tests UI optionnels avec offscreen Qt).
 - [ ] **Gel** : tag `2.0.0`, changelog utilisateur, communication sur la rupture de stack (migration depuis paquets GTK 1.x).
 
 ---

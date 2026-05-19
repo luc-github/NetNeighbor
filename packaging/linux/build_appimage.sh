@@ -108,7 +108,7 @@ mkdir -p \
   "${APP_SHARE}"
 
 # ── App sources ────────────────────────────────────────────────────────────
-for path in app.py main.py i18n.py requirements.txt \
+for path in main.py app_qt.py i18n.py requirements.txt requirements-qt.txt \
             discovery model ui utils data config assets \
             locale LICENSE README.md USER_DOCUMENTATION.md VERSION; do
   if [[ -e "${PROJECT_ROOT}/${path}" ]]; then
@@ -124,6 +124,18 @@ find "${APP_SHARE}" \
 # The assets/icons/hicolor subtree contains relative symlinks valid only in
 # the source tree.  Icons are installed explicitly below.
 rm -rf "${APP_SHARE}/assets/icons/hicolor"
+
+# Trim bundled-freedesktop to only the resolutions needed by the Qt UI (saves ~143 MB).
+# Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
+_bfd="${APP_SHARE}/assets/icons/bundled-freedesktop"
+if [ -d "${_bfd}" ]; then
+    for _d in "${_bfd}"/*/; do
+        case "$(basename "${_d%/}")" in
+            16|32|48|96|256) ;;
+            *) rm -rf "${_d}" ;;
+        esac
+    done
+fi
 
 # ── Compile .po → .mo ─────────────────────────────────────────────────────
 if command -v msgfmt >/dev/null 2>&1; then

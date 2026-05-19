@@ -1,4 +1,6 @@
-# File __init__.py for NetNeighbor version 1.0.0
+# File __init__.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Desktop UI package — NetNeighbor 2.0 (PySide6)."""
 

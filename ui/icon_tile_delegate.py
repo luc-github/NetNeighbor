@@ -1,4 +1,6 @@
-# File icon_tile_delegate.py for NetNeighbor version 1.0.0
+# File icon_tile_delegate.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Delegate for icon-mode tiles: cached Qt text layout, no focus ring."""
 
@@ -14,7 +16,7 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate,
 )
 
-from ui_qt.icon_tile_label import (
+from ui.icon_tile_label import (
     ICON_TILE_DISPLAY_HEIGHTS_ROLE,
     ICON_TILE_DISPLAY_LINES_ROLE,
     ICON_TILE_LABEL_ROLE,

@@ -1,5 +1,5 @@
-# File neighbor_mac.py for NetNeighbor version 1.0.0
-# Internal version : 1.0.0 date: 2026-05-07 11:44
+# File neighbor_mac.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Resolve MAC from kernel neighbor caches (ARP / IPv6 ND) — no privileged probe.
@@ -22,6 +22,7 @@ _LOG = logging.getLogger(__name__)
 # Short-lived cache: list refresh / details may call many times in one frame.
 _NEIGH_FULL_CACHE: tuple[float, str | None] = (0.0, None)
 _ARP_TEXT_CACHE: tuple[float, str | None] = (0.0, None)
+_WIN_ARP_CACHE: tuple[float, str | None] = (0.0, None)
 
 _LLADDR_RE = re.compile(r"\blladdr\s+([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})\b")
 
@@ -137,13 +138,13 @@ def _run_ip_neigh(args: list[str]) -> str:
     return proc.stdout or ""
 
 
-def _mac_from_windows_arp(ipv4: str) -> str | None:
-    """Read ``arp -a`` on Windows (no extra packets; entry appears after LAN traffic)."""
-    if sys.platform != "win32":
-        return None
-    target = ipv4.strip()
-    if not target:
-        return None
+def _win_arp_table_cached() -> str:
+    """Run ``arp -a`` once and cache the result for 0.85 s (same TTL as Linux caches)."""
+    global _WIN_ARP_CACHE
+    now = _monotonic()
+    if _WIN_ARP_CACHE[1] is not None and now - _WIN_ARP_CACHE[0] < 0.85:
+        return _WIN_ARP_CACHE[1]
+    _cflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         proc = subprocess.run(
             ["arp", "-a"],
@@ -152,13 +153,24 @@ def _mac_from_windows_arp(ipv4: str) -> str | None:
             timeout=4,
             encoding="utf-8",
             errors="replace",
+            creationflags=_cflags,
         )
+        text = proc.stdout or "" if proc.returncode == 0 else ""
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
         _LOG.debug("arp -a failed: %s", e)
+        text = ""
+    _WIN_ARP_CACHE = (now, text)
+    return text
+
+
+def _mac_from_windows_arp(ipv4: str) -> str | None:
+    """Read ``arp -a`` on Windows (no extra packets; entry appears after LAN traffic)."""
+    if sys.platform != "win32":
         return None
-    if proc.returncode != 0:
+    target = ipv4.strip()
+    if not target:
         return None
-    for line in (proc.stdout or "").splitlines():
+    for line in _win_arp_table_cached().splitlines():
         parts = line.split()
         if len(parts) < 2:
             continue

@@ -1,4 +1,6 @@
-# File device_remote_icon.py for NetNeighbor version 1.0.0
+# File device_remote_icon.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Device-provided icon URLs and local cache index (shared GTK/Qt, no UI deps)."""
 
@@ -9,7 +11,6 @@ import ipaddress
 import json
 import os
 import ssl
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -20,9 +21,6 @@ from utils.device_bundles import DeviceBundle
 
 
 def _netneighbor_cache_dir() -> Path:
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-        return base / "netneighbor" / "cache"
     return Path.home() / ".cache" / "netneighbor"
 
 
@@ -367,6 +365,32 @@ def load_remote_icon_payload_bytes(cache_key: str) -> bytes | None:
     return None
 
 
+def _rmdir_contents(path: Path) -> None:
+    """Delete all files and subdirectories inside *path* (keep the directory itself)."""
+    import shutil
+    try:
+        if not path.is_dir():
+            return
+        for item in path.iterdir():
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                else:
+                    item.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def clear_all_app_data() -> None:
+    """Delete all files in ~/.cache/netneighbor and ~/.config/netneighbor."""
+    global _index_cache
+    _index_cache = None
+    _rmdir_contents(Path.home() / ".cache" / "netneighbor")
+    _rmdir_contents(Path.home() / ".config" / "netneighbor")
+
+
 def load_remote_icon_payload_for_device(device: Device) -> bytes | None:
     sip = str(device.ip).strip()
     row = _load_index().get(sip)
@@ -444,9 +468,13 @@ def urlopen_remote_icon(url: str):
             except ValueError:
                 pass
         if allow_insecure:
-            ctx = ssl.create_default_context()
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
+            try:
+                ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
+            except ssl.SSLError:
+                pass
     timeout = 4.5 if scheme == "https" else 2.0
     if ctx is not None:
         return urlopen(url, timeout=timeout, context=ctx)

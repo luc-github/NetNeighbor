@@ -5,6 +5,21 @@ keeping the project healthy between releases.
 
 ## Configuration paths
 
+> **All platforms** (Windows, Linux, macOS) use `~` = `Path.home()` as the base, so paths are
+> identical relative to the home directory. On Windows `~` resolves to `C:\Users\<name>`.
+>
+> **Windows path consistency (fixed in 2.0)** — an earlier version of `utils/device_remote_icon.py`
+> computed the icon cache base as `%LOCALAPPDATA%\netneighbor\cache\` on Windows, while
+> `utils/app_logging.py` and `utils/discovery_cache.py` both used `Path.home() / ".cache" /
+> "netneighbor"`. This caused icon payload files and the index to land in
+> `C:\Users\<name>\AppData\Local\netneighbor\cache\remote_icons\` instead of
+> `C:\Users\<name>\.cache\netneighbor\remote_icons\` like everything else.
+> The fix was to remove the `sys.platform == "win32"` branch from `_netneighbor_cache_dir()` in
+> `device_remote_icon.py` so all three modules resolve to the same `~/.cache/netneighbor/` base.
+> Users who ran the old version on Windows may have orphaned files in
+> `%LOCALAPPDATA%\netneighbor\cache\` — those can be deleted; the app will re-fetch icons into the
+> correct location automatically.
+
 | Path | Content |
 |------|---------|
 | `~/.config/netneighbor/ui_prefs.json` | UI state + per-device overrides + rules (not a full device DB). Tray-related booleans include **`close_to_tray`** (default true), **`start_minimized_to_tray`**, **`start_at_login`** (writes XDG autostart when enabled). **`custom_command_template`** (**Tools → External applications**) for **Run custom command**; **`connect_command_templates`** overrides **Open** per URL scheme; **`device_commands`** stores per-device connection command lists from the **Options** tab (see [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md)). |
@@ -12,7 +27,7 @@ keeping the project healthy between releases.
 | `~/.cache/netneighbor/discovery-cache.json` | Volatile discovery cache (`last_seen_overrides`, monitored snapshots metadata, SSDP XML/profile cache). Safe to delete; app rebuilds it. |
 | `~/.config/netneighbor/logging.json` | Per-area log levels (`default`, `app`, `ssdp`, `mdns`). Created with defaults on first run if missing. |
 | `~/.cache/netneighbor/netneighbor.log` | Log file when file logging is enabled (see `app.py`). |
-| `~/.cache/netneighbor/remote_icons/` | On-disk cache for **device-provided** icons fetched from SSDP/mDNS URLs (normalized). Primary file per URL: **`{SHA256(url)}.payload`** raw HTTP body (decoded with GdkPixbuf on load — avoids flaky `savev`). The digest uses a **canonical URL** after rewriting typical LAN hosts (`*.local`, `*.lan`, single-label names) to the **device IP** (stable fetch + hash), then normalizing (lowercased scheme/host, trailing FQDN dot stripped, **default HTTP/HTTPS ports omitted**). Disk lookup also tries **legacy explicit `:80` / `:443`** variants so filenames from older canonicalization rules still resolve. A second lookup tries the **canonical raw URL** (pre-IP rewrite) for older payloads. **HTTPS** to `*.local` / `*.lan` or **RFC1918** hosts uses a relaxed TLS verify context (typical self-signed printer certs). Legacy **`.png`** files from older releases are still read if present. Clearing the folder forces a fresh download; if icons look wrong after a firmware change, clear **`remote_icon_index.json`** (see next row) as well. |
+| `~/.cache/netneighbor/remote_icons/` | On-disk cache for **device-provided** icons fetched from SSDP/mDNS URLs (normalized). Primary file per URL: **`{SHA256(url)}.payload`** raw HTTP body (decoded with GdkPixbuf on load — avoids flaky `savev`). The digest uses a **canonical URL** after rewriting typical LAN hosts (`*.local`, `*.lan`, single-label names) to the **device IP** (stable fetch + hash), then normalizing (lowercased scheme/host, trailing FQDN dot stripped, **default HTTP/HTTPS ports omitted**). Disk lookup also tries **legacy explicit `:80` / `:443`** variants so filenames from older canonicalization rules still resolve. A second lookup tries the **canonical raw URL** (pre-IP rewrite) for older payloads. **HTTPS** to `*.local` / `*.lan` or **RFC1918** hosts uses a relaxed TLS context: certificate verification is disabled (self-signed printer certs) **and** `SECLEVEL=0` is set to allow legacy cipher suites and short keys that older embedded firmware (HP, Canon, Lexmark…) may require. Standard public HTTPS URLs go through the system default SSL context with full verification. Legacy **`.png`** files from older releases are still read if present. Clearing the folder forces a fresh download; if icons look wrong after a firmware change, clear **`remote_icon_index.json`** (see next row) as well. |
 | `~/.cache/netneighbor/remote_icon_index.json` | **Host → icon cache index** (version 2 JSON): per **IPv4/IPv6 key** stores **`canonical_url`**, **`payload_sha256`** (same stem as **`remote_icons/{sha256}.payload`**), and **`updated_at`**. Lets the UI load the correct cached icon **on cold start** without waiting for every mDNS TXT variant. Delete this file to drop remembered host→URL mappings (payload files remain until removed manually). |
 | `~/.config/netneighbor/discovery.json` | Discovery toggles + startup refresh schedule. Top-level **`mdns`** / **`ssdp`** with **`enabled`**, **`rules`**, optional **`query`**: SSDP **`interval_seconds`** (periodic M-SEARCH cadence, default 60), **`mx_seconds`** (M-SEARCH **MX** max wait, clamped **5–6**, default 5), **`descriptor_http_min_interval_seconds`** (minimum gap between HTTP GETs for descriptor URLs whose **host is the same IP** (or same hostname if not numeric); avoids duplicate fetches when anticipatory XML and SSDP LOCATION arrive close together; **0** disables; default **5**, max **120**); mDNS **`enumeration_timeout_seconds`** (DNS-SD type scan, **2–3** s, default 2.5), **`enumeration_interval_seconds`** (repeat scan, default 240), **`service_info_timeout_ms`** (`get_service_info`, **2000–3000** ms, default 2500). **`merge.protocol_order`**: ordered protocol **`source`** ids (default **`ssdp`**, **`mdns`**) — earlier = stronger for live-row tie-breaks. **`merge.information_precedence`**: ordered roles (**`user_override`**, **`ssdp_live`**, **`ssdp_profile_cache`**, **`mdns`**) — must list all four exactly once to customize; defaults favour user prefs, then live SSDP, then disk-cache hints on mDNS, then raw mDNS (see `utils/discovery_config.py`). **`startup_refresh_seconds`** at root (comma-separated string or JSON array). |
 
@@ -26,11 +41,39 @@ keeping the project healthy between releases.
 
 ## Systray, window chrome, fullscreen
 
-- **Tray**: `ui/tray_indicator.py` — prefers Ayatana **AppIndicator** (`gir1.2-ayatanaappindicator3-0.1`) or legacy **AppIndicator3** (`gir1.2-appindicator3-0.1`), else **Gtk.StatusIcon**. Tray menu: **Open** / **Minimize to tray** (sensitive while the window is visible) / **Quit**. Without any of these backends, **close-to-tray** cannot hide to the panel; the window still closes normally.
-- **Icons**: canonical vector logo — **`assets/svg/netneighbor.svg`**. Theme resolution uses **`assets/icons/`** as an extra icon search path; **`hicolor/scalable/apps/`** contains symlinks **`io.esp3d.netneighbor.svg`** and **`io.esp3d.netneighbor-tray.svg`** pointing at that file (so GTK finds app + tray names). Installed `.deb` copies the SVG into `/usr/share/icons/hicolor/scalable/apps/` under both names.
-- **Close-to-tray + tray available**: main window uses a **Gtk.HeaderBar** with **Maximize** and **Close** only (explicit minimize lives on the tray menu). **CLI** **`--start-minimized-to-tray`** and first-run flow can skip stealing focus until the user opens from the tray (`app.py` → `MainWindow`). **F11** toggles fullscreen (useful for the icon grid); implemented via a window **Gtk.AccelGroup** in `ui/main_window.py`.
-- **`utils/gtk_dialog.py`**: **`prepare_gtk_dialog`** disables CSD/header-bar dialogs that lose WM title bars on some compositors/window managers (used by main window, details, list, and related dialogs).
-- **Open on PCs**: **Open** / double-click uses **`resolve_connect_target`** — **HTTP(S)** first, then **SMB** / **FTP** / **SSH** / **Telnet** from merged mDNS or explicit device URLs; type **`computer`** with no other target opens **`smb://`** toward the host IP (file manager). The resulting URI is opened via **`launch_connect_for_uri`** (`utils/connect_launcher.py`) — empty per-scheme template in **Tools → External applications…** keeps the system default. If no target exists, **Open** is inactive.
+- **Tray**: `ui/systray.py` — `NetNeighborTray(QSystemTrayIcon)`. Tray menu: **Show window** / **Hide window** / **Quit**. Left-click toggles window visibility. Created in `app_qt.py` when `QSystemTrayIcon.isSystemTrayAvailable()`. On Linux this requires a desktop environment with a system tray (most include one).
+- **Icons**: canonical vector logo — **`assets/svg/netneighbor_icon.svg`**. The installed `.deb` copies the SVG into `/usr/share/icons/hicolor/scalable/apps/` as `io.esp3d.netneighbor.svg`, and the tray SVG as `io.esp3d.netneighbor-tray.svg`.
+- **Close-to-tray**: `closeEvent` in `ui/main_window.py` calls `event.ignore()` + `self.hide()` when `close_to_tray` pref is `True` and a tray is available; otherwise normal close.
+- **Minimize to tray**: `changeEvent` intercepts `WindowStateChange` + `isMinimized()`; schedules `self.hide()` via `QTimer.singleShot(0, …)`.
+- **CLI `--start-minimized-to-tray`**: when set and tray is available, `window.show()` is skipped so the app starts invisible.
+- **F11 fullscreen**: handled via `keyPressEvent` in `ui/main_window.py`.
+- **Open on PCs**: **Open** / double-click uses `resolve_connect_target` — **HTTP(S)** first, then **SMB** / **FTP** / **SSH** / **SFTP** / **Telnet** from merged mDNS or explicit device URLs; type `computer` with no other target opens `smb://` toward the host IP. The resulting URI is opened via `launch_connect_for_uri` (`utils/connect_launcher.py`) — empty per-scheme template in **View → Preferences… → Applications** keeps the system default. If no target exists, **Open** is inactive.
+
+## Bundled device icons (bundled-freedesktop)
+
+`assets/icons/bundled-freedesktop/` contains PNG fallback icons for ~1 000
+[freedesktop.org](https://specifications.freedesktop.org/icon-naming-spec/icon-naming-spec-latest.html)
+icon names, supplied at multiple pixel resolutions. The source tree retains **all**
+resolutions (~151 MB total) for archival — they are available for future UI changes or
+higher-DPI presets without requiring a new source checkout.
+
+Packages ship only the **5 sizes** actually used by the Qt icon-view presets:
+
+| Folder | UI preset | HiDPI equivalent |
+|--------|-----------|-----------------|
+| `16/` | Small (16 px) | — |
+| `32/` | Medium (32 px) | Small @2× |
+| `48/` | Large (48 px) | Medium @2× |
+| `96/` | Extra large (96 px) | Large @2× |
+| `256/` | — | high-DPI launcher / app icon |
+
+All other resolution directories (24, 64, 128, …) are stripped during the packaging
+build step (`packaging/linux/build_*.sh`, `packaging/windows/build.ps1`), saving
+~143 MB per artifact.
+
+`bundled_freedesktop_png_side_sizes()` in `ui/icons.py` discovers the available sizes
+dynamically at runtime by scanning for `{N}x{N}` subdirectories, so trimming the
+directory has no effect on the runtime code path — it simply resolves to a smaller set.
 
 ## Common tasks
 

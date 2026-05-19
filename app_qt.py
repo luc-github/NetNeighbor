@@ -1,4 +1,6 @@
-# File app_qt.py for NetNeighbor version 1.0.0
+# File app_qt.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Application bootstrap — NetNeighbor 2.0 (PySide6)."""
 
@@ -65,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     from i18n import setup_i18n
     from model.device import Device
     from ui.icons import resolve_app_icon_paths_in_order
-    from ui_qt import MainThreadScheduler, NetNeighborMainWindow, NetNeighborTray
+    from ui import MainThreadScheduler, NetNeighborMainWindow, NetNeighborTray
     from utils.app_logging import setup_logging
     from utils.discovery_config import discovery_manager_kwargs, load_discovery_protocol_config
     from utils.qt_single_instance import create_activation_listener, send_activate_to_primary
@@ -93,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         _log.debug("Qt base translator not found for %s (standard buttons stay in English)", _qt_locale.name())
     if not args.qt_native_style:
         from PySide6.QtCore import Qt
-        from ui_qt.app_theme import setup_fusion_theme
+        from ui.app_theme import setup_fusion_theme
         app.setStyle("Fusion")
         if args.theme_dark:
             forced: Qt.ColorScheme | None = Qt.ColorScheme.Dark
@@ -166,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         window.show()
 
     if os.environ.get("NETNEIGHBOR_DEBUG_TOPLEVEL"):
-        from ui_qt.main_window import _debug_log_extra_top_level_widgets
+        from ui.main_window import _debug_log_extra_top_level_widgets
 
         QTimer.singleShot(2500, lambda: _debug_log_extra_top_level_widgets("idle 2.5s after show"))
 

@@ -1,4 +1,8 @@
-# UI architecture (GTK 3)
+> **ARCHIVED — GTK 1.x only.** This document describes the original GTK 3 / PyGObject UI layer
+> (NetNeighbor ≤ 1.x). The current UI is PySide6/Qt — see [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md)
+> and [`ROADMAP_QT_2_0.md`](ROADMAP_QT_2_0.md) for the 2.0 architecture.
+
+# UI architecture (GTK 3, archived)
 
 ## Goals and choices
 

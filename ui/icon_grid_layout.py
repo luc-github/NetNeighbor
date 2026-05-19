@@ -1,4 +1,6 @@
-# File icon_grid_layout.py for NetNeighbor version 1.0.0
+# File icon_grid_layout.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Adaptive cell sizing for icon-mode ``QListWidget`` grids (flat + grouped sections)."""
 
@@ -11,7 +13,7 @@ from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QFont, QFontMetrics, QIcon
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
 
-from ui_qt.icon_tile_label import (
+from ui.icon_tile_label import (
     ICON_TILE_LABEL_ROLE,
     LONG_NAME_WRAP_MIN_WIDTH_FACTOR,
     MIN_LINES_BEFORE_ELLIPSIS,

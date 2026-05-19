@@ -1,4 +1,6 @@
-# File remote_icon_cache.py for NetNeighbor version 1.0.0
+# File remote_icon_cache.py for NetNeighbor version 2.0.0
+# Internal version : 2.0.0 date: 2026-05-19 00:00
+# Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """In-memory Qt pixmaps for device-provided icons (HTTP fetch + GTK-compatible disk cache)."""
 
@@ -8,7 +10,7 @@ import logging
 import threading
 from collections.abc import Callable
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QPainter, QPixmap
 
 from model.device import Device
@@ -23,7 +25,7 @@ from utils.device_remote_icon import (
 )
 from utils.icon_view_prefs import DEVICE_ICON_REFERENCE_PX
 
-_LOG = logging.getLogger("ui_qt.remote_icon")
+_LOG = logging.getLogger("ui.remote_icon")
 
 
 def _is_svg_payload(data: bytes) -> bool:
@@ -173,16 +175,54 @@ class QtRemoteIconCache(QObject):
     """Load SSDP/mDNS device icons from disk cache or background HTTP."""
 
     icons_ready = Signal()
+    _fetch_result = Signal(object)  # dict: cache_key, payload, sip, disk_keys
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._bytes_by_key: dict[str, bytes] = {}
         self._bytes_by_host: dict[str, bytes] = {}
         self._fetching: set[str] = set()
+        self._failed: set[str] = set()
+        self._fetch_result.connect(self._handle_fetch_result)
 
     def clear(self) -> None:
         self._bytes_by_key.clear()
         self._bytes_by_host.clear()
+        self._failed.clear()
+
+    def fetch_status_for_device(self, device: Device) -> str:
+        """Return 'ready', 'fetching', 'failed', or 'missing'."""
+        sip = str(device.ip).strip()
+        if sip and sip in self._bytes_by_host:
+            return "ready"
+        for key in iter_remote_icon_disk_keys(device):
+            if key in self._bytes_by_key:
+                return "ready"
+        if load_remote_icon_payload_for_device(device):
+            return "ready"
+        pair = primary_fetch_pair_for_device(device)
+        if pair is None:
+            return "missing"
+        _, cache_key = pair
+        if cache_key in self._fetching:
+            return "fetching"
+        if cache_key in self._failed:
+            return "failed"
+        return "missing"
+
+    def trigger_fetch_for_device(self, device: Device) -> None:
+        """Start (or retry after failure) a background fetch for this device's icon."""
+        pair = primary_fetch_pair_for_device(device)
+        if pair is None:
+            _LOG.warning("trigger_fetch: no URL for device ip=%s source=%s", device.ip, device.source)
+            return
+        fetch_url, cache_key = pair
+        if cache_key in self._fetching:
+            _LOG.warning("trigger_fetch: already fetching key=%s url=%s", cache_key, fetch_url)
+            return
+        _LOG.warning("trigger_fetch: starting fetch url=%s key=%s", fetch_url, cache_key)
+        self._failed.discard(cache_key)
+        self._start_fetch(fetch_url, cache_key, device, None)
 
     def icon_for_bundle_device(
         self,
@@ -255,6 +295,8 @@ class QtRemoteIconCache(QObject):
         fetch_url, cache_key = pair
         if cache_key in self._fetching:
             return None
+        if cache_key in self._failed:
+            return None
         self._start_fetch(fetch_url, cache_key, device, on_fetch_started)
         return None
 
@@ -287,22 +329,43 @@ class QtRemoteIconCache(QObject):
 
         def _worker() -> None:
             payload: bytes | None = None
+            _LOG.warning("icon fetch thread started url=%s", fetch_url)
             try:
                 with urlopen_remote_icon(fetch_url) as response:
                     payload = response.read()
                 if payload:
+                    _LOG.warning("icon fetch OK url=%s bytes=%d", fetch_url, len(payload))
                     save_remote_icon_payload(cache_key, payload)
+                else:
+                    _LOG.warning("icon fetch returned empty payload url=%s", fetch_url)
             except Exception as exc:
-                _LOG.debug("Remote icon fetch failed url=%s: %s", fetch_url, exc)
+                _LOG.warning("icon fetch FAILED url=%s: %s", fetch_url, exc)
 
-            def _done() -> None:
-                self._fetching.discard(cache_key)
-                if payload:
-                    self._register_bytes(device, payload, disk_keys)
-                    if sip:
-                        persist_remote_icon_index_entry(sip, cache_key)
-                    self.icons_ready.emit()
-
-            QTimer.singleShot(0, _done)
+            _LOG.warning("icon fetch emitting _fetch_result for key=%s success=%s", cache_key, bool(payload))
+            self._fetch_result.emit({
+                "cache_key": cache_key,
+                "payload": payload or b"",
+                "sip": sip,
+                "disk_keys": disk_keys,
+            })
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _handle_fetch_result(self, result: dict) -> None:
+        cache_key = result["cache_key"]
+        payload = result["payload"]
+        sip = result["sip"]
+        disk_keys = result["disk_keys"]
+        self._fetching.discard(cache_key)
+        if payload:
+            if sip:
+                self._bytes_by_host[sip] = payload
+            for key in disk_keys:
+                self._bytes_by_key[key] = payload
+            self._bytes_by_key.setdefault(cache_key, payload)
+            if sip:
+                persist_remote_icon_index_entry(sip, cache_key)
+        else:
+            self._failed.add(cache_key)
+        _LOG.warning("icon _handle_fetch_result: success=%s key=%s", bool(payload), cache_key)
+        self.icons_ready.emit()
