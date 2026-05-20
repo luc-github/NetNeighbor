@@ -413,6 +413,18 @@ class DiscoveryManager:
                 return
         except ValueError:
             pass
+        # WSD/WSDD devices without a resolvable MAC are suppressed: they cannot be
+        # merged with the IPv4 entry for the same host and would appear as a duplicate.
+        # Offline events are still processed so a previously stored device can go offline.
+        if device.source in {"wsd", "wsdd"} and device.online:
+            if not self._mac_for_device_identity(device):
+                self._device_event_logger(device.source).debug(
+                    "Suppressing WSD/WSDD device without MAC: ip=%s name=%s",
+                    device.ip,
+                    device.name,
+                )
+                return
+
         if self._should_hold_for_stable_identity(device):
             return
 

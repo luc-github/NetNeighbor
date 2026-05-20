@@ -23,6 +23,7 @@ _LOG = logging.getLogger(__name__)
 _NEIGH_FULL_CACHE: tuple[float, str | None] = (0.0, None)
 _ARP_TEXT_CACHE: tuple[float, str | None] = (0.0, None)
 _WIN_ARP_CACHE: tuple[float, str | None] = (0.0, None)
+_WIN_IPV6_NEIGH_CACHE: tuple[float, str | None] = (0.0, None)
 
 _LLADDR_RE = re.compile(r"\blladdr\s+([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})\b")
 
@@ -163,6 +164,58 @@ def _win_arp_table_cached() -> str:
     return text
 
 
+def _win_ipv6_neigh_cached() -> str:
+    global _WIN_IPV6_NEIGH_CACHE
+    now = _monotonic()
+    if _WIN_IPV6_NEIGH_CACHE[1] is not None and now - _WIN_IPV6_NEIGH_CACHE[0] < 0.85:
+        return _WIN_IPV6_NEIGH_CACHE[1]
+    _cflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        proc = subprocess.run(
+            ["netsh", "interface", "ipv6", "show", "neighbors"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=_cflags,
+        )
+        text = proc.stdout or "" if proc.returncode == 0 else ""
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
+        _LOG.debug("netsh ipv6 neigh failed: %s", e)
+        text = ""
+    _WIN_IPV6_NEIGH_CACHE = (now, text)
+    return text
+
+
+def _mac_from_windows_ipv6_neigh(ipv6_raw: str) -> str | None:
+    """Resolve MAC for an IPv6 address from ``netsh interface ipv6 show neighbors``."""
+    text = _win_ipv6_neigh_cached()
+    if not text:
+        return None
+    want_base = ipv6_raw.split("%", 1)[0].strip()
+    try:
+        want_addr = ipaddress.ip_address(want_base)
+    except ValueError:
+        return None
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        col_ip = parts[0].split("%", 1)[0].strip()
+        try:
+            col_addr = ipaddress.ip_address(col_ip)
+        except ValueError:
+            continue
+        if col_addr != want_addr:
+            continue
+        for col in parts[1:]:
+            m = _norm_mac(col)
+            if m and m != "00:00:00:00:00:00":
+                return m
+    return None
+
+
 def _mac_from_windows_arp(ipv4: str) -> str | None:
     """Read ``arp -a`` on Windows (no extra packets; entry appears after LAN traffic)."""
     if sys.platform != "win32":
@@ -189,8 +242,12 @@ def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
     if sys.platform == "win32":
         try:
             base = str(ip_raw).strip().split("%", 1)[0].strip()
-            if base and isinstance(ipaddress.ip_address(base), ipaddress.IPv4Address):
+            if not base:
+                return None
+            parsed = ipaddress.ip_address(base)
+            if isinstance(parsed, ipaddress.IPv4Address):
                 return _mac_from_windows_arp(base)
+            return _mac_from_windows_ipv6_neigh(str(ip_raw).strip())
         except ValueError:
             pass
         return None
