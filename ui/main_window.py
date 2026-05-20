@@ -61,7 +61,6 @@ from ui.device_details_dialog import DeviceCommandSettings, DeviceIconSettings, 
 from ui.icon_picker_dialog import pick_device_icon_id
 from ui.icon_tile_delegate import IconTileItemDelegate
 from ui.no_focus_item_delegate import NoFocusItemDelegate
-from utils.app_version import get_app_version
 from utils.details_payload import format_device_type_for_details
 from utils.device_bundles import (
     DeviceBundle,
@@ -449,8 +448,7 @@ class NetNeighborMainWindow(QMainWindow):
         self._remote_icon_cache.icons_ready.connect(self._on_remote_icons_ready)
         self._remote_icon_cache.prefetch_from_index()
 
-        ver = get_app_version()
-        self.setWindowTitle(_("NetNeighbor {}").format(ver))
+        self.setWindowTitle(_("NetNeighbor"))
 
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
 
