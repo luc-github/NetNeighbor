@@ -105,9 +105,9 @@ find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) -
 # installed explicitly to /usr/share/icons/hicolor/ by the lines below.
 rm -rf "${APP_ROOT}/assets/icons/hicolor"
 
-# Trim bundled-freedesktop to only the resolutions needed by the Qt UI (saves ~143 MB).
+# Trim netneighbor icon set to only the resolutions needed by the Qt UI (saves ~143 MB).
 # Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
-_bfd="${APP_ROOT}/assets/icons/bundled-freedesktop"
+_bfd="${APP_ROOT}/assets/icons/netneighbor"
 if [ -d "${_bfd}" ]; then
     for _d in "${_bfd}"/*/; do
         case "$(basename "${_d%/}")" in

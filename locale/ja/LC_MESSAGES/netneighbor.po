@@ -931,254 +931,95 @@ msgstr "ESP3D デバイス"
 msgid "Unknown Devices"
 msgstr "不明なデバイス"
 
-#~ msgid "Icon"
-#~ msgstr "アイコン"
 
-#~ msgid "Invalid command template for this protocol."
-#~ msgstr "このプロトコルのコマンドテンプレートが無効です。"
 
 #, python-brace-format
-#~ msgid "{text} {deprecated_message}"
-#~ msgstr "{text} {deprecated_message}"
 
 #, python-brace-format
-#~ msgid "Got unexpected extra argument ({args})"
-#~ msgid_plural "Got unexpected extra arguments ({args})"
-#~ msgstr[0] "予期しない追加の引数を受け取りました ({args})"
-#~ msgstr[1] "予期しない追加の引数を受け取りました ({args})"
 
-#~ msgid "DeprecationWarning: The command {name!r} is deprecated.{extra_message}"
-#~ msgstr "DeprecationWarning: コマンド {name!r} は廃止予定です。{extra_message}"
 
-#~ msgid "Aborted!"
-#~ msgstr "中止されました!"
 
-#~ msgid "Commands"
-#~ msgstr "コマンド"
 
-#~ msgid "Missing command."
-#~ msgstr "コマンドがありません。"
 
-#~ msgid "No such command {name!r}."
-#~ msgstr "そのようなコマンド {name!r} はありません。"
 
-#~ msgid "Value must be an iterable."
-#~ msgstr "値は反復可能である必要があります。"
 
 #, python-brace-format
-#~ msgid "Takes {nargs} values but 1 was given."
-#~ msgid_plural "Takes {nargs} values but {len} were given."
-#~ msgstr[0] "{nargs} 個の値が必要ですが、1 個が指定されました。"
-#~ msgstr[1] "{nargs} 個の値が必要ですが、{len} 個が指定されました。"
 
-#~ msgid ""
-#~ "DeprecationWarning: The {param_type} {name!r} is deprecated.{extra_message}"
-#~ msgstr "DeprecationWarning: {param_type} {name!r} は廃止予定です。{extra_message}"
 
 #, python-brace-format
-#~ msgid "env var: {var}"
-#~ msgstr "環境変数: {var}"
 
 #, python-brace-format
-#~ msgid "default: {default}"
-#~ msgstr "デフォルト: {default}"
 
-#~ msgid "(dynamic)"
-#~ msgstr "(動的)"
 
 #, python-format
-#~ msgid "%(prog)s, version %(version)s"
-#~ msgstr "%(prog)s, バージョン %(version)s"
 
-#~ msgid "Show the version and exit."
-#~ msgstr "バージョン情報を表示して終了します。"
 
-#~ msgid "Show this message and exit."
-#~ msgstr "このメッセージを表示して終了します。"
 
 #, python-brace-format
-#~ msgid "Error: {message}"
-#~ msgstr "エラー: {message}"
 
 #, python-brace-format
-#~ msgid "Try '{command} {option}' for help."
-#~ msgstr "ヘルプについては '{command} {option}' を試してください。"
 
 #, python-brace-format
-#~ msgid "Invalid value: {message}"
-#~ msgstr "無効な値: {message}"
 
 #, python-brace-format
-#~ msgid "Invalid value for {param_hint}: {message}"
-#~ msgstr "{param_hint} の無効な値: {message}"
 
-#~ msgid "Missing argument"
-#~ msgstr "引数がありません"
 
-#~ msgid "Missing option"
-#~ msgstr "オプションがありません"
 
-#~ msgid "Missing parameter"
-#~ msgstr "パラメータがありません"
 
 #, python-brace-format
-#~ msgid "Missing {param_type}"
-#~ msgstr "{param_type} がありません"
 
 #, python-brace-format
-#~ msgid "Missing parameter: {param_name}"
-#~ msgstr "パラメータがありません: {param_name}"
 
 #, python-brace-format
-#~ msgid "No such option: {name}"
-#~ msgstr "そのようなオプションはありません: {name}"
 
 #, python-brace-format
-#~ msgid "Did you mean {possibility}?"
-#~ msgid_plural "(Possible options: {possibilities})"
-#~ msgstr[0] "{possibility} のことですか?"
-#~ msgstr[1] "(考えられるオプション: {possibilities})"
 
-#~ msgid "unknown error"
-#~ msgstr "不明なエラー"
 
-#~ msgid "Could not open file {filename!r}: {message}"
-#~ msgstr "ファイル {filename!r} を開くことができませんでした: {message}"
 
-#~ msgid "Argument {name!r} takes {nargs} values."
-#~ msgstr "引数 {name!r} は {nargs} 個の値を取ります。"
 
-#~ msgid "Option {name!r} does not take a value."
-#~ msgstr "オプション {name!r} は値を取りません。"
 
-#~ msgid "Option {name!r} requires an argument."
-#~ msgid_plural "Option {name!r} requires {nargs} arguments."
-#~ msgstr[0] "オプション {name!r} には引数が必要です。"
-#~ msgstr[1] "オプション {name!r} には {nargs} 個の引数が必要です。"
 
-#~ msgid "Shell completion is not supported for Bash versions older than 4.4."
-#~ msgstr "Bash 4.4 より前のバージョンでは、シェル補完はサポートされていません。"
 
-#~ msgid "Couldn't detect Bash version, shell completion is not supported."
-#~ msgstr "Bash バージョンを検出できませんでした。シェル補完はサポートされていません。"
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed"
-#~ msgstr "{editor}: 編集に失敗しました"
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed: {e}"
-#~ msgstr "{editor}: 編集に失敗しました: {e}"
 
-#~ msgid "Repeat for confirmation"
-#~ msgstr "確認のため繰り返してください"
 
-#~ msgid "Error: The value you entered was invalid."
-#~ msgstr "エラー: 入力した値は無効です。"
 
 #, python-brace-format
-#~ msgid "Error: {e.message}"
-#~ msgstr "エラー: {e.message}"
 
-#~ msgid "Error: The two entered values do not match."
-#~ msgstr "エラー: 入力された2つの値が一致しません。"
 
-#~ msgid "Error: invalid input"
-#~ msgstr "エラー: 無効な入力"
 
-#~ msgid "Press any key to continue..."
-#~ msgstr "任意のキーを押して続行してください..."
 
 #, python-brace-format
-#~ msgid ""
-#~ "Choose from:\n"
-#~ "\t{choices}"
-#~ msgstr ""
-#~ "選択してください:\n"
-#~ "\t{choices}"
 
-#~ msgid "{value!r} is not {choice}."
-#~ msgid_plural "{value!r} is not one of {choices}."
-#~ msgstr[0] "{value!r} は {choice} ではありません。"
-#~ msgstr[1] "{value!r} は {choices} のいずれでもありません。"
 
-#~ msgid "{value!r} does not match the format {format}."
-#~ msgid_plural "{value!r} does not match the formats {formats}."
-#~ msgstr[0] "{value!r} は形式 {format} と一致しません。"
-#~ msgstr[1] "{value!r} は形式 {formats} のいずれとも一致しません。"
 
-#~ msgid "{value!r} is not a valid {number_type}."
-#~ msgstr "{value!r} は有効な {number_type} ではありません。"
 
 #, python-brace-format
-#~ msgid "{value} is not in the range {range}."
-#~ msgstr "{value} は範囲 {range} 内にありません。"
 
-#~ msgid "{value!r} is not a valid boolean. Recognized values: {states}"
-#~ msgstr "{value!r} は有効なブール値ではありません。認識される値: {states}"
 
-#~ msgid "{value!r} is not a valid UUID."
-#~ msgstr "{value!r} は有効なUUIDではありません。"
 
-#~ msgid "file"
-#~ msgstr "ファイル"
 
-#~ msgid "directory"
-#~ msgstr "ディレクトリ"
 
-#~ msgid "path"
-#~ msgstr "パス"
 
-#~ msgid "{name} {filename!r} does not exist."
-#~ msgstr "{name} {filename!r} は存在しません。"
 
-#~ msgid "{name} {filename!r} is a file."
-#~ msgstr "{name} {filename!r} はファイルです。"
 
-#~ msgid "{name} {filename!r} is a directory."
-#~ msgstr "{name} {filename!r} はディレクトリです。"
 
-#~ msgid "{name} {filename!r} is not readable."
-#~ msgstr "{name} {filename!r} は読み取り可能ではありません。"
 
-#~ msgid "{name} {filename!r} is not writable."
-#~ msgstr "{name} {filename!r} は書き込み可能ではありません。"
 
-#~ msgid "{name} {filename!r} is not executable."
-#~ msgstr "{name} {filename!r} は実行可能ではありません。"
 
 #, python-brace-format
-#~ msgid "{len_type} values are required, but {len_value} was given."
-#~ msgid_plural "{len_type} values are required, but {len_value} were given."
-#~ msgstr[0] "{len_type} 個の値が必要ですが、{len_value} 個が指定されました。"
-#~ msgstr[1] "{len_type} 個の値が必要ですが、{len_value} 個が指定されました。"
 
-#~ msgid "Custom connections"
-#~ msgstr "カスタム接続"
 
-#~ msgid "Port:"
-#~ msgstr "ポート:"
 
 #, python-brace-format
-#~ msgid "Placeholders: {ip} {port} {name} {type} {category} {url}"
-#~ msgstr "プレースホルダー: {ip} {port} {name} {type} {category} {url}"
 
 #, python-brace-format
-#~ msgid "Connect to {label}"
-#~ msgstr "{label} に接続"
 
 #, python-brace-format
-#~ msgid ""
-#~ "Open / double-click: optional handler per URL scheme. Leave empty to use the"
-#~ " system default (browser, file manager, etc.). Example: xdg-open {url} or "
-#~ "dolphin {url}"
-#~ msgstr ""
-#~ "開く / ダブルクリック: "
-#~ "URLスキームごとのオプションハンドラー。空白のままにするとシステムデフォルト（ブラウザ、ファイルマネージャーなど）を使用します。例: xdg-open"
-#~ " {url} または dolphin {url}"
 
-#~ msgid "Command:"
-#~ msgstr "コマンド:"
 
 #: ui/
 msgid "About NetNeighbor"
@@ -1350,13 +1191,6 @@ msgstr "デバイスがありません"
 msgid "No hidden devices"
 msgstr "非表示デバイスなし"
 
-#: ui/
-msgid ""
-"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
-"config/netneighbor/custom_icons/."
-msgstr ""
-"アイコンが見つかりません。assets/icons/bundled-freedesktop または ~/.config/netneighbo"
-"r/custom_icons/ に PNG を追加してください。"
 
 #: ui/
 msgid ""
@@ -1526,3 +1360,34 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "リセット完了 — 再起動してください"
+#: ui/
+msgid "App icon pack"
+msgstr ""
+
+#: ui/
+msgid "Download failed"
+msgstr ""
+
+#: ui/
+msgid "Downloading…"
+msgstr ""
+
+#: ui/
+msgid "Icon pack"
+msgstr "アイコンパック"
+
+#: ui/
+msgid "NetNeighbor (built-in)"
+msgstr "NetNeighbor (組み込み)"
+
+#: ui/
+msgid ""
+"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
+"etneighbor/custom_icons/."
+msgstr ""
+"アイコンが見つかりません。assets/icons/netneighbor または ~/.config/netneighbor/custom"
+"_icons/ に PNG を追加してください。"
+
+#: ui/
+msgid "Open folder…"
+msgstr "フォルダを開く…"

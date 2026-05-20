@@ -82,7 +82,7 @@ Objectif : le cœur discovery peut tourner et être testé **sans** boucle GLib,
 - [x] Vue **liste** (colonnes triables) équivalente au `Gtk.TreeView` actuel.
 - [x] Vue **icônes** / sections groupées (type ou emplacement) équivalente à la grille + sidebar.
 - [x] Menus contextuels : Open (sous-menus), Details, Options, Monitor/Unfollow, Rename, Location, Device type, Hide device, Run custom command.
-- [x] Icônes appareils : assets bundled-freedesktop + cache remote ; intégration `QIcon` / pixmaps via `ui/`.
+- [x] Icônes appareils : assets netneighbor + cache remote ; intégration `QIcon` / pixmaps via `ui/`.
 
 ---
 

@@ -357,11 +357,11 @@ be validated without a macOS test machine.
   - PyInstaller `hiddenimports` updated: added `PySide6.QtNetwork`, `PySide6.QtSvg`.
   - `.deb` description updated (GTK → Qt/PySide6).
 
-### I-1b bundled-freedesktop icon trimming in packages ✅
+### I-1b netneighbor icon trimming in packages ✅
 
 - **Files:** `packaging/linux/build_deb.sh`, `packaging/linux/build_tarball.sh`,
   `packaging/linux/build_appimage.sh`, `packaging/windows/build.ps1`
-- **Change:** The `assets/icons/bundled-freedesktop/` directory contains ~151 MB across
+- **Change:** The `assets/icons/netneighbor/` directory contains ~151 MB across
   10 resolution subdirectories. Source tree retains all resolutions for archival.
   All four packaging scripts now trim the directory to the 5 sizes actually used by
   the Qt UI (16, 32, 48, 96, 256), saving ~143 MB per package artifact.

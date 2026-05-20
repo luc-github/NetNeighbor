@@ -159,6 +159,18 @@ Open with **View → Preferences…** (`Ctrl+,`).
 | **Auto** | Follow the OS/desktop setting |
 | **Dark** | Force dark colour scheme |
 
+**Icon pack**
+
+| Setting | Description |
+|---------|-------------|
+| Pack dropdown | Select the active icon pack for device-type icons. The scrollable strip below previews all icons in the selected pack. |
+| **Open folder…** | Opens `~/.config/netneighbor_icon_packs/` in the file manager. The list refreshes automatically when you return to the dialog. |
+
+User-installed packs go in `~/.config/netneighbor_icon_packs/{pack_id}/` (one subfolder per pack).
+Each folder may contain an optional `iconpack.json` with `name`, `owner`, `version`, `license`, `repository` fields.
+Icon files are placed in `{N}x{N}/` or flat `{N}/` subdirectories (both naming conventions are supported).
+The built-in *NetNeighbor* pack lives under `assets/icons/netneighbor/` and is always available as a fallback.
+
 **Session**
 
 | Setting | Description |

@@ -1,0 +1,9 @@
+{
+  "name": "NetNeighbor",
+  "owner": "Luc Lebosse",
+  "resolutions": "16,32,48,64,96,128,256,512,1024",
+  "version": "2.0",
+  "date": "2026-05-19",
+  "repository": "https://github.com/luc-github/NetNeighbor",
+  "license": "lgpl3"
+}

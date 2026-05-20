@@ -2,7 +2,7 @@
 # Internal version : 2.0.0 date: 2026-05-19 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
-"""Per-device-type icons: only ``assets/icons/bundled-freedesktop`` (see ``config/icons.json``).
+"""Per-device-type icons: active icon pack + ``assets/icons/netneighbor`` built-in fallback.
 
 No system theme, no Windows Shell stock, no ``QStyle`` fallbacks — assets only, then
 ``assets/icons/unknown.png`` if present.
@@ -30,31 +30,67 @@ from utils.type_icon_config import type_icon_basenames_for_slug
 def _bundled_freedesktop_qicon(
     basename: str, *, preferred_px: int = DEVICE_ICON_REFERENCE_PX
 ) -> QIcon | None:
-    """Build a multi-resolution ``QIcon`` from ``bundled-freedesktop`` (PNG folders + optional flat/SVG)."""
-    from ui.icons import bundled_freedesktop_png_side_sizes
+    """Build a multi-resolution ``QIcon`` — active icon pack first, built-in fallback.
+
+    Supports both ``{N}x{N}/`` and flat ``{N}/`` directory naming in user packs.
+    """
+    from ui.icons import bundled_freedesktop_png_side_sizes, _bundled_freedesktop_root
+    from utils.icon_packs import (
+        BUILTIN_PACK_ID,
+        active_icon_pack_id,
+        active_icon_pack_root,
+        find_icon_in_pack,
+        scan_pack_sizes,
+    )
 
     raw = str(basename).strip()
     stem = Path(raw).name
     if not stem or stem != raw:
         return None
-    root = Path(__file__).resolve().parent.parent / "assets" / "icons" / "bundled-freedesktop"
-    sizes = bundled_freedesktop_png_side_sizes()
+
+    builtin_root = _bundled_freedesktop_root()
+    pack_id = active_icon_pack_id()
+    pack_root = active_icon_pack_root() if pack_id != BUILTIN_PACK_ID else None
+
+    builtin_sizes = bundled_freedesktop_png_side_sizes()
     icon = QIcon()
     registered: set[int] = set()
-    for sz in sizes:
-        p = root / f"{sz}x{sz}" / f"{stem}.png"
-        if p.is_file():
-            icon.addFile(str(p), QSize(sz, sz))
-            registered.add(sz)
-    if preferred_px not in registered and sizes:
-        best = min(sizes, key=lambda s: (abs(s - preferred_px), s))
-        p = root / f"{best}x{best}" / f"{stem}.png"
-        if p.is_file():
+
+    # Sizes present in built-in: prefer pack version, fall back to built-in.
+    for sz in builtin_sizes:
+        p = find_icon_in_pack(pack_root, sz, stem) if pack_root is not None else None
+        if p is None:
+            p = builtin_root / f"{sz}x{sz}" / f"{stem}.png"
+            if not p.is_file():
+                continue
+        icon.addFile(str(p), QSize(sz, sz))
+        registered.add(sz)
+
+    # Extra sizes only the active pack provides (e.g. 22, 128 not in built-in).
+    if pack_root is not None:
+        for sz in scan_pack_sizes(pack_root):
+            if sz in registered:
+                continue
+            p = find_icon_in_pack(pack_root, sz, stem)
+            if p is not None:
+                icon.addFile(str(p), QSize(sz, sz))
+                registered.add(sz)
+
+    if preferred_px not in registered and registered:
+        best = min(registered, key=lambda s: (abs(s - preferred_px), s))
+        p = find_icon_in_pack(pack_root, best, stem) if pack_root is not None else None
+        if p is None:
+            p = builtin_root / f"{best}x{best}" / f"{stem}.png"
+            p = p if p.is_file() else None
+        if p is not None:
             icon.addFile(str(p), QSize(preferred_px, preferred_px))
-    for ext in (".svg", ".png"):
-        flat = root / f"{stem}{ext}"
-        if flat.is_file():
-            icon.addFile(str(flat))
+
+    for root in ([pack_root] if pack_root is not None else []) + [builtin_root]:
+        for ext in (".svg", ".png"):
+            flat = root / f"{stem}{ext}"
+            if flat.is_file():
+                icon.addFile(str(flat))
+
     return None if icon.isNull() else icon
 
 

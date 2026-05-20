@@ -949,261 +949,95 @@ msgstr "Dispositivos ESP3D"
 msgid "Unknown Devices"
 msgstr "Dispositivos desconocidos"
 
-#~ msgid "Icon"
-#~ msgstr "Icono"
 
-#~ msgid "Invalid command template for this protocol."
-#~ msgstr "Plantilla de comando no válida para este protocolo."
 
 #, python-brace-format
-#~ msgid "{text} {deprecated_message}"
-#~ msgstr "{text} {deprecated_message}"
 
 #, python-brace-format
-#~ msgid "Got unexpected extra argument ({args})"
-#~ msgid_plural "Got unexpected extra arguments ({args})"
-#~ msgstr[0] "Se recibió un argumento adicional inesperado ({args})"
-#~ msgstr[1] "Se recibieron argumentos adicionales inesperados ({args})"
 
-#~ msgid "DeprecationWarning: The command {name!r} is deprecated.{extra_message}"
-#~ msgstr ""
-#~ "DeprecationWarning: El comando {name!r} está deprecado.{extra_message}"
 
-#~ msgid "Aborted!"
-#~ msgstr "¡Abortado!"
 
-#~ msgid "Commands"
-#~ msgstr "Comandos"
 
-#~ msgid "Missing command."
-#~ msgstr "Comando faltante."
 
-#~ msgid "No such command {name!r}."
-#~ msgstr "No existe el comando {name!r}."
 
-#~ msgid "Value must be an iterable."
-#~ msgstr "El valor debe ser iterable."
 
 #, python-brace-format
-#~ msgid "Takes {nargs} values but 1 was given."
-#~ msgid_plural "Takes {nargs} values but {len} were given."
-#~ msgstr[0] "Se requieren {nargs} valores pero se proporcionó 1."
-#~ msgstr[1] "Se requieren {nargs} valores pero se proporcionaron {len}."
 
-#~ msgid ""
-#~ "DeprecationWarning: The {param_type} {name!r} is deprecated.{extra_message}"
-#~ msgstr ""
-#~ "DeprecationWarning: El {param_type} {name!r} está deprecado.{extra_message}"
 
 #, python-brace-format
-#~ msgid "env var: {var}"
-#~ msgstr "variable de entorno: {var}"
 
 #, python-brace-format
-#~ msgid "default: {default}"
-#~ msgstr "predeterminado: {default}"
 
-#~ msgid "(dynamic)"
-#~ msgstr "(dinámico)"
 
 #, python-format
-#~ msgid "%(prog)s, version %(version)s"
-#~ msgstr "%(prog)s, versión %(version)s"
 
-#~ msgid "Show the version and exit."
-#~ msgstr "Mostrar la versión y salir."
 
-#~ msgid "Show this message and exit."
-#~ msgstr "Mostrar este mensaje y salir."
 
 #, python-brace-format
-#~ msgid "Error: {message}"
-#~ msgstr "Error: {message}"
 
 #, python-brace-format
-#~ msgid "Try '{command} {option}' for help."
-#~ msgstr "Pruebe '{command} {option}' para obtener ayuda."
 
 #, python-brace-format
-#~ msgid "Invalid value: {message}"
-#~ msgstr "Valor inválido: {message}"
 
 #, python-brace-format
-#~ msgid "Invalid value for {param_hint}: {message}"
-#~ msgstr "Valor inválido para {param_hint}: {message}"
 
-#~ msgid "Missing argument"
-#~ msgstr "Argumento faltante"
 
-#~ msgid "Missing option"
-#~ msgstr "Opción faltante"
 
-#~ msgid "Missing parameter"
-#~ msgstr "Parámetro faltante"
 
 #, python-brace-format
-#~ msgid "Missing {param_type}"
-#~ msgstr "{param_type} faltante"
 
 #, python-brace-format
-#~ msgid "Missing parameter: {param_name}"
-#~ msgstr "Parámetro faltante: {param_name}"
 
 #, python-brace-format
-#~ msgid "No such option: {name}"
-#~ msgstr "Opción inexistente: {name}"
 
 #, python-brace-format
-#~ msgid "Did you mean {possibility}?"
-#~ msgid_plural "(Possible options: {possibilities})"
-#~ msgstr[0] "¿Quisiste decir {possibility}?"
-#~ msgstr[1] "(Opciones posibles: {possibilities})"
 
-#~ msgid "unknown error"
-#~ msgstr "error desconocido"
 
-#~ msgid "Could not open file {filename!r}: {message}"
-#~ msgstr "No se pudo abrir el archivo {filename!r}: {message}"
 
-#~ msgid "Argument {name!r} takes {nargs} values."
-#~ msgstr "El argumento {name!r} requiere {nargs} valores."
 
-#~ msgid "Option {name!r} does not take a value."
-#~ msgstr "La opción {name!r} no acepta un valor."
 
-#~ msgid "Option {name!r} requires an argument."
-#~ msgid_plural "Option {name!r} requires {nargs} arguments."
-#~ msgstr[0] "La opción {name!r} requiere un argumento."
-#~ msgstr[1] "La opción {name!r} requiere {nargs} argumentos."
 
-#~ msgid "Shell completion is not supported for Bash versions older than 4.4."
-#~ msgstr ""
-#~ "La finalización de shell no es compatible con versiones de Bash anteriores a"
-#~ " 4.4."
 
-#~ msgid "Couldn't detect Bash version, shell completion is not supported."
-#~ msgstr ""
-#~ "No se pudo detectar la versión de Bash, la finalización de shell no es "
-#~ "compatible."
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed"
-#~ msgstr "{editor}: Error al editar"
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed: {e}"
-#~ msgstr "{editor}: Error al editar: {e}"
 
-#~ msgid "Repeat for confirmation"
-#~ msgstr "Repita para confirmar"
 
-#~ msgid "Error: The value you entered was invalid."
-#~ msgstr "Error: El valor que ingresó no es válido."
 
 #, python-brace-format
-#~ msgid "Error: {e.message}"
-#~ msgstr "Error: {e.message}"
 
-#~ msgid "Error: The two entered values do not match."
-#~ msgstr "Error: Los dos valores ingresados no coinciden."
 
-#~ msgid "Error: invalid input"
-#~ msgstr "Error: entrada no válida"
 
-#~ msgid "Press any key to continue..."
-#~ msgstr "Presione cualquier tecla para continuar..."
 
 #, python-brace-format
-#~ msgid ""
-#~ "Choose from:\n"
-#~ "\t{choices}"
-#~ msgstr ""
-#~ "Elija entre:\n"
-#~ "\t{choices}"
 
-#~ msgid "{value!r} is not {choice}."
-#~ msgid_plural "{value!r} is not one of {choices}."
-#~ msgstr[0] "{value!r} no es {choice}."
-#~ msgstr[1] "{value!r} no es uno de {choices}."
 
-#~ msgid "{value!r} does not match the format {format}."
-#~ msgid_plural "{value!r} does not match the formats {formats}."
-#~ msgstr[0] "{value!r} no coincide con el formato {format}."
-#~ msgstr[1] "{value!r} no coincide con los formatos {formats}."
 
-#~ msgid "{value!r} is not a valid {number_type}."
-#~ msgstr "{value!r} no es un {number_type} válido."
 
 #, python-brace-format
-#~ msgid "{value} is not in the range {range}."
-#~ msgstr "{value} no está en el rango {range}."
 
-#~ msgid "{value!r} is not a valid boolean. Recognized values: {states}"
-#~ msgstr "{value!r} no es un booleano válido. Valores reconocidos: {states}"
 
-#~ msgid "{value!r} is not a valid UUID."
-#~ msgstr "{value!r} no es un UUID válido."
 
-#~ msgid "file"
-#~ msgstr "archivo"
 
-#~ msgid "directory"
-#~ msgstr "directorio"
 
-#~ msgid "path"
-#~ msgstr "ruta"
 
-#~ msgid "{name} {filename!r} does not exist."
-#~ msgstr "{name} {filename!r} no existe."
 
-#~ msgid "{name} {filename!r} is a file."
-#~ msgstr "{name} {filename!r} es un archivo."
 
-#~ msgid "{name} {filename!r} is a directory."
-#~ msgstr "{name} {filename!r} es un directorio."
 
-#~ msgid "{name} {filename!r} is not readable."
-#~ msgstr "{name} {filename!r} no es legible."
 
-#~ msgid "{name} {filename!r} is not writable."
-#~ msgstr "{name} {filename!r} no es escribible."
 
-#~ msgid "{name} {filename!r} is not executable."
-#~ msgstr "{name} {filename!r} no es ejecutable."
 
 #, python-brace-format
-#~ msgid "{len_type} values are required, but {len_value} was given."
-#~ msgid_plural "{len_type} values are required, but {len_value} were given."
-#~ msgstr[0] "Se requieren {len_type} valores, pero se proporcionó {len_value}."
-#~ msgstr[1] ""
-#~ "Se requieren {len_type} valores, pero se proporcionaron {len_value}."
 
-#~ msgid "Custom connections"
-#~ msgstr "Conexiones personalizadas"
 
-#~ msgid "Port:"
-#~ msgstr "Puerto:"
 
 #, python-brace-format
-#~ msgid "Placeholders: {ip} {port} {name} {type} {category} {url}"
-#~ msgstr "Marcadores de posición: {ip} {port} {name} {type} {category} {url}"
 
 #, python-brace-format
-#~ msgid "Connect to {label}"
-#~ msgstr "Conectar a {label}"
 
 #, python-brace-format
-#~ msgid ""
-#~ "Open / double-click: optional handler per URL scheme. Leave empty to use the"
-#~ " system default (browser, file manager, etc.). Example: xdg-open {url} or "
-#~ "dolphin {url}"
-#~ msgstr ""
-#~ "Abrir / doble clic: controlador opcional por esquema de URL. Dejar vacío "
-#~ "para usar el predeterminado del sistema (navegador, gestor de archivos, "
-#~ "etc.). Ejemplo: xdg-open {url} o dolphin {url}"
 
-#~ msgid "Command:"
-#~ msgstr "Comando:"
 
 #: ui/
 msgid "About NetNeighbor"
@@ -1379,13 +1213,6 @@ msgstr "Aún no hay dispositivos"
 msgid "No hidden devices"
 msgstr "No hay dispositivos ocultos"
 
-#: ui/
-msgid ""
-"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
-"config/netneighbor/custom_icons/."
-msgstr ""
-"No se encontraron iconos. Agregue PNGs en assets/icons/bundled-freedes"
-"ktop o ~/.config/netneighbor/custom_icons/."
 
 #: ui/
 msgid ""
@@ -1561,3 +1388,34 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "Restablecimiento completado — reinicie la aplicación"
+#: ui/
+msgid "App icon pack"
+msgstr ""
+
+#: ui/
+msgid "Download failed"
+msgstr ""
+
+#: ui/
+msgid "Downloading…"
+msgstr ""
+
+#: ui/
+msgid "Icon pack"
+msgstr "Paquete de iconos"
+
+#: ui/
+msgid "NetNeighbor (built-in)"
+msgstr "NetNeighbor (integrado)"
+
+#: ui/
+msgid ""
+"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
+"etneighbor/custom_icons/."
+msgstr ""
+"No se encontraron iconos. Agregue PNGs en assets/icons/netneighbor o ~"
+"/.config/netneighbor/custom_icons/."
+
+#: ui/
+msgid "Open folder…"
+msgstr "Abrir carpeta…"

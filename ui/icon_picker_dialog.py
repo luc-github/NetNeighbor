@@ -62,7 +62,7 @@ class IconPickerDialog(QDialog):
         if not entries:
             empty = QLabel(
                 _(
-                    "No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/.config/netneighbor/custom_icons/."
+                    "No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/netneighbor/custom_icons/."
                 )
             )
             empty.setWordWrap(True)

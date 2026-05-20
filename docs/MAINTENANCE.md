@@ -29,6 +29,7 @@ keeping the project healthy between releases.
 | `~/.cache/netneighbor/netneighbor.log` | Log file when file logging is enabled (see `app.py`). |
 | `~/.cache/netneighbor/remote_icons/` | On-disk cache for **device-provided** icons fetched from SSDP/mDNS URLs (normalized). Primary file per URL: **`{SHA256(url)}.payload`** raw HTTP body (decoded with GdkPixbuf on load — avoids flaky `savev`). The digest uses a **canonical URL** after rewriting typical LAN hosts (`*.local`, `*.lan`, single-label names) to the **device IP** (stable fetch + hash), then normalizing (lowercased scheme/host, trailing FQDN dot stripped, **default HTTP/HTTPS ports omitted**). Disk lookup also tries **legacy explicit `:80` / `:443`** variants so filenames from older canonicalization rules still resolve. A second lookup tries the **canonical raw URL** (pre-IP rewrite) for older payloads. **HTTPS** to `*.local` / `*.lan` or **RFC1918** hosts uses a relaxed TLS context: certificate verification is disabled (self-signed printer certs) **and** `SECLEVEL=0` is set to allow legacy cipher suites and short keys that older embedded firmware (HP, Canon, Lexmark…) may require. Standard public HTTPS URLs go through the system default SSL context with full verification. Legacy **`.png`** files from older releases are still read if present. Clearing the folder forces a fresh download; if icons look wrong after a firmware change, clear **`remote_icon_index.json`** (see next row) as well. |
 | `~/.cache/netneighbor/remote_icon_index.json` | **Host → icon cache index** (version 2 JSON): per **IPv4/IPv6 key** stores **`canonical_url`**, **`payload_sha256`** (same stem as **`remote_icons/{sha256}.payload`**), and **`updated_at`**. Lets the UI load the correct cached icon **on cold start** without waiting for every mDNS TXT variant. Delete this file to drop remembered host→URL mappings (payload files remain until removed manually). |
+| `~/.config/netneighbor_icon_packs/` | **User-installed icon packs** (one subfolder per pack). Intentionally outside `~/.config/netneighbor/` so *Reset all application data* does not wipe them. Each subfolder may contain `iconpack.json` (`name`, `owner`, `version`, `license`, `repository` fields; optional) and icon files under `{N}x{N}/` or flat `{N}/` subdirectories. Active pack ID stored in `ui_prefs.json` under `icon_pack`. See `utils/icon_packs.py`. |
 | `~/.config/netneighbor/discovery.json` | Discovery toggles + startup refresh schedule. Top-level **`mdns`** / **`ssdp`** with **`enabled`**, **`rules`**, optional **`query`**: SSDP **`interval_seconds`** (periodic M-SEARCH cadence, default 60), **`mx_seconds`** (M-SEARCH **MX** max wait, clamped **5–6**, default 5), **`descriptor_http_min_interval_seconds`** (minimum gap between HTTP GETs for descriptor URLs whose **host is the same IP** (or same hostname if not numeric); avoids duplicate fetches when anticipatory XML and SSDP LOCATION arrive close together; **0** disables; default **5**, max **120**); mDNS **`enumeration_timeout_seconds`** (DNS-SD type scan, **2–3** s, default 2.5), **`enumeration_interval_seconds`** (repeat scan, default 240), **`service_info_timeout_ms`** (`get_service_info`, **2000–3000** ms, default 2500). **`merge.protocol_order`**: ordered protocol **`source`** ids (default **`ssdp`**, **`mdns`**) — earlier = stronger for live-row tie-breaks. **`merge.information_precedence`**: ordered roles (**`user_override`**, **`ssdp_live`**, **`ssdp_profile_cache`**, **`mdns`**) — must list all four exactly once to customize; defaults favour user prefs, then live SSDP, then disk-cache hints on mDNS, then raw mDNS (see `utils/discovery_config.py`). **`startup_refresh_seconds`** at root (comma-separated string or JSON array). |
 
 ## Logging
@@ -49,9 +50,17 @@ keeping the project healthy between releases.
 - **F11 fullscreen**: handled via `keyPressEvent` in `ui/main_window.py`.
 - **Open on PCs**: **Open** / double-click uses `resolve_connect_target` — **HTTP(S)** first, then **SMB** / **FTP** / **SSH** / **SFTP** / **Telnet** from merged mDNS or explicit device URLs; type `computer` with no other target opens `smb://` toward the host IP. The resulting URI is opened via `launch_connect_for_uri` (`utils/connect_launcher.py`) — empty per-scheme template in **View → Preferences… → Applications** keeps the system default. If no target exists, **Open** is inactive.
 
-## Bundled device icons (bundled-freedesktop)
+## Icon packs
 
-`assets/icons/bundled-freedesktop/` contains PNG fallback icons for ~1 000
+NetNeighbor supports swappable icon packs for device-type icons. The active pack is selected in **Preferences → General → Icon pack** and stored as `icon_pack` in `ui_prefs.json`.
+
+- **Resolution**: `utils/qt_device_icons.py` (`_bundled_freedesktop_qicon`) checks the active pack first, then falls back to the built-in `assets/icons/netneighbor/`. Supports both `{N}x{N}/` and flat `{N}/` directory naming.
+- **User packs**: `~/.config/netneighbor_icon_packs/{pack_id}/` — survives Reset. Add `iconpack.json` for display name; otherwise the directory name is shown.
+- **Cache**: changing the pack invalidates the module-level cache (`utils/icon_packs.invalidate_icon_pack_cache`) and `QPixmapCache` so the view rebuilds immediately.
+
+## Bundled device icons (netneighbor)
+
+`assets/icons/netneighbor/` contains PNG fallback icons for ~1 000
 [freedesktop.org](https://specifications.freedesktop.org/icon-naming-spec/icon-naming-spec-latest.html)
 icon names, supplied at multiple pixel resolutions. The source tree retains **all**
 resolutions (~151 MB total) for archival — they are available for future UI changes or
@@ -74,6 +83,7 @@ build step (`packaging/linux/build_*.sh`, `packaging/windows/build.ps1`), saving
 `bundled_freedesktop_png_side_sizes()` in `ui/icons.py` discovers the available sizes
 dynamically at runtime by scanning for `{N}x{N}` subdirectories, so trimming the
 directory has no effect on the runtime code path — it simply resolves to a smaller set.
+User packs that use flat `{N}/` directories are handled by `scan_pack_sizes()` / `find_icon_in_pack()` in `utils/icon_packs.py`.
 
 ## Common tasks
 

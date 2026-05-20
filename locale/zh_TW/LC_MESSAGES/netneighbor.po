@@ -930,253 +930,95 @@ msgstr "ESP3D 裝置"
 msgid "Unknown Devices"
 msgstr "未知裝置"
 
-#~ msgid "Icon"
-#~ msgstr "圖示"
 
-#~ msgid "Invalid command template for this protocol."
-#~ msgstr "此通訊協定的命令範本無效。"
 
 #, python-brace-format
-#~ msgid "{text} {deprecated_message}"
-#~ msgstr "{text} {deprecated_message}"
 
 #, python-brace-format
-#~ msgid "Got unexpected extra argument ({args})"
-#~ msgid_plural "Got unexpected extra arguments ({args})"
-#~ msgstr[0] "收到意外的額外引數 ({args})"
-#~ msgstr[1] "收到意外的額外引數 ({args})"
 
-#~ msgid "DeprecationWarning: The command {name!r} is deprecated.{extra_message}"
-#~ msgstr "DeprecationWarning: 命令 {name!r} 已過時。{extra_message}"
 
-#~ msgid "Aborted!"
-#~ msgstr "已中止！"
 
-#~ msgid "Commands"
-#~ msgstr "命令"
 
-#~ msgid "Missing command."
-#~ msgstr "缺少命令。"
 
-#~ msgid "No such command {name!r}."
-#~ msgstr "不存在命令 {name!r}。"
 
-#~ msgid "Value must be an iterable."
-#~ msgstr "值必須是可迭代的。"
 
 #, python-brace-format
-#~ msgid "Takes {nargs} values but 1 was given."
-#~ msgid_plural "Takes {nargs} values but {len} were given."
-#~ msgstr[0] "需要 {nargs} 個值，但只提供了 1 個。"
-#~ msgstr[1] "需要 {nargs} 個值，但提供了 {len} 個。"
 
-#~ msgid ""
-#~ "DeprecationWarning: The {param_type} {name!r} is deprecated.{extra_message}"
-#~ msgstr "DeprecationWarning: {param_type} {name!r} 已過時。{extra_message}"
 
 #, python-brace-format
-#~ msgid "env var: {var}"
-#~ msgstr "環境變數：{var}"
 
 #, python-brace-format
-#~ msgid "default: {default}"
-#~ msgstr "預設值：{default}"
 
-#~ msgid "(dynamic)"
-#~ msgstr "（動態）"
 
 #, python-format
-#~ msgid "%(prog)s, version %(version)s"
-#~ msgstr "%(prog)s，版本 %(version)s"
 
-#~ msgid "Show the version and exit."
-#~ msgstr "顯示版本並結束。"
 
-#~ msgid "Show this message and exit."
-#~ msgstr "顯示此訊息並結束。"
 
 #, python-brace-format
-#~ msgid "Error: {message}"
-#~ msgstr "錯誤：{message}"
 
 #, python-brace-format
-#~ msgid "Try '{command} {option}' for help."
-#~ msgstr "試試 '{command} {option}' 以取得說明。"
 
 #, python-brace-format
-#~ msgid "Invalid value: {message}"
-#~ msgstr "無效的值：{message}"
 
 #, python-brace-format
-#~ msgid "Invalid value for {param_hint}: {message}"
-#~ msgstr "{param_hint} 的值無效：{message}"
 
-#~ msgid "Missing argument"
-#~ msgstr "缺少引數"
 
-#~ msgid "Missing option"
-#~ msgstr "缺少選項"
 
-#~ msgid "Missing parameter"
-#~ msgstr "缺少參數"
 
 #, python-brace-format
-#~ msgid "Missing {param_type}"
-#~ msgstr "缺少 {param_type}"
 
 #, python-brace-format
-#~ msgid "Missing parameter: {param_name}"
-#~ msgstr "缺少參數：{param_name}"
 
 #, python-brace-format
-#~ msgid "No such option: {name}"
-#~ msgstr "沒有這樣的選項：{name}"
 
 #, python-brace-format
-#~ msgid "Did you mean {possibility}?"
-#~ msgid_plural "(Possible options: {possibilities})"
-#~ msgstr[0] "您是指 {possibility} 嗎？"
-#~ msgstr[1] "（可能的選項：{possibilities}）"
 
-#~ msgid "unknown error"
-#~ msgstr "未知錯誤"
 
-#~ msgid "Could not open file {filename!r}: {message}"
-#~ msgstr "無法開啟檔案 {filename!r}：{message}"
 
-#~ msgid "Argument {name!r} takes {nargs} values."
-#~ msgstr "引數 {name!r} 需要 {nargs} 個值。"
 
-#~ msgid "Option {name!r} does not take a value."
-#~ msgstr "選項 {name!r} 不接受值。"
 
-#~ msgid "Option {name!r} requires an argument."
-#~ msgid_plural "Option {name!r} requires {nargs} arguments."
-#~ msgstr[0] "選項 {name!r} 需要一個引數。"
-#~ msgstr[1] "選項 {name!r} 需要 {nargs} 個引數。"
 
-#~ msgid "Shell completion is not supported for Bash versions older than 4.4."
-#~ msgstr "Bash 版本早於 4.4 不支援 Shell 完成。"
 
-#~ msgid "Couldn't detect Bash version, shell completion is not supported."
-#~ msgstr "無法偵測 Bash 版本，不支援 Shell 完成。"
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed"
-#~ msgstr "{editor}：編輯失敗"
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed: {e}"
-#~ msgstr "{editor}：編輯失敗：{e}"
 
-#~ msgid "Repeat for confirmation"
-#~ msgstr "重複確認"
 
-#~ msgid "Error: The value you entered was invalid."
-#~ msgstr "錯誤：您輸入的值無效。"
 
 #, python-brace-format
-#~ msgid "Error: {e.message}"
-#~ msgstr "錯誤: {e.message}"
 
-#~ msgid "Error: The two entered values do not match."
-#~ msgstr "錯誤: 輸入的兩個值不符。"
 
-#~ msgid "Error: invalid input"
-#~ msgstr "錯誤: 無效的輸入"
 
-#~ msgid "Press any key to continue..."
-#~ msgstr "按任意鍵以繼續..."
 
 #, python-brace-format
-#~ msgid ""
-#~ "Choose from:\n"
-#~ "\t{choices}"
-#~ msgstr ""
-#~ "選擇:\n"
-#~ "\t{choices}"
 
-#~ msgid "{value!r} is not {choice}."
-#~ msgid_plural "{value!r} is not one of {choices}."
-#~ msgstr[0] "{value!r} 不是 {choice}。"
-#~ msgstr[1] "{value!r} 不是以下其中之一：{choices}。"
 
-#~ msgid "{value!r} does not match the format {format}."
-#~ msgid_plural "{value!r} does not match the formats {formats}."
-#~ msgstr[0] "{value!r} 不符合格式 {format}。"
-#~ msgstr[1] "{value!r} 不符合格式 {formats}。"
 
-#~ msgid "{value!r} is not a valid {number_type}."
-#~ msgstr "{value!r} 不是有效的 {number_type}。"
 
 #, python-brace-format
-#~ msgid "{value} is not in the range {range}."
-#~ msgstr "{value} 不在範圍 {range} 內。"
 
-#~ msgid "{value!r} is not a valid boolean. Recognized values: {states}"
-#~ msgstr "{value!r} 不是有效的布林值。認可的值: {states}"
 
-#~ msgid "{value!r} is not a valid UUID."
-#~ msgstr "{value!r} 不是有效的 UUID。"
 
-#~ msgid "file"
-#~ msgstr "檔案"
 
-#~ msgid "directory"
-#~ msgstr "目錄"
 
-#~ msgid "path"
-#~ msgstr "路徑"
 
-#~ msgid "{name} {filename!r} does not exist."
-#~ msgstr "{name} {filename!r} 不存在。"
 
-#~ msgid "{name} {filename!r} is a file."
-#~ msgstr "{name} {filename!r} 是一個檔案。"
 
-#~ msgid "{name} {filename!r} is a directory."
-#~ msgstr "{name} {filename!r} 是一個目錄。"
 
-#~ msgid "{name} {filename!r} is not readable."
-#~ msgstr "{name} {filename!r} 不可讀。"
 
-#~ msgid "{name} {filename!r} is not writable."
-#~ msgstr "{name} {filename!r} 不可寫。"
 
-#~ msgid "{name} {filename!r} is not executable."
-#~ msgstr "{name} {filename!r} 不可執行。"
 
 #, python-brace-format
-#~ msgid "{len_type} values are required, but {len_value} was given."
-#~ msgid_plural "{len_type} values are required, but {len_value} were given."
-#~ msgstr[0] "需要 {len_type} 個值，但提供了 {len_value} 個。"
-#~ msgstr[1] "需要 {len_type} 個值，但提供了 {len_value} 個。"
 
-#~ msgid "Custom connections"
-#~ msgstr "自訂連接"
 
-#~ msgid "Port:"
-#~ msgstr "連接埠："
 
 #, python-brace-format
-#~ msgid "Placeholders: {ip} {port} {name} {type} {category} {url}"
-#~ msgstr "佔位符：{ip} {port} {name} {type} {category} {url}"
 
 #, python-brace-format
-#~ msgid "Connect to {label}"
-#~ msgstr "連接到 {label}"
 
 #, python-brace-format
-#~ msgid ""
-#~ "Open / double-click: optional handler per URL scheme. Leave empty to use the"
-#~ " system default (browser, file manager, etc.). Example: xdg-open {url} or "
-#~ "dolphin {url}"
-#~ msgstr ""
-#~ "開啟 / 雙擊：每個 URL 配置的選用處理程式。留空以使用系統預設值（瀏覽器、檔案管理器等）。範例：xdg-open {url} 或 dolphin "
-#~ "{url}"
 
-#~ msgid "Command:"
-#~ msgstr "命令："
 
 #: ui/
 msgid "About NetNeighbor"
@@ -1348,13 +1190,6 @@ msgstr "尚無裝置"
 msgid "No hidden devices"
 msgstr "沒有隱藏的裝置"
 
-#: ui/
-msgid ""
-"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
-"config/netneighbor/custom_icons/."
-msgstr ""
-"找不到圖示。請在 assets/icons/bundled-freedesktop 或 ~/.config/netneighbor/cust"
-"om_icons/ 下新增 PNG。"
 
 #: ui/
 msgid ""
@@ -1523,3 +1358,34 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "重設完成 — 請重新啟動應用程式"
+#: ui/
+msgid "App icon pack"
+msgstr ""
+
+#: ui/
+msgid "Download failed"
+msgstr ""
+
+#: ui/
+msgid "Downloading…"
+msgstr ""
+
+#: ui/
+msgid "Icon pack"
+msgstr "圖示包"
+
+#: ui/
+msgid "NetNeighbor (built-in)"
+msgstr "NetNeighbor（內建）"
+
+#: ui/
+msgid ""
+"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
+"etneighbor/custom_icons/."
+msgstr ""
+"找不到圖示。請在 assets/icons/netneighbor 或 ~/.config/netneighbor/custom_icons"
+"/ 下新增 PNG。"
+
+#: ui/
+msgid "Open folder…"
+msgstr "開啟資料夾…"

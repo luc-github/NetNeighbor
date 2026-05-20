@@ -5,7 +5,7 @@
 Per logical device type (slug), the **ordered** list of icon **basenames** lives in
 **`config/icons.json`** under the ``types`` object. Each name is resolved as::
 
-    assets/icons/bundled-freedesktop/{N}x{N}/<basename>.png
+    assets/icons/netneighbor/{N}x{N}/<basename>.png
 
 (first existing size wins; see ``ui/icons.bundled_freedesktop_png_side_sizes``).
 
@@ -16,7 +16,7 @@ There is **no** Freedesktop theme, **no** Windows Shell stock, and **no** ``QSty
 
 ## Multi-size pack layout
 
-Square folders (`16x16` … `1024x1024`, etc.) under ``bundled-freedesktop/`` are auto-discovered.
+Square folders (`16x16` … `1024x1024`, etc.) under ``netneighbor/`` are auto-discovered.
 
 ## Per-device JSON icons (`data/device_types.json`)
 
@@ -29,7 +29,7 @@ The ``icon`` field may still name a file under ``assets/icons/`` (e.g. ``router.
 ## Registering a new device type slug
 
 1. Add the slug and basename list under ``types`` in ``config/icons.json``.
-2. Add matching PNGs under ``bundled-freedesktop/{N}x{N}/``.
+2. Add matching PNGs under ``netneighbor/{N}x{N}/``.
 3. Wire the type in discovery / ``device_types.json`` as today.
 
 Ensure ``fallback.icon`` remains set to ``unknown.png`` where applicable in ``device_types.json``.

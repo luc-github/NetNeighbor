@@ -24,6 +24,7 @@ bulk-reset or script defaults; invalid or missing keys fall back to built-in def
 | `custom_command_template` | Optional shell-like command for **Run custom command** in the device menu; placeholders `{ip}`, `{port}`, `{name}`, `{type}`, `{category}`, `{url}` are expanded (quoted). |
 | `connect_command_templates` | Optional object keyed by **`http`**, **`https`**, **`smb`**, **`ftp`**, **`ssh`**, **`telnet`**, **`sftp`**: shell-like command for **Open** / double-click for that URL scheme; empty value = system default. Same placeholders as `custom_command_template`. |
 | `device_commands` | Per-device connection commands (set in the **Options** tab). Object keyed by device identity (`name:source` or `source:ip:port`). Each value is a list of `{scheme, ip, port, mode, label}` where `mode` is `"override"` or `"additional"`. Override entries replace auto-detected defaults for that scheme; additional entries add submenu entries without replacing. |
+| `icon_pack` | Active icon pack ID (string). `"builtin"` selects the shipped `assets/icons/netneighbor/` pack; any other value is resolved as a subdirectory name under `~/.config/netneighbor_icon_packs/`. Set from **Preferences → General → Icon pack**. |
 
 Other keys store view mode, icon sort, overrides, sidebar width, notification mode, etc.; treat
 unknown keys as opaque unless you grep the codebase for `save_ui_preferences` / `ui_prefs`.
@@ -33,7 +34,7 @@ unknown keys as opaque unless you grep the codebase for `save_ui_preferences` / 
 | File | Merges with | Behaviour |
 |------|-------------|-----------|
 | `device_types.json` | `data/device_types.json` | Deep-merge per `mdns` / `ssdp` service key; shallow merge `fallback`. |
-| `icons.json` | `config/icons.json` | Shallow-merge the top-level ``types`` object: each slug maps to an ordered list of **basename** strings for `assets/icons/bundled-freedesktop/{N}x{N}/<basename>.png` (replaces the shipped list for that slug when you supply it). |
+| `icons.json` | `config/icons.json` | Shallow-merge the top-level ``types`` object: each slug maps to an ordered list of **basename** strings for `assets/icons/netneighbor/{N}x{N}/<basename>.png` (replaces the shipped list for that slug when you supply it). |
 | `ssdp_rules.json` | `config/ssdp_rules.json` | Shallow merge `name_rules` and `information_rules` (user keys win). **`type_rules`:** user list is **prepended** (first match wins over shipped rules). |
 | `mdns_rules.json` | `config/mdns_rules.json` | **`summary_from_txt`:** same label merges `keys` lists (user aliases first, then bundled). **`type_rules`:** user list **prepended**. |
 

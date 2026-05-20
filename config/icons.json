@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "Per device-type slug: ordered list of PNG basenames WITHOUT the “.png” suffix (e.g. “printer” → bundled-freedesktop/64x64/printer.png). Same stem for each discovered NxN folder under assets/icons/bundled-freedesktop/. User overlay may write either stem or full “stem.png”. No system icons.",
+  “comment”: “Per device-type slug: ordered list of PNG basenames WITHOUT the “.png” suffix (e.g. “printer” → netneighbor/64x64/printer.png). Same stem for each discovered NxN folder under assets/icons/netneighbor/. User overlay may write either stem or full “stem.png”. No system icons.”,
   "types": {
     "3dprinter": ["network-3dprinter"],
     "camera": ["network-webcam"],

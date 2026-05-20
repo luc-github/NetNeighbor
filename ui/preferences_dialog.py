@@ -6,14 +6,18 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Callable
 from gettext import gettext as _
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QGridLayout,
@@ -26,6 +30,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSizePolicy,
     QTabWidget,
     QTreeWidget,
@@ -84,15 +89,19 @@ class PreferencesDialog(QDialog):
         on_type_presets_saved: Callable[[list[tuple[str, str]]], None] | None = None,
         on_connect_templates_saved: Callable[[dict[str, str], str], None] | None = None,
         on_clear_icon_cache: Callable[[], None] | None = None,
+        on_icon_pack_changed: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(_("Preferences"))
         self.setModal(True)
-        self.resize(580, 500)
+        self.resize(580, 520)
         self._on_location_presets_saved  = on_location_presets_saved
         self._on_type_presets_saved      = on_type_presets_saved
         self._on_connect_templates_saved = on_connect_templates_saved
         self._on_clear_icon_cache        = on_clear_icon_cache
+        self._on_icon_pack_changed       = on_icon_pack_changed
+        self._icon_packs: list = []
+        self._icon_folder_opened: bool = False
 
         self._prefs = load_ui_preferences()
         self._original_theme = str(self._prefs.get("theme", "auto"))
@@ -149,6 +158,33 @@ class PreferencesDialog(QDialog):
         self._theme_group.idToggled.connect(self._on_theme_toggled)
         QVBoxLayout(theme_box).addWidget(theme_inner)
 
+        icon_pack_box = QGroupBox(_("Icon pack"))
+        ip_outer = QVBoxLayout(icon_pack_box)
+        ip_top = QHBoxLayout()
+        self._icon_pack_combo = QComboBox()
+        self._icon_pack_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._icon_pack_combo.currentIndexChanged.connect(self._on_icon_pack_combo_changed)
+        btn_open_packs = QPushButton(_("Open folder…"))
+        btn_open_packs.setFixedWidth(110)
+        btn_open_packs.clicked.connect(self._on_open_icon_packs_folder)
+        ip_top.addWidget(self._icon_pack_combo)
+        ip_top.addWidget(btn_open_packs)
+        self._icon_pack_scroll = QScrollArea()
+        self._icon_pack_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self._icon_pack_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._icon_pack_scroll.setWidgetResizable(True)
+        self._icon_pack_scroll.setFixedHeight(72)
+        self._icon_pack_scroll.setStyleSheet(
+            "QScrollArea { border: 1px solid palette(mid); border-radius: 4px; background: palette(base); }"
+        )
+        self._icon_pack_strip_widget = QWidget()
+        self._icon_pack_strip_layout = QHBoxLayout(self._icon_pack_strip_widget)
+        self._icon_pack_strip_layout.setContentsMargins(4, 4, 4, 4)
+        self._icon_pack_strip_layout.setSpacing(4)
+        self._icon_pack_scroll.setWidget(self._icon_pack_strip_widget)
+        ip_outer.addLayout(ip_top)
+        ip_outer.addWidget(self._icon_pack_scroll)
+
         session = QGroupBox(_("Session"))
         sl = QVBoxLayout(session)
         self._close_to_tray   = QCheckBox(_("Close to system tray / panel instead of exiting"))
@@ -166,6 +202,7 @@ class PreferencesDialog(QDialog):
         ml.addWidget(self._btn_clear_icon_cache)
 
         outer.addWidget(theme_box)
+        outer.addWidget(icon_pack_box)
         outer.addWidget(session)
         outer.addWidget(maintenance)
         outer.addStretch(1)
@@ -385,6 +422,22 @@ class PreferencesDialog(QDialog):
         else:
             self._btn_theme_auto.setChecked(True)
 
+        # Icon pack
+        from utils.icon_packs import load_available_packs, BUILTIN_PACK_ID
+        self._icon_packs = load_available_packs()
+        current_pack_id = str(self._prefs.get("icon_pack", BUILTIN_PACK_ID))
+        self._icon_pack_combo.blockSignals(True)
+        for pack in self._icon_packs:
+            self._icon_pack_combo.addItem(pack.name, pack.pack_id)
+        select_idx = 0
+        for i in range(self._icon_pack_combo.count()):
+            if self._icon_pack_combo.itemData(i) == current_pack_id:
+                select_idx = i
+                break
+        self._icon_pack_combo.setCurrentIndex(select_idx)
+        self._icon_pack_combo.blockSignals(False)
+        self._update_icon_pack_preview(self._icon_pack_combo.itemData(select_idx) or BUILTIN_PACK_ID)
+
         # Session
         self._close_to_tray.setChecked(bool(self._prefs.get("close_to_tray", True)))
         self._start_minimized.setChecked(bool(self._prefs.get("start_minimized_to_tray", False)))
@@ -443,6 +496,15 @@ class PreferencesDialog(QDialog):
         theme_val = "light" if tid == 0 else "dark" if tid == 2 else "auto"
         prefs["theme"] = theme_val
 
+        # Icon pack
+        pack_idx = self._icon_pack_combo.currentIndex()
+        new_pack_id = self._icon_pack_combo.itemData(pack_idx) if pack_idx >= 0 else ""
+        from utils.icon_packs import BUILTIN_PACK_ID
+        if not new_pack_id:
+            new_pack_id = BUILTIN_PACK_ID
+        old_pack_id = str(prefs.get("icon_pack", BUILTIN_PACK_ID))
+        prefs["icon_pack"] = new_pack_id
+
         # Session
         prefs["close_to_tray"]            = self._close_to_tray.isChecked()
         prefs["start_minimized_to_tray"]  = self._start_minimized.isChecked()
@@ -490,8 +552,112 @@ class PreferencesDialog(QDialog):
             self._on_type_presets_saved(type_options)
         if self._on_connect_templates_saved:
             self._on_connect_templates_saved(templates, custom)
+        if self._on_icon_pack_changed and new_pack_id != old_pack_id:
+            self._on_icon_pack_changed(new_pack_id)
 
         self.accept()
+
+    # ------------------------------------------------------------------
+    # Icon pack tab actions
+    # ------------------------------------------------------------------
+
+    def _on_icon_pack_combo_changed(self, index: int) -> None:
+        pack_id = self._icon_pack_combo.itemData(index)
+        if pack_id:
+            self._update_icon_pack_preview(pack_id)
+
+    def _update_icon_pack_preview(self, pack_id: str) -> None:
+        # Clear previous strip
+        while self._icon_pack_strip_layout.count():
+            item = self._icon_pack_strip_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        pack = next((p for p in self._icon_packs if p.pack_id == pack_id), None)
+        if pack is None:
+            return
+
+        from utils.icon_packs import find_icon_in_pack, scan_pack_sizes
+        ICON_PX = 48
+        sizes = scan_pack_sizes(pack.root)
+        if not sizes:
+            # Built-in: use ui.icons sizes
+            from ui.icons import bundled_freedesktop_png_side_sizes
+            sizes = bundled_freedesktop_png_side_sizes()
+        if not sizes:
+            return
+        best_sz = min(sizes, key=lambda s: (abs(s - ICON_PX), s))
+
+        # Collect all icon files at best_sz
+        icon_files: list[str] = []
+        for dir_name in (f"{best_sz}x{best_sz}", str(best_sz)):
+            size_dir = pack.root / dir_name
+            if size_dir.is_dir():
+                icon_files = sorted(str(p) for p in size_dir.glob("*.png"))
+                break
+
+        for icon_path in icon_files:
+            pix = QPixmap(icon_path)
+            if pix.isNull():
+                continue
+            pix = pix.scaled(
+                ICON_PX, ICON_PX,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            lbl = QLabel()
+            lbl.setPixmap(pix)
+            lbl.setFixedSize(ICON_PX + 2, ICON_PX + 2)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._icon_pack_strip_layout.addWidget(lbl)
+        self._icon_pack_strip_layout.addStretch(1)
+
+    def _on_open_icon_packs_folder(self) -> None:
+        from utils.icon_packs import user_icon_packs_dir
+        import subprocess
+        folder = user_icon_packs_dir()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            if sys.platform == "win32":
+                os.startfile(str(folder))  # noqa: S606
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(folder)])
+            else:
+                subprocess.Popen(["xdg-open", str(folder)])
+        except OSError:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        self._icon_folder_opened = True
+
+    def changeEvent(self, event: object) -> None:
+        from PySide6.QtCore import QEvent
+        super().changeEvent(event)  # type: ignore[arg-type]
+        if (
+            isinstance(event, QEvent)
+            and event.type() == QEvent.Type.ActivationChange
+            and self.isActiveWindow()
+            and self._icon_folder_opened
+        ):
+            self._icon_folder_opened = False
+            self._refresh_icon_pack_list()
+
+    def _refresh_icon_pack_list(self) -> None:
+        from utils.icon_packs import load_available_packs, BUILTIN_PACK_ID
+        current_id = self._icon_pack_combo.currentData() or BUILTIN_PACK_ID
+        self._icon_packs = load_available_packs()
+        self._icon_pack_combo.blockSignals(True)
+        self._icon_pack_combo.clear()
+        for pack in self._icon_packs:
+            self._icon_pack_combo.addItem(pack.name, pack.pack_id)
+        select_idx = 0
+        for i in range(self._icon_pack_combo.count()):
+            if self._icon_pack_combo.itemData(i) == current_id:
+                select_idx = i
+                break
+        self._icon_pack_combo.setCurrentIndex(select_idx)
+        self._icon_pack_combo.blockSignals(False)
+        self._update_icon_pack_preview(self._icon_pack_combo.itemData(select_idx) or BUILTIN_PACK_ID)
 
     def _on_theme_toggled(self, button_id: int, checked: bool) -> None:
         if not checked:

@@ -436,6 +436,7 @@ class NetNeighborMainWindow(QMainWindow):
 
         self._remote_icon_cache = QtRemoteIconCache(self)
         self._remote_icon_cache.icons_ready.connect(self._on_remote_icons_ready)
+        self._remote_icon_cache.prefetch_from_index()
 
         ver = get_app_version()
         self.setWindowTitle(_("NetNeighbor {}").format(ver))
@@ -1089,6 +1090,7 @@ class NetNeighborMainWindow(QMainWindow):
             on_type_presets_saved=self._apply_type_presets,
             on_connect_templates_saved=self._apply_connect_templates,
             on_clear_icon_cache=self._clear_icon_cache,
+            on_icon_pack_changed=self._apply_icon_pack,
         )
         dlg.exec()
 
@@ -1106,6 +1108,14 @@ class NetNeighborMainWindow(QMainWindow):
         from utils.device_remote_icon import clear_all_app_data
         clear_all_app_data()
         self._remote_icon_cache.clear()
+
+    def _apply_icon_pack(self, pack_id: str) -> None:
+        from utils.icon_packs import invalidate_icon_pack_cache
+        from PySide6.QtGui import QPixmapCache
+        invalidate_icon_pack_cache()
+        QPixmapCache.clear()
+        self._last_snapshot_fp = None  # force re-render even if devices unchanged
+        self.set_devices(self._last_devices)
 
     def _reload_discovery(self) -> None:
         if self._discovery_manager is None:

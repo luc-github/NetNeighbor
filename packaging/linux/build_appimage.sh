@@ -125,9 +125,9 @@ find "${APP_SHARE}" \
 # the source tree.  Icons are installed explicitly below.
 rm -rf "${APP_SHARE}/assets/icons/hicolor"
 
-# Trim bundled-freedesktop to only the resolutions needed by the Qt UI (saves ~143 MB).
+# Trim netneighbor icon set to only the resolutions needed by the Qt UI (saves ~143 MB).
 # Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
-_bfd="${APP_SHARE}/assets/icons/bundled-freedesktop"
+_bfd="${APP_SHARE}/assets/icons/netneighbor"
 if [ -d "${_bfd}" ]; then
     for _d in "${_bfd}"/*/; do
         case "$(basename "${_d%/}")" in

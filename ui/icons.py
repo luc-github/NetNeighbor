@@ -33,11 +33,11 @@ def resolve_asset_icon_file(icon_name: str | None) -> Path | None:
 
 
 def _bundled_freedesktop_root() -> Path:
-    return Path(__file__).resolve().parent.parent / "assets" / "icons" / "bundled-freedesktop"
+    return Path(__file__).resolve().parent.parent / "assets" / "icons" / "netneighbor"
 
 
 def bundled_freedesktop_png_side_sizes() -> tuple[int, ...]:
-    """Square ``{N}x{N}`` subdirs under ``bundled-freedesktop``, sorted ascending (e.g. 16 … 1024).
+    """Square ``{N}x{N}`` subdirs under ``assets/icons/netneighbor``, sorted ascending (e.g. 16 … 1024).
 
     Discovered at runtime (cached until the directory ``mtime`` changes) so any
     export ladder (16–1024, theme-style 22/32/…, etc.) works without a hard-coded list.
@@ -82,7 +82,7 @@ def user_custom_icons_dir() -> Path:
 
 
 def iter_bundled_freedesktop_choice_basenames() -> list[str]:
-    """Unique ``*.png`` stems under any ``NxN`` subfolder of ``bundled-freedesktop`` (sorted)."""
+    """Unique ``*.png`` stems under any ``NxN`` subfolder of ``assets/icons/netneighbor`` (sorted)."""
     root = _bundled_freedesktop_root()
     names: set[str] = set()
     try:
@@ -123,7 +123,7 @@ def resolve_persisted_icon_id_to_path(icon_id: str | None) -> Path | None:
 
 
 def resolve_bundled_freedesktop_icon(icon_name: str | None) -> Path | None:
-    """One file under ``assets/icons/bundled-freedesktop`` for a Freedesktop basename.
+    """One file under ``assets/icons/netneighbor`` for a Freedesktop basename.
 
     Prefers the **largest** existing ``{N}x{N}/{name}.png``, then flat ``{name}.png`` / ``{name}.svg``.
     For Qt multi-resolution icons, ``utils.qt_device_icons`` registers every ``NxN`` size found.

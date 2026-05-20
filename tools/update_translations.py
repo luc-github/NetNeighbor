@@ -436,15 +436,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "zh_CN": "没有隐藏的设备",
         "zh_TW": "沒有隱藏的裝置",
     },
-    "No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/.config/netneighbor/custom_icons/.": {
-        "fr": "Aucune icône trouvée. Ajoutez des PNG dans assets/icons/bundled-freedesktop ou ~/.config/netneighbor/custom_icons/.",
-        "de": "Keine Symbole gefunden. Fügen Sie PNGs unter assets/icons/bundled-freedesktop oder ~/.config/netneighbor/custom_icons/ hinzu.",
-        "es": "No se encontraron iconos. Agregue PNGs en assets/icons/bundled-freedesktop o ~/.config/netneighbor/custom_icons/.",
-        "it": "Nessuna icona trovata. Aggiungere PNG in assets/icons/bundled-freedesktop o ~/.config/netneighbor/custom_icons/.",
-        "nl": "Geen pictogrammen gevonden. Voeg PNG's toe onder assets/icons/bundled-freedesktop of ~/.config/netneighbor/custom_icons/.",
-        "ja": "アイコンが見つかりません。assets/icons/bundled-freedesktop または ~/.config/netneighbor/custom_icons/ に PNG を追加してください。",
-        "zh_CN": "未找到图标。请在 assets/icons/bundled-freedesktop 或 ~/.config/netneighbor/custom_icons/ 中添加 PNG。",
-        "zh_TW": "找不到圖示。請在 assets/icons/bundled-freedesktop 或 ~/.config/netneighbor/custom_icons/ 下新增 PNG。",
+    "No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/netneighbor/custom_icons/.": {
+        "fr": "Aucune icône trouvée. Ajoutez des PNG dans assets/icons/netneighbor ou ~/.config/netneighbor/custom_icons/.",
+        "de": "Keine Symbole gefunden. Fügen Sie PNGs unter assets/icons/netneighbor oder ~/.config/netneighbor/custom_icons/ hinzu.",
+        "es": "No se encontraron iconos. Agregue PNGs en assets/icons/netneighbor o ~/.config/netneighbor/custom_icons/.",
+        "it": "Nessuna icona trovata. Aggiungere PNG in assets/icons/netneighbor o ~/.config/netneighbor/custom_icons/.",
+        "nl": "Geen pictogrammen gevonden. Voeg PNG's toe onder assets/icons/netneighbor of ~/.config/netneighbor/custom_icons/.",
+        "ja": "アイコンが見つかりません。assets/icons/netneighbor または ~/.config/netneighbor/custom_icons/ に PNG を追加してください。",
+        "zh_CN": "未找到图标。请在 assets/icons/netneighbor 或 ~/.config/netneighbor/custom_icons/ 中添加 PNG。",
+        "zh_TW": "找不到圖示。請在 assets/icons/netneighbor 或 ~/.config/netneighbor/custom_icons/ 下新增 PNG。",
     },
     "Notification delivery depends on the OS and session. Tray-backed behaviour (close to tray, minimized start) will align once the system tray is implemented.": {
         "fr": "La livraison des notifications dépend du système d'exploitation et de la session. Le comportement basé sur la barre système (fermeture dans la barre, démarrage minimisé) sera aligné une fois la barre système implémentée.",
@@ -565,6 +565,36 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "ja": "サービスタイプ",
         "zh_CN": "服务类型",
         "zh_TW": "服務類型",
+    },
+    "Icon pack": {
+        "fr": "Pack d'icônes",
+        "de": "Icon-Pack",
+        "es": "Paquete de iconos",
+        "it": "Pacchetto icone",
+        "nl": "Icoonpakket",
+        "ja": "アイコンパック",
+        "zh_CN": "图标包",
+        "zh_TW": "圖示包",
+    },
+    "Open folder…": {
+        "fr": "Ouvrir le dossier…",
+        "de": "Ordner öffnen…",
+        "es": "Abrir carpeta…",
+        "it": "Apri cartella…",
+        "nl": "Map openen…",
+        "ja": "フォルダを開く…",
+        "zh_CN": "打开文件夹…",
+        "zh_TW": "開啟資料夾…",
+    },
+    "NetNeighbor (built-in)": {
+        "fr": "NetNeighbor (intégré)",
+        "de": "NetNeighbor (integriert)",
+        "es": "NetNeighbor (integrado)",
+        "it": "NetNeighbor (integrato)",
+        "nl": "NetNeighbor (ingebouwd)",
+        "ja": "NetNeighbor (組み込み)",
+        "zh_CN": "NetNeighbor（内置）",
+        "zh_TW": "NetNeighbor（內建）",
     },
     "Session": {
         "fr": "Session",
@@ -895,12 +925,27 @@ except ImportError:
     print("babel not available — skipping .mo compilation")
     sys.exit(0)
 
+def _strip_obsolete_from_po(po_path: "Path") -> int:
+    """Remove ``#~`` obsolete blocks from a .po file in-place. Returns number of lines removed."""
+    text = po_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    kept = [l for l in lines if not l.startswith("#~")]
+    removed = len(lines) - len(kept)
+    if removed:
+        po_path.write_text("".join(kept), encoding="utf-8")
+    return removed
+
+
 for locale in LOCALES:
     po_path = ROOT / "locale" / locale / "LC_MESSAGES" / "netneighbor.po"
     mo_path = po_path.with_suffix(".mo")
     try:
+        removed = _strip_obsolete_from_po(po_path)
+        if removed:
+            print(f"{locale}: removed {removed} obsolete lines from .po")
         with open(po_path, "rb") as f:
             catalog = read_po(f, locale=locale)
+        catalog.obsolete.clear()
         with open(mo_path, "wb") as f:
             write_mo(f, catalog)
         print(f"{locale}: compiled .mo ({mo_path.stat().st_size} bytes)")

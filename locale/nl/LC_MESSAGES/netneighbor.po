@@ -945,259 +945,95 @@ msgstr "ESP3D-apparaten"
 msgid "Unknown Devices"
 msgstr "Onbekende Apparaten"
 
-#~ msgid "Icon"
-#~ msgstr "Pictogram"
 
-#~ msgid "Invalid command template for this protocol."
-#~ msgstr "Ongeldig opdrachtsjabloon voor dit protocol."
 
 #, python-brace-format
-#~ msgid "{text} {deprecated_message}"
-#~ msgstr "{text} {deprecated_message}"
 
 #, python-brace-format
-#~ msgid "Got unexpected extra argument ({args})"
-#~ msgid_plural "Got unexpected extra arguments ({args})"
-#~ msgstr[0] "Onverwacht extra argument ontvangen ({args})"
-#~ msgstr[1] "Onverwachte extra argumenten ontvangen ({args})"
 
-#~ msgid "DeprecationWarning: The command {name!r} is deprecated.{extra_message}"
-#~ msgstr "DeprecationWarning: De opdracht {name!r} is verouderd.{extra_message}"
 
-#~ msgid "Aborted!"
-#~ msgstr "Afgebroken!"
 
-#~ msgid "Commands"
-#~ msgstr "Opdrachten"
 
-#~ msgid "Missing command."
-#~ msgstr "Opdracht ontbreekt."
 
-#~ msgid "No such command {name!r}."
-#~ msgstr "Geen dergelijke opdracht {name!r}."
 
-#~ msgid "Value must be an iterable."
-#~ msgstr "Waarde moet een iterable zijn."
 
 #, python-brace-format
-#~ msgid "Takes {nargs} values but 1 was given."
-#~ msgid_plural "Takes {nargs} values but {len} were given."
-#~ msgstr[0] "Vereist {nargs} waarden maar 1 was gegeven."
-#~ msgstr[1] "Vereist {nargs} waarden maar {len} waren gegeven."
 
-#~ msgid ""
-#~ "DeprecationWarning: The {param_type} {name!r} is deprecated.{extra_message}"
-#~ msgstr ""
-#~ "DeprecationWarning: De {param_type} {name!r} is verouderd.{extra_message}"
 
 #, python-brace-format
-#~ msgid "env var: {var}"
-#~ msgstr "omgevingsvariabele: {var}"
 
 #, python-brace-format
-#~ msgid "default: {default}"
-#~ msgstr "standaard: {default}"
 
-#~ msgid "(dynamic)"
-#~ msgstr "(dynamisch)"
 
 #, python-format
-#~ msgid "%(prog)s, version %(version)s"
-#~ msgstr "%(prog)s, versie %(version)s"
 
-#~ msgid "Show the version and exit."
-#~ msgstr "Toon de versie en sluit af."
 
-#~ msgid "Show this message and exit."
-#~ msgstr "Toon dit bericht en sluit af."
 
 #, python-brace-format
-#~ msgid "Error: {message}"
-#~ msgstr "Fout: {message}"
 
 #, python-brace-format
-#~ msgid "Try '{command} {option}' for help."
-#~ msgstr "Probeer '{command} {option}' voor hulp."
 
 #, python-brace-format
-#~ msgid "Invalid value: {message}"
-#~ msgstr "Ongeldige waarde: {message}"
 
 #, python-brace-format
-#~ msgid "Invalid value for {param_hint}: {message}"
-#~ msgstr "Ongeldige waarde voor {param_hint}: {message}"
 
-#~ msgid "Missing argument"
-#~ msgstr "Ontbrekend argument"
 
-#~ msgid "Missing option"
-#~ msgstr "Ontbrekende optie"
 
-#~ msgid "Missing parameter"
-#~ msgstr "Ontbrekende parameter"
 
 #, python-brace-format
-#~ msgid "Missing {param_type}"
-#~ msgstr "Ontbrekend {param_type}"
 
 #, python-brace-format
-#~ msgid "Missing parameter: {param_name}"
-#~ msgstr "Ontbrekende parameter: {param_name}"
 
 #, python-brace-format
-#~ msgid "No such option: {name}"
-#~ msgstr "Onbekende optie: {name}"
 
 #, python-brace-format
-#~ msgid "Did you mean {possibility}?"
-#~ msgid_plural "(Possible options: {possibilities})"
-#~ msgstr[0] "Bedoelde u {possibility}?"
-#~ msgstr[1] "(Mogelijke opties: {possibilities})"
 
-#~ msgid "unknown error"
-#~ msgstr "onbekende fout"
 
-#~ msgid "Could not open file {filename!r}: {message}"
-#~ msgstr "Kon bestand {filename!r} niet openen: {message}"
 
-#~ msgid "Argument {name!r} takes {nargs} values."
-#~ msgstr "Argument {name!r} vereist {nargs} waarden."
 
-#~ msgid "Option {name!r} does not take a value."
-#~ msgstr "Optie {name!r} accepteert geen waarde."
 
-#~ msgid "Option {name!r} requires an argument."
-#~ msgid_plural "Option {name!r} requires {nargs} arguments."
-#~ msgstr[0] "Optie {name!r} vereist een argument."
-#~ msgstr[1] "Optie {name!r} vereist {nargs} argumenten."
 
-#~ msgid "Shell completion is not supported for Bash versions older than 4.4."
-#~ msgstr ""
-#~ "Shell-aanvulling wordt niet ondersteund voor Bash-versies ouder dan 4.4."
 
-#~ msgid "Couldn't detect Bash version, shell completion is not supported."
-#~ msgstr ""
-#~ "Bash-versie kon niet worden gedetecteerd, shell-aanvulling wordt niet "
-#~ "ondersteund."
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed"
-#~ msgstr "{editor}: Bewerking mislukt"
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed: {e}"
-#~ msgstr "{editor}: Bewerking mislukt: {e}"
 
-#~ msgid "Repeat for confirmation"
-#~ msgstr "Herhaal ter bevestiging"
 
-#~ msgid "Error: The value you entered was invalid."
-#~ msgstr "Fout: De waarde die u hebt ingevoerd was ongeldig."
 
 #, python-brace-format
-#~ msgid "Error: {e.message}"
-#~ msgstr "Fout: {e.message}"
 
-#~ msgid "Error: The two entered values do not match."
-#~ msgstr "Fout: De twee ingevoerde waarden komen niet overeen."
 
-#~ msgid "Error: invalid input"
-#~ msgstr "Fout: ongeldige invoer"
 
-#~ msgid "Press any key to continue..."
-#~ msgstr "Druk op een willekeurige toets om door te gaan..."
 
 #, python-brace-format
-#~ msgid ""
-#~ "Choose from:\n"
-#~ "\t{choices}"
-#~ msgstr ""
-#~ "Kies uit:\n"
-#~ "\t{choices}"
 
-#~ msgid "{value!r} is not {choice}."
-#~ msgid_plural "{value!r} is not one of {choices}."
-#~ msgstr[0] "{value!r} is niet {choice}."
-#~ msgstr[1] "{value!r} is geen van {choices}."
 
-#~ msgid "{value!r} does not match the format {format}."
-#~ msgid_plural "{value!r} does not match the formats {formats}."
-#~ msgstr[0] "{value!r} komt niet overeen met de indeling {format}."
-#~ msgstr[1] "{value!r} komt niet overeen met de indelingen {formats}."
 
-#~ msgid "{value!r} is not a valid {number_type}."
-#~ msgstr "{value!r} is geen geldige {number_type}."
 
 #, python-brace-format
-#~ msgid "{value} is not in the range {range}."
-#~ msgstr "{value} valt niet in het bereik {range}."
 
-#~ msgid "{value!r} is not a valid boolean. Recognized values: {states}"
-#~ msgstr ""
-#~ "{value!r} is geen geldige Booleaanse waarde. Herkende waarden: {states}"
 
-#~ msgid "{value!r} is not a valid UUID."
-#~ msgstr "{value!r} is geen geldige UUID."
 
-#~ msgid "file"
-#~ msgstr "bestand"
 
-#~ msgid "directory"
-#~ msgstr "map"
 
-#~ msgid "path"
-#~ msgstr "pad"
 
-#~ msgid "{name} {filename!r} does not exist."
-#~ msgstr "{name} {filename!r} bestaat niet."
 
-#~ msgid "{name} {filename!r} is a file."
-#~ msgstr "{name} {filename!r} is een bestand."
 
-#~ msgid "{name} {filename!r} is a directory."
-#~ msgstr "{name} {filename!r} is een map."
 
-#~ msgid "{name} {filename!r} is not readable."
-#~ msgstr "{name} {filename!r} is niet leesbaar."
 
-#~ msgid "{name} {filename!r} is not writable."
-#~ msgstr "{name} {filename!r} is niet schrijfbaar."
 
-#~ msgid "{name} {filename!r} is not executable."
-#~ msgstr "{name} {filename!r} is niet uitvoerbaar."
 
 #, python-brace-format
-#~ msgid "{len_type} values are required, but {len_value} was given."
-#~ msgid_plural "{len_type} values are required, but {len_value} were given."
-#~ msgstr[0] "{len_type} waarden zijn vereist, maar {len_value} was gegeven."
-#~ msgstr[1] "{len_type} waarden zijn vereist, maar {len_value} waren gegeven."
 
-#~ msgid "Custom connections"
-#~ msgstr "Aangepaste verbindingen"
 
-#~ msgid "Port:"
-#~ msgstr "Poort:"
 
 #, python-brace-format
-#~ msgid "Placeholders: {ip} {port} {name} {type} {category} {url}"
-#~ msgstr "Aanduidingen: {ip} {port} {name} {type} {category} {url}"
 
 #, python-brace-format
-#~ msgid "Connect to {label}"
-#~ msgstr "Verbinding maken met {label}"
 
 #, python-brace-format
-#~ msgid ""
-#~ "Open / double-click: optional handler per URL scheme. Leave empty to use the"
-#~ " system default (browser, file manager, etc.). Example: xdg-open {url} or "
-#~ "dolphin {url}"
-#~ msgstr ""
-#~ "Openen / dubbelklikken: optionele handler per URL-schema. Leeg laten om de "
-#~ "systeemstandaard (browser, bestandsbeheer, enz.) te gebruiken. Voorbeeld: "
-#~ "xdg-open {url} of dolphin {url}"
 
-#~ msgid "Command:"
-#~ msgstr "Opdracht:"
 
 #: ui/
 msgid "About NetNeighbor"
@@ -1371,13 +1207,6 @@ msgstr "Nog geen apparaten"
 msgid "No hidden devices"
 msgstr "Geen verborgen apparaten"
 
-#: ui/
-msgid ""
-"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
-"config/netneighbor/custom_icons/."
-msgstr ""
-"Geen pictogrammen gevonden. Voeg PNG's toe onder assets/icons/bundled-"
-"freedesktop of ~/.config/netneighbor/custom_icons/."
 
 #: ui/
 msgid ""
@@ -1554,3 +1383,34 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "Gewist — herstart de applicatie"
+#: ui/
+msgid "App icon pack"
+msgstr ""
+
+#: ui/
+msgid "Download failed"
+msgstr ""
+
+#: ui/
+msgid "Downloading…"
+msgstr ""
+
+#: ui/
+msgid "Icon pack"
+msgstr "Icoonpakket"
+
+#: ui/
+msgid "NetNeighbor (built-in)"
+msgstr "NetNeighbor (ingebouwd)"
+
+#: ui/
+msgid ""
+"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
+"etneighbor/custom_icons/."
+msgstr ""
+"Geen pictogrammen gevonden. Voeg PNG's toe onder assets/icons/netneigh"
+"bor of ~/.config/netneighbor/custom_icons/."
+
+#: ui/
+msgid "Open folder…"
+msgstr "Map openen…"

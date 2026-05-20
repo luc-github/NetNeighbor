@@ -946,234 +946,86 @@ msgstr "ESP3D-Geräte"
 msgid "Unknown Devices"
 msgstr "Unbekannte Geräte"
 
-#~ msgid "Icon"
-#~ msgstr "Symbol"
 
-#~ msgid "Invalid command template for this protocol."
-#~ msgstr "Ungültige Befehlsvorlage für dieses Protokoll."
 
 #, python-brace-format
-#~ msgid "{text} {deprecated_message}"
-#~ msgstr "{text} {deprecated_message}"
 
 #, python-brace-format
-#~ msgid "Got unexpected extra argument ({args})"
-#~ msgid_plural "Got unexpected extra arguments ({args})"
-#~ msgstr[0] "Unerwartetes zusätzliches Argument erhalten ({args})"
-#~ msgstr[1] "Unerwartete zusätzliche Argumente erhalten ({args})"
 
-#~ msgid "DeprecationWarning: The command {name!r} is deprecated.{extra_message}"
-#~ msgstr "DeprecationWarning: Der Befehl {name!r} ist veraltet.{extra_message}"
 
-#~ msgid "Aborted!"
-#~ msgstr "Abgebrochen!"
 
-#~ msgid "Commands"
-#~ msgstr "Befehle"
 
-#~ msgid "Missing command."
-#~ msgstr "Befehl fehlt."
 
-#~ msgid "No such command {name!r}."
-#~ msgstr "Kein solcher Befehl {name!r}."
 
-#~ msgid "Value must be an iterable."
-#~ msgstr "Der Wert muss ein Iterable sein."
 
 #, python-brace-format
-#~ msgid "Takes {nargs} values but 1 was given."
-#~ msgid_plural "Takes {nargs} values but {len} were given."
-#~ msgstr[0] "Benötigt {nargs} Werte, aber 1 wurde angegeben."
-#~ msgstr[1] "Benötigt {nargs} Werte, aber {len} wurden angegeben."
 
-#~ msgid ""
-#~ "DeprecationWarning: The {param_type} {name!r} is deprecated.{extra_message}"
-#~ msgstr ""
-#~ "DeprecationWarning: Das {param_type} {name!r} ist veraltet.{extra_message}"
 
 #, python-brace-format
-#~ msgid "env var: {var}"
-#~ msgstr "Umgebungsvariable: {var}"
 
 #, python-brace-format
-#~ msgid "default: {default}"
-#~ msgstr "Standard: {default}"
 
-#~ msgid "(dynamic)"
-#~ msgstr "(dynamisch)"
 
 #, python-format
-#~ msgid "%(prog)s, version %(version)s"
-#~ msgstr "%(prog)s, Version %(version)s"
 
-#~ msgid "Show the version and exit."
-#~ msgstr "Version anzeigen und beenden."
 
-#~ msgid "Show this message and exit."
-#~ msgstr "Diese Meldung anzeigen und beenden."
 
 #, python-brace-format
-#~ msgid "Error: {message}"
-#~ msgstr "Fehler: {message}"
 
 #, python-brace-format
-#~ msgid "Try '{command} {option}' for help."
-#~ msgstr "Geben Sie '{command} {option}' ein, um Hilfe zu erhalten."
 
 #, python-brace-format
-#~ msgid "Invalid value: {message}"
-#~ msgstr "Ungültiger Wert: {message}"
 
 #, python-brace-format
-#~ msgid "Invalid value for {param_hint}: {message}"
-#~ msgstr "Ungültiger Wert für {param_hint}: {message}"
 
-#~ msgid "Missing argument"
-#~ msgstr "Fehlendes Argument"
 
-#~ msgid "Missing option"
-#~ msgstr "Fehlende Option"
 
-#~ msgid "Missing parameter"
-#~ msgstr "Fehlender Parameter"
 
 #, python-brace-format
-#~ msgid "Missing {param_type}"
-#~ msgstr "Fehlendes {param_type}"
 
 #, python-brace-format
-#~ msgid "Missing parameter: {param_name}"
-#~ msgstr "Fehlender Parameter: {param_name}"
 
 #, python-brace-format
-#~ msgid "No such option: {name}"
-#~ msgstr "Keine solche Option: {name}"
 
 #, python-brace-format
-#~ msgid "Did you mean {possibility}?"
-#~ msgid_plural "(Possible options: {possibilities})"
-#~ msgstr[0] "Meinten Sie {possibility}?"
-#~ msgstr[1] "(Mögliche Optionen: {possibilities})"
 
-#~ msgid "unknown error"
-#~ msgstr "unbekannter Fehler"
 
-#~ msgid "Could not open file {filename!r}: {message}"
-#~ msgstr "Datei {filename!r} konnte nicht geöffnet werden: {message}"
 
-#~ msgid "Argument {name!r} takes {nargs} values."
-#~ msgstr "Argument {name!r} erfordert {nargs} Werte."
 
-#~ msgid "Option {name!r} does not take a value."
-#~ msgstr "Option {name!r} akzeptiert keinen Wert."
 
-#~ msgid "Option {name!r} requires an argument."
-#~ msgid_plural "Option {name!r} requires {nargs} arguments."
-#~ msgstr[0] "Option {name!r} erfordert ein Argument."
-#~ msgstr[1] "Option {name!r} erfordert {nargs} Argumente."
 
-#~ msgid "Shell completion is not supported for Bash versions older than 4.4."
-#~ msgstr ""
-#~ "Shell-Vervollständigung wird für Bash-Versionen älter als 4.4 nicht "
-#~ "unterstützt."
 
-#~ msgid "Couldn't detect Bash version, shell completion is not supported."
-#~ msgstr ""
-#~ "Bash-Version konnte nicht erkannt werden, Shell-Vervollständigung wird nicht"
-#~ " unterstützt."
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed"
-#~ msgstr "{editor}: Bearbeitung fehlgeschlagen"
 
 #, python-brace-format
-#~ msgid "{editor}: Editing failed: {e}"
-#~ msgstr "{editor}: Bearbeitung fehlgeschlagen: {e}"
 
-#~ msgid "Repeat for confirmation"
-#~ msgstr "Wiederholen zur Bestätigung"
 
-#~ msgid "Error: The value you entered was invalid."
-#~ msgstr "Fehler: Der eingegebene Wert war ungültig."
 
 #, python-brace-format
-#~ msgid "Error: {e.message}"
-#~ msgstr "Fehler: {e.message}"
 
-#~ msgid "Error: The two entered values do not match."
-#~ msgstr "Fehler: Die zwei eingegebenen Werte stimmen nicht überein."
 
-#~ msgid "Error: invalid input"
-#~ msgstr "Fehler: ungültige Eingabe"
 
-#~ msgid "Press any key to continue..."
-#~ msgstr "Beliebige Taste drücken zum Fortfahren..."
 
 #, python-brace-format
-#~ msgid ""
-#~ "Choose from:\n"
-#~ "\t{choices}"
-#~ msgstr ""
-#~ "Wählen Sie aus:\n"
-#~ "\t{choices}"
 
-#~ msgid "{value!r} is not {choice}."
-#~ msgid_plural "{value!r} is not one of {choices}."
-#~ msgstr[0] "{value!r} ist nicht {choice}."
-#~ msgstr[1] "{value!r} ist nicht einer von {choices}."
 
-#~ msgid "{value!r} does not match the format {format}."
-#~ msgid_plural "{value!r} does not match the formats {formats}."
-#~ msgstr[0] "{value!r} stimmt nicht mit dem Format {format} überein."
-#~ msgstr[1] "{value!r} stimmt nicht mit den Formaten {formats} überein."
 
-#~ msgid "{value!r} is not a valid {number_type}."
-#~ msgstr "{value!r} ist kein gültiger {number_type}."
 
 #, python-brace-format
-#~ msgid "{value} is not in the range {range}."
-#~ msgstr "{value} liegt nicht im Bereich {range}."
 
-#~ msgid "{value!r} is not a valid boolean. Recognized values: {states}"
-#~ msgstr "{value!r} ist kein gültiger boolescher Wert. Erkannte Werte: {states}"
 
-#~ msgid "{value!r} is not a valid UUID."
-#~ msgstr "{value!r} ist keine gültige UUID."
 
-#~ msgid "file"
-#~ msgstr "Datei"
 
-#~ msgid "directory"
-#~ msgstr "Verzeichnis"
 
-#~ msgid "path"
-#~ msgstr "Pfad"
 
-#~ msgid "{name} {filename!r} does not exist."
-#~ msgstr "{name} {filename!r} existiert nicht."
 
-#~ msgid "{name} {filename!r} is a file."
-#~ msgstr "{name} {filename!r} ist eine Datei."
 
-#~ msgid "{name} {filename!r} is a directory."
-#~ msgstr "{name} {filename!r} ist ein Verzeichnis."
 
-#~ msgid "{name} {filename!r} is not readable."
-#~ msgstr "{name} {filename!r} ist nicht lesbar."
 
-#~ msgid "{name} {filename!r} is not writable."
-#~ msgstr "{name} {filename!r} ist nicht schreibbar."
 
-#~ msgid "{name} {filename!r} is not executable."
-#~ msgstr "{name} {filename!r} ist nicht ausführbar."
 
 #, python-brace-format
-#~ msgid "{len_type} values are required, but {len_value} was given."
-#~ msgid_plural "{len_type} values are required, but {len_value} were given."
-#~ msgstr[0] ""
-#~ "{len_type} Werte sind erforderlich, aber {len_value} wurde angegeben."
-#~ msgstr[1] ""
-#~ "{len_type} Werte sind erforderlich, aber {len_value} wurden angegeben."
 
 #: ui/
 msgid "About NetNeighbor"
@@ -1347,13 +1199,6 @@ msgstr "Noch keine Geräte"
 msgid "No hidden devices"
 msgstr "Keine ausgeblendeten Geräte"
 
-#: ui/
-msgid ""
-"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
-"config/netneighbor/custom_icons/."
-msgstr ""
-"Keine Symbole gefunden. Fügen Sie PNGs unter assets/icons/bundled-free"
-"desktop oder ~/.config/netneighbor/custom_icons/ hinzu."
 
 #: ui/
 msgid ""
@@ -1530,3 +1375,34 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "Zurückgesetzt — bitte neu starten"
+#: ui/
+msgid "App icon pack"
+msgstr ""
+
+#: ui/
+msgid "Download failed"
+msgstr ""
+
+#: ui/
+msgid "Downloading…"
+msgstr ""
+
+#: ui/
+msgid "Icon pack"
+msgstr "Icon-Pack"
+
+#: ui/
+msgid "NetNeighbor (built-in)"
+msgstr "NetNeighbor (integriert)"
+
+#: ui/
+msgid ""
+"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
+"etneighbor/custom_icons/."
+msgstr ""
+"Keine Symbole gefunden. Fügen Sie PNGs unter assets/icons/netneighbor "
+"oder ~/.config/netneighbor/custom_icons/ hinzu."
+
+#: ui/
+msgid "Open folder…"
+msgstr "Ordner öffnen…"

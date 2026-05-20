@@ -1098,11 +1098,6 @@ msgstr ""
 msgid "No hidden devices"
 msgstr ""
 
-#: ui/
-msgid ""
-"No icons found. Add PNGs under assets/icons/bundled-freedesktop or ~/."
-"config/netneighbor/custom_icons/."
-msgstr ""
 
 #: ui/
 msgid ""
@@ -1234,3 +1229,60 @@ msgstr ""
 #: ui/
 msgid "{} devices"
 msgstr ""
+
+#: ui/
+msgid ""
+"All preferences, cached icons, discovery data and logs will be permane"
+"ntly deleted:\n• ~/.config/netneighbor\n• ~/.cache/netneighbor\n\nNetN"
+"eighbor will use default settings on next start.\nThis action cannot b"
+"e undone."
+msgstr ""
+
+#: ui/
+msgid "App icon pack"
+msgstr ""
+
+#: ui/
+msgid "Download failed"
+msgstr ""
+
+#: ui/
+msgid "Downloading…"
+msgstr ""
+
+#: ui/
+msgid "Icon pack"
+msgstr ""
+
+#: ui/
+msgid "Maintenance"
+msgstr ""
+
+#: ui/
+msgid "NetNeighbor (built-in)"
+msgstr ""
+
+#: ui/
+msgid ""
+"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
+"etneighbor/custom_icons/."
+msgstr ""
+
+#: ui/
+msgid "Open folder…"
+msgstr ""
+
+#: ui/
+msgid "Reset all application data?"
+msgstr ""
+
+#: ui/
+msgid "Reset all application data…"
+msgstr ""
+
+#: ui/
+msgid "Reset done — please restart"
+msgstr ""
+
+
+

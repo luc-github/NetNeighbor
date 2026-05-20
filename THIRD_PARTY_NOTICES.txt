@@ -4,7 +4,7 @@ NetNeighbor — third-party notices
 This file lists attributions for libraries shipped with NetNeighbor. The
 application is licensed under the GNU Lesser General Public License (LGPL).
 
-Bundled device-type artwork lives under ``assets/icons/bundled-freedesktop/``
-(see ``assets/icons/bundled-freedesktop/README.txt``). It is part of the same
+Bundled device-type artwork lives under ``assets/icons/netneighbor/``
+(see ``assets/icons/netneighbor/README.txt``). It is part of the same
 distribution unless your build adds separate third-party art — in that case,
 document it here.

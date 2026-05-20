@@ -52,11 +52,11 @@ See `packaging/linux/build_deb.sh` for the full file list and icon layout.
 
 ### Bundled icon set — size trimming
 
-`assets/icons/bundled-freedesktop/` is ~151 MB in the source tree (10 resolution
+`assets/icons/netneighbor/` is ~151 MB in the source tree (10 resolution
 directories). All three Linux build scripts automatically trim the directory to the
 5 sizes used by the Qt icon-view presets (16, 32, 48, 96, 256), reducing the packaged
 size by ~143 MB. The Windows build does the same after the PyInstaller `onedir` step.
-See [`MAINTENANCE.md`](MAINTENANCE.md#bundled-device-icons-bundled-freedesktop) for details.
+See [`MAINTENANCE.md`](MAINTENANCE.md#bundled-device-icons-netneighbor) for details.
 
 ### Install / cleanup
 

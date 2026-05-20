@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 ICON_CREDIT_LINES_EN: tuple[str, ...] = (
-    "Device-type icons: bundled under assets/icons/bundled-freedesktop; per-device overrides in ~/.config/netneighbor/custom_icons/.",
+    "Device-type icons: bundled under assets/icons/netneighbor; per-device overrides in ~/.config/netneighbor/custom_icons/.",
 )
 
 

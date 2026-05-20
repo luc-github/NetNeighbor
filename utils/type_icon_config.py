@@ -118,7 +118,7 @@ def load_type_icon_basenames_by_slug(*, force_reload: bool = False) -> dict[str,
 
 
 def type_icon_basenames_for_slug(device_type_slug: str | None) -> list[str]:
-    """Ordered basenames for ``bundled-freedesktop`` lookup (falls back to ``unknown``)."""
+    """Ordered basenames for bundled icon lookup (falls back to ``unknown``)."""
     m = load_type_icon_basenames_by_slug()
     slug = (device_type_slug or "unknown").strip().lower() or "unknown"
     if slug in m:

@@ -56,13 +56,13 @@ if (-not (Test-Path $outFolder)) {
     throw "PyInstaller output not found: $outFolder"
 }
 
-# Trim bundled-freedesktop to only the resolutions needed by the Qt UI (saves ~143 MB).
+# Trim netneighbor icon set to only the resolutions needed by the Qt UI (saves ~143 MB).
 # Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
-$bfd = Join-Path $outFolder "_internal\assets\icons\bundled-freedesktop"
+$bfd = Join-Path $outFolder "_internal\assets\icons\netneighbor"
 if (Test-Path $bfd) {
     $keep = @("16", "32", "48", "96", "256")
     Get-ChildItem $bfd -Directory | Where-Object { $_.Name -notin $keep } | Remove-Item -Recurse -Force
-    Write-Host "Trimmed bundled-freedesktop to: $($keep -join ', ')"
+    Write-Host "Trimmed netneighbor icons to: $($keep -join ', ')"
 }
 
 $zipName = "NetNeighbor-$Version-win64.zip"

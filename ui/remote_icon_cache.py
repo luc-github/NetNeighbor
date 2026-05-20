@@ -145,20 +145,16 @@ def pixmap_from_icon_bytes(data: bytes, target_size: int, *, min_native_size: in
 
 
 def qicon_from_icon_bytes(data: bytes, target_size: int) -> QIcon | None:
-    """Build a multi-size ``QIcon`` anchored at 48px when possible.
+    """Build a multi-size ``QIcon`` for the given target size.
 
-    Raster icons are only used when their native resolution is at least
-    ``target_size``.  A 48 px device icon will therefore be shown at medium
-    (48 px) but NOT at large (96 px) or xlarge (256 px), where the caller
-    falls back to the bundled type icon.  SVG icons are always used because
-    they are resolution-independent.
+    Always uses the device-provided icon regardless of its native resolution;
+    small raster icons are upscaled smoothly rather than falling back to the
+    bundled type icon.  SVG icons render natively at any size.
     """
     if target_size <= 0:
         target_size = DEVICE_ICON_REFERENCE_PX
 
-    is_svg = _is_svg_payload(data)
-    min_native = 0 if is_svg else target_size
-    pix = pixmap_from_icon_bytes(data, target_size, min_native_size=min_native)
+    pix = pixmap_from_icon_bytes(data, target_size)
     if pix is None or pix.isNull():
         return None
 
@@ -189,6 +185,31 @@ class QtRemoteIconCache(QObject):
         self._bytes_by_key.clear()
         self._bytes_by_host.clear()
         self._failed.clear()
+
+    def prefetch_from_index(self) -> None:
+        """Pre-warm in-memory cache from the on-disk icon index.
+
+        Called once at startup so the first render finds all previously-fetched
+        icons in memory, avoiding per-device disk reads during tile painting.
+        """
+        from utils.device_remote_icon import _load_index, _REMOTE_ICON_DISK_DIR
+        for sip, row in _load_index().items():
+            if sip in self._bytes_by_host:
+                continue
+            sha = row.get("payload_sha256", "")
+            if not isinstance(sha, str) or len(sha) != 64:
+                continue
+            path = _REMOTE_ICON_DISK_DIR / f"{sha}.payload"
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            if data:
+                self._bytes_by_host[sip] = data
+                canon = row.get("canonical_url", "")
+                if canon:
+                    self._bytes_by_key[canon] = data
+        _LOG.debug("prefetch_from_index: %d hosts pre-loaded", len(self._bytes_by_host))
 
     def fetch_status_for_device(self, device: Device) -> str:
         """Return 'ready', 'fetching', 'failed', or 'missing'."""

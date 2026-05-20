@@ -1,0 +1,9 @@
+{
+'name' : 'Windows 11 fluent',
+'owner' : 'Luc Lebosse',
+'resolutions' : '16,22,32,48,64,96,128,256,512,1024',
+'version' : '1.0',
+'date' : '2026-05-19',
+'repository' : 'https://github.com/luc-github/NetNeighbor/icons_packs/win11fluent',
+'license' : 'lgpl3'   
+}
