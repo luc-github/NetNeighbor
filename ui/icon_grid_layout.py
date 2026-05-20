@@ -114,21 +114,21 @@ def compute_icon_mode_cell_size(
         return QSize(min_w, icon_tile_cell_height(ih, empty_h))
 
     vp = max(min_w, viewport_width)
-    gaps_one_row = list_spacing * max(0, count - 1)
 
     def _fits_one_row(cell_w: int) -> bool:
-        return count * cell_w + gaps_one_row <= vp
+        # Qt adds list_spacing on all 4 viewport sides: (count+1) gaps total.
+        return count * cell_w + (count + 1) * list_spacing <= vp
 
     if _fits_one_row(max_cell_w):
         cell_w = max_cell_w
     elif count == 1:
         cell_w = min(max_cell_w, vp)
     else:
-        cell_w = max(min_w, (vp - gaps_one_row) // count)
+        cell_w = max(min_w, (vp - (count + 1) * list_spacing) // count)
         cell_w = min(cell_w, max_cell_w)
         if not _fits_one_row(cell_w):
-            cols = max(1, (vp + list_spacing) // (min_w + list_spacing))
-            cell_w = max(min_w, (vp - list_spacing * (cols - 1)) // cols)
+            cols = max(1, (vp - list_spacing) // (min_w + list_spacing))
+            cell_w = max(min_w, (vp - list_spacing * (cols + 1)) // cols)
             cell_w = min(cell_w, max_cell_w)
 
     if has_long_names:
@@ -168,9 +168,9 @@ def icon_list_content_height(
     cw = max(1, grid_cell.width())
     ch = max(1, grid_cell.height())
     spacing = list_widget.spacing()
-    cols = max(1, (vp_w + spacing) // (cw + spacing))
+    cols = max(1, (vp_w - spacing) // (cw + spacing))
     rows = (count + cols - 1) // cols
-    return rows * ch + rows * spacing
+    return rows * ch + (rows + 1) * spacing
 
 
 def apply_icon_mode_list_layout(

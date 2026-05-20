@@ -7,16 +7,16 @@
 from __future__ import annotations
 
 import logging
-import math
 import os
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
 from datetime import datetime, timezone
 
 from gettext import gettext as _
 from PySide6.QtCore import QDateTime, QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPainter, QPalette, QResizeEvent, QShowEvent
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QPainter, QPalette, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -140,11 +140,12 @@ class _ScanningOverlay(QWidget):
     dependency on QTimer delivery timing.
     """
 
-    _SEGS = 8
-    _RING_R = 26
-    _DOT_R = 5
-    _INTERVAL_S = 0.09   # ~11 fps
+    _FRAMES = 10
+    _INTERVAL_S = 0.10   # 10 fps
     _MAX_MS = 12_000
+    # SVG viewBox is 200×250 (4:5 ratio); render at this width (height computed from ratio).
+    _SVG_W = 160
+    _SVG_H = 200  # 160 * 250 / 200
 
     _tick_signal = Signal()  # emitted from bg thread → received on main thread
 
@@ -154,6 +155,8 @@ class _ScanningOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self._step = 0
+        self._tick_count = 0
+        self._hide_requested = False
         self._alive = False
         self._tick_signal.connect(self._on_tick, Qt.ConnectionType.QueuedConnection)
         self._guard = QTimer(self)
@@ -162,6 +165,14 @@ class _ScanningOverlay(QWidget):
         self._guard.timeout.connect(self.hide)
         content_frame.installEventFilter(self)
         main_window.installEventFilter(self)
+
+        from PySide6.QtSvg import QSvgRenderer
+        svg_dir = Path(__file__).resolve().parent.parent / "assets" / "spinner"
+        self._renderers: list = []
+        for i in range(self._FRAMES):
+            p = svg_dir / f"spinner-{i}.svg"
+            r = QSvgRenderer(str(p), self) if p.is_file() else None
+            self._renderers.append(r)
 
     # ── geometry sync ──────────────────────────────────────────────────────────
 
@@ -187,6 +198,8 @@ class _ScanningOverlay(QWidget):
         self._update_geometry()
         self.raise_()
         self._guard.start()
+        self._tick_count = 0
+        self._hide_requested = False
         self._alive = True
         t = threading.Thread(target=self._anim_loop, daemon=True, name="overlay-anim")
         t.start()
@@ -203,47 +216,45 @@ class _ScanningOverlay(QWidget):
             self._tick_signal.emit()
             time.sleep(self._INTERVAL_S)
 
+    def request_hide(self) -> None:
+        """Hide after the current cycle completes (minimum one full 0→9 loop)."""
+        if self._tick_count >= self._FRAMES:
+            self.hide()
+        else:
+            self._hide_requested = True
+
     def _on_tick(self) -> None:
         if not self.isVisible():
             return
-        self._step = (self._step + 1) % self._SEGS
+        self._tick_count += 1
+        self._step = self._tick_count % self._FRAMES
         self.raise_()
         self.repaint()
+        if self._hide_requested and self._tick_count >= self._FRAMES:
+            self.hide()
 
     # ── painting ───────────────────────────────────────────────────────────────
 
     def paintEvent(self, _event) -> None:
+        from PySide6.QtCore import QRectF
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
         painter.fillRect(self.rect(), self.palette().color(QPalette.ColorRole.Base))
 
         cx = self.width() / 2.0
-        cy = self.height() / 2.0 - 20
+        # Centre the SVG slightly above mid-height to leave room for text below.
+        svg_top = self.height() / 2.0 - self._SVG_H / 2.0 - 16
+        svg_rect = QRectF(cx - self._SVG_W / 2.0, svg_top, self._SVG_W, self._SVG_H)
 
-        hi = self.palette().color(QPalette.ColorRole.Highlight)
-        for i in range(self._SEGS):
-            age = (i - self._step) % self._SEGS
-            alpha = int(40 + 215 * age / (self._SEGS - 1))
-            ang = 2 * math.pi * i / self._SEGS - math.pi / 2
-            dx = self._RING_R * math.cos(ang)
-            dy = self._RING_R * math.sin(ang)
-            c = QColor(hi)
-            c.setAlpha(alpha)
-            painter.setBrush(c)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(
-                int(cx + dx - self._DOT_R),
-                int(cy + dy - self._DOT_R),
-                self._DOT_R * 2,
-                self._DOT_R * 2,
-            )
+        renderer = self._renderers[self._step % self._FRAMES] if self._renderers else None
+        if renderer is not None and renderer.isValid():
+            renderer.render(painter, svg_rect)
 
         font = painter.font()
         font.setPointSize(11)
         painter.setFont(font)
         painter.setPen(self.palette().color(QPalette.ColorRole.Text))
-        text_top = int(cy) + self._RING_R + 14
+        text_top = int(svg_top + self._SVG_H + 10)
         painter.drawText(
             QRect(0, text_top, self.width(), 32),
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
@@ -519,6 +530,8 @@ class NetNeighborMainWindow(QMainWindow):
         self._icon_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self._icon_list.setWrapping(True)
         self._icon_list.setWordWrap(True)
+        self._icon_list.setFrameShape(QFrame.Shape.NoFrame)
+        self._icon_list.setViewportMargins(8, 0, 8, 8)
         # Windows native (Vista) style for QListView IconMode can create transient top-level HWNDs
         # per layout pass; batched layout + a minimal stylesheet steer this widget through the
         # style-polished path instead (taskbar entries titled like "python…" still pick up our AppID).
@@ -1354,7 +1367,7 @@ class NetNeighborMainWindow(QMainWindow):
         if len(self._last_devices) > 0:
             self._first_device_ui_flush_done = True
             if self._scanning_overlay.isVisible():
-                self._scanning_overlay.hide()
+                self._scanning_overlay.request_hide()
 
     def _apply_devices_snapshot(self, devices: list[Device]) -> None:
         """Apply a device list to bundles, sidebar, and main views (always merge like GTK)."""

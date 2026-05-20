@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -35 200 250" height="200" width="200">
+  <title>Logo NetNeightbor</title>
+  
+  
+  <g stroke-linejoin="round" stroke-linecap="round"  stroke="#7ADDCD">
+    
+    <line stroke-width="8" y2="162" x2="18" y1="38" x1="18"></line>
+    <line stroke-width="8" y2="162" x2="72" y1="38" x1="72"></line>
+    <line stroke-width="8" y2="162" x2="128" y1="38" x1="128"></line>
+    <line stroke-width="8" y2="162" x2="182" y1="38" x1="182"></line>
+    
+    
+    <line stroke-width="8"  y2="162" x2="72" y1="38" x1="18"></line>
+    <line stroke-width="8"  y2="162" x2="182" y1="38" x1="128"></line>
+  </g>
+  
+   <g stroke-linejoin="round" stroke-linecap="round"  stroke-dasharray="5, 10" stroke="#EB683D">  
+    <line stroke-width="3" y2="162" x2="128" y1="38" x1="72"></line>
+    <line stroke-width="3" y2="38" x2="128" y1="162" x1="72"></line>
+  </g>
+
+  
+  <g>
+    
+    <circle stroke-width="7" stroke="#309B8C" fill="#FFFFFF" r="10" cy="38" cx="18"></circle>
+    <circle stroke-width="7" stroke="#309B8C" fill="#E16E43"  r="10" cy="38" cx="72"></circle>
+    <circle stroke-width="7" stroke="#309B8C" fill="#FFFFFF"  r="10" cy="38" cx="128"></circle>
+    <circle stroke-width="7" stroke="#309B8C" fill="#FFFFFF"  r="10" cy="38" cx="182"></circle>
+    
+    
+    <circle stroke-width="7" stroke="#309B8C" fill="#FFFFFF" r="10"  cy="162" cx="18"></circle>
+    <circle stroke-width="7" stroke="#309B8C" fill="#FFFFFF" r="10"  cy="162" cx="72"></circle>
+    <circle stroke-width="7" stroke="#309B8C" fill="#FFFFFF" r="10"  cy="162" cx="128"></circle>
+    <circle stroke-width="7" stroke="#309B8C" fill="#FFFFFF" r="10"  cy="162" cx="182"></circle>
+    
+    
+    <circle stroke-width="7" stroke="#E16E43" fill="#FFFFFF" r="10" cy="100" cx="100"></circle>
+  </g>
+</svg>

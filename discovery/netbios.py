@@ -46,6 +46,11 @@ _NMB_SUBPROCESS_KW = _subprocess_no_window_kwargs()
 _STATUS_OF_RE = re.compile(r"^Looking up status of\s+(\S+)\s*$", re.IGNORECASE)
 # ``	DS415PLUS       <00> -         B <ACTIVE>``
 _STATUS_NAME_RE = re.compile(r"^\s+(\S+)\s+<([0-9a-fA-F]{2})>\s*-")
+# nbtstat -A output: ``   MYPC           <00>  UNIQUE      Registered``
+_NBTSTAT_NAME_RE = re.compile(
+    r"^\s+(\S+)\s+<([0-9a-fA-F]{2})>\s+(?:UNIQUE|GROUP)\b",
+    re.IGNORECASE,
+)
 
 
 def _parse_ip_name_suffix(rest: str) -> tuple[str, str] | None:
@@ -102,6 +107,24 @@ def _ip_rank(ip_s: str) -> tuple[int, int]:
 def _is_placeholder_netbios_name(name: str) -> bool:
     n = (name or "").strip()
     return n in {"*", "?"}
+
+
+def _parse_nbtstat_output(text: str, queried_ip: str) -> list[tuple[str, str, str]]:
+    """Parse ``nbtstat -A <IP>`` output → ``(ip, name, suffix_hex)`` rows.
+
+    The "Node IpAddress" header is our local interface IP, not the target —
+    use ``queried_ip`` as the canonical IP for all parsed names.
+    """
+    try:
+        ip = str(ipaddress.ip_address(queried_ip.strip()))
+    except ValueError:
+        ip = queried_ip.strip()
+    rows: list[tuple[str, str, str]] = []
+    for raw in (text or "").splitlines():
+        m = _NBTSTAT_NAME_RE.match(raw)
+        if m:
+            rows.append((ip, m.group(1).strip(), m.group(2).lower()))
+    return rows
 
 
 def _parse_nmblookup_output(text: str) -> list[tuple[str, str, str]]:
@@ -241,6 +264,7 @@ class NetbiosDiscovery(BaseDiscovery):
             except ValueError:
                 self._logger.debug("NetBIOS directed_ips skip invalid IP: %r", raw)
         self._nmblookup = shutil.which("nmblookup")
+        self._nbtstat: str | None = shutil.which("nbtstat") if sys.platform == "win32" else None
         self._running = False
         self._stop_event = threading.Event()
         self._wake_event = threading.Event()
@@ -256,8 +280,8 @@ class NetbiosDiscovery(BaseDiscovery):
         self._nmb_grace_sweeps: int = 2
 
     def suggest_directed_ip(self, ip_s: str) -> None:
-        """Queue ``nmblookup -A`` for this IP on the next probe (LAN PCs missed by broadcast sweep)."""
-        if not self._running or not self._nmblookup:
+        """Queue ``nmblookup -A`` / ``nbtstat -A`` for this IP on the next probe."""
+        if not self._running or (not self._nmblookup and not self._nbtstat):
             return
         try:
             normalized = str(ipaddress.ip_address((ip_s or "").strip()))
@@ -271,10 +295,20 @@ class NetbiosDiscovery(BaseDiscovery):
         self._logger.debug("NetBIOS: extra directed probe queued for %s", normalized)
         self.refresh()
 
+    def remove_directed_ip(self, ip_s: str) -> None:
+        """Remove an IP from the extra directed probe queue (e.g. device went offline)."""
+        try:
+            normalized = str(ipaddress.ip_address((ip_s or "").strip()))
+        except ValueError:
+            return
+        with self._extra_directed_lock:
+            self._extra_directed.pop(normalized, None)
+        self._logger.debug("NetBIOS: removed directed probe for %s", normalized)
+
     def start(self) -> None:
         if self._running:
             return
-        if not self._nmblookup:
+        if not self._nmblookup and not self._nbtstat:
             if not self._missing_logged:
                 self._logger.warning(
                     "NetBIOS discovery unavailable: nmblookup not in PATH "
@@ -321,46 +355,80 @@ class NetbiosDiscovery(BaseDiscovery):
                 self._wake_event.clear()
 
     def _run_once(self) -> None:
-        if self._nmblookup is None:
+        if not self._nmblookup and not self._nbtstat:
             return
-        cmd = [self._nmblookup, *self._argv_rest]
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=float(self._timeout_s),
-                check=False,
-                **_NMB_SUBPROCESS_KW,
-            )
-        except subprocess.TimeoutExpired:
-            # Transient failure — don't penalise hosts with a miss count increment.
-            self._logger.debug("nmblookup timed out after %.1fs", self._timeout_s)
-            return
-        except OSError:
-            self._logger.debug("nmblookup failed to run", exc_info=True)
-            return
-        out = (proc.stdout or "") + "\n" + (proc.stderr or "")
-        rows = _parse_nmblookup_output(out)
-        with self._extra_directed_lock:
-            extra_directed = list(self._extra_directed.keys())
-        directed_chain = list(dict.fromkeys([*self._directed_ips, *sorted(extra_directed)]))
+        rows: list[tuple[str, str, str]] = []
+        sweep_rc: int | None = None
 
-        def _probe_one(dip: str) -> list:
+        # Broadcast sweep: nmblookup only (nbtstat has no broadcast mode).
+        if self._nmblookup:
+            cmd = [self._nmblookup, *self._argv_rest]
             try:
-                proc_d = subprocess.run(
-                    [self._nmblookup, "-A", dip],
+                proc = subprocess.run(
+                    cmd,
                     capture_output=True,
                     text=True,
                     timeout=float(self._timeout_s),
                     check=False,
                     **_NMB_SUBPROCESS_KW,
                 )
-                return _parse_nmblookup_output((proc_d.stdout or "") + "\n" + (proc_d.stderr or ""))
+                sweep_rc = proc.returncode
             except subprocess.TimeoutExpired:
-                self._logger.debug("nmblookup -A %s timed out after %.1fs", dip, self._timeout_s)
+                self._logger.debug("nmblookup timed out after %.1fs", self._timeout_s)
+                return
             except OSError:
-                self._logger.debug("nmblookup -A %s failed", dip, exc_info=True)
+                self._logger.debug("nmblookup failed to run", exc_info=True)
+                return
+            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            rows = _parse_nmblookup_output(out)
+
+        with self._extra_directed_lock:
+            extra_directed = list(self._extra_directed.keys())
+        directed_chain = list(dict.fromkeys([*self._directed_ips, *sorted(extra_directed)]))
+
+        def _probe_one(dip: str) -> list[tuple[str, str, str]]:
+            if self._nmblookup:
+                try:
+                    proc_d = subprocess.run(
+                        [self._nmblookup, "-A", dip],
+                        capture_output=True,
+                        text=True,
+                        timeout=float(self._timeout_s),
+                        check=False,
+                        **_NMB_SUBPROCESS_KW,
+                    )
+                    return _parse_nmblookup_output((proc_d.stdout or "") + "\n" + (proc_d.stderr or ""))
+                except subprocess.TimeoutExpired:
+                    self._logger.debug("nmblookup -A %s timed out after %.1fs", dip, self._timeout_s)
+                except OSError:
+                    self._logger.debug("nmblookup -A %s failed", dip, exc_info=True)
+            elif self._nbtstat:
+                try:
+                    proc_d = subprocess.run(
+                        [self._nbtstat, "-A", dip],
+                        capture_output=True,
+                        text=True,
+                        timeout=float(self._timeout_s),
+                        check=False,
+                        **_NMB_SUBPROCESS_KW,
+                    )
+                    result = _parse_nbtstat_output((proc_d.stdout or "") + "\n" + (proc_d.stderr or ""), dip)
+                    if result:
+                        return result
+                except subprocess.TimeoutExpired:
+                    self._logger.debug("nbtstat -A %s timed out after %.1fs — trying DNS reverse lookup", dip, self._timeout_s)
+                except OSError:
+                    self._logger.debug("nbtstat -A %s failed", dip, exc_info=True)
+            # Fallback: DNS reverse lookup (covers DNS-registered hosts when UDP 137 is firewalled).
+            try:
+                import socket as _socket
+                fqdn, _, _ = _socket.gethostbyaddr(dip)
+                short = fqdn.split(".")[0].strip().upper()
+                if short:
+                    self._logger.debug("DNS reverse fallback for %s → %s", dip, short)
+                    return [(dip, short, "00")]
+            except Exception:
+                pass
             return []
 
         if directed_chain:
@@ -370,15 +438,16 @@ class NetbiosDiscovery(BaseDiscovery):
                     rows.extend(partial_rows)
         merged = _merge_rows_prefer_ipv4(rows)
         if not merged:
-            self._logger.debug(
-                "NetBIOS: no hosts parsed (nmblookup exit=%s; try ``nmblookup -S '*'`` / LAN NMB)",
-                proc.returncode,
-            )
-            if self._directed_ips:
-                self._logger.warning(
-                    "NetBIOS: directed_ips=%s returned no usable names — check ``nmblookup -A <ip>`` from this host",
-                    self._directed_ips,
+            if sweep_rc is not None:
+                self._logger.debug(
+                    "NetBIOS: no hosts parsed (nmblookup exit=%s; try ``nmblookup -S '*'`` / LAN NMB)",
+                    sweep_rc,
                 )
+                if self._directed_ips:
+                    self._logger.warning(
+                        "NetBIOS: directed_ips=%s returned no usable names — check ``nmblookup -A <ip>`` from this host",
+                        self._directed_ips,
+                    )
 
         # Build payloads for hosts found in this sweep.
         current_payloads: dict[str, dict] = {}

@@ -19,7 +19,7 @@ from discovery.netbios import NetbiosDiscovery
 from discovery.wsdd_client import WsddSocketDiscovery
 from discovery.wsd import WSDiscovery, is_synthetic_wsd_display_name
 from model.device import Device
-from utils.discovery_cache import CACHE_MAX_AGE_HOURS, load_discovery_cache
+from utils.discovery_cache import CACHE_MAX_AGE_HOURS, load_discovery_cache, save_nmb_name_cache, save_wsd_device_cache
 from utils.discovery_config import normalize_information_precedence_list
 from utils.device_bundles import normalize_mac_for_bundle_merge
 from utils.discovery_identity import (
@@ -40,6 +40,9 @@ PresenceTransitionHook = Callable[[Device, PresenceTransitionKind], None]
 _IDENTITY_HOLD_SECONDS = 3.0
 # Coalesce burst ``_notify()`` calls (mDNS / merge can fire many times per 100 ms window).
 _NOTIFY_DEBOUNCE_SECONDS = 0.08
+# Retry WSD NMB probes when ARP cache is cold at device arrival time.
+_WSD_NMB_RETRY_INTERVAL_S = 30.0
+_WSD_NMB_MAX_RETRIES = 6
 
 
 def _descriptor_url_with_ip(descriptor_template: str, ip_s: str) -> str | None:
@@ -253,6 +256,10 @@ class DiscoveryManager:
         self._notify_debounce_lock = threading.Lock()
         self._notify_debounce_timer: threading.Timer | None = None
         self._stopped: bool = False
+        self._wsd_nmb_retry_lock = threading.Lock()
+        self._wsd_nmb_retry_timer: threading.Timer | None = None
+        self._wsd_nmb_pending: dict[str, tuple[str, int]] = {}  # device_key → (mac, retry_count)
+        self._wsd_nmb_probed: dict[str, str] = {}  # device_key → target_v4 (for cleanup on offline)
         self._presence_hooks: list[PresenceTransitionHook] = []
         self._type_overrides: dict[str, str] = {}
         self._name_overrides: dict[str, str] = {}
@@ -272,6 +279,8 @@ class DiscoveryManager:
         self._ssdp_profile_cache_by_ip, self._ssdp_profile_cache_emit_rows = (
             self._load_ssdp_profile_cache_by_ip()
         )
+        self._nmb_name_cache: dict[str, dict] = self._load_nmb_name_cache()
+        self._wsd_device_cache: dict[str, dict] = self._load_wsd_device_cache()
         self._demo_mode = demo_mode
         self._location_prefs_need_reapply = False
         self._location_prefs_dirty_callback: Callable[[], None] | None = None
@@ -329,6 +338,12 @@ class DiscoveryManager:
             if self._notify_debounce_timer is not None:
                 self._notify_debounce_timer.cancel()
                 self._notify_debounce_timer = None
+        with self._wsd_nmb_retry_lock:
+            if self._wsd_nmb_retry_timer is not None:
+                self._wsd_nmb_retry_timer.cancel()
+                self._wsd_nmb_retry_timer = None
+            self._wsd_nmb_pending.clear()
+        self._wsd_nmb_probed.clear()
         self._logger.info("Stopping discovery protocols")
         for protocol in self._protocols:
             protocol.stop()
@@ -532,21 +547,56 @@ class DiscoveryManager:
             uloc,
         )
         self._emit_presence_hooks_if_transition(device, prev_online, device.online)
+        if device.source == "nmb" and device.online:
+            name = (device.name or "").strip()
+            if name:
+                sip = str(device.ip).strip()
+                from utils.neighbor_mac import lookup_mac_from_neighbor_cache
+                mac = lookup_mac_from_neighbor_cache(sip)
+                save_nmb_name_cache(sip, name, mac)
+                self._nmb_name_cache[sip] = {"name": name}
+        if device.source == "wsd" and device.online:
+            name = (device.name or "").strip()
+            if name and not is_synthetic_wsd_display_name(name):
+                dev_key = device.key
+                md = device.metadata if isinstance(device.metadata, dict) else {}
+                row = {
+                    "name": name,
+                    "ip": str(device.ip),
+                    "port": int(device.port or 0),
+                    "type": device.type or "",
+                    "category": device.category or "",
+                    "url": device.url or "",
+                    "wsd_epr": md.get("wsd_epr", ""),
+                    "wsd_xaddrs": md.get("wsd_xaddrs") or [],
+                    "wsd_types": md.get("wsd_types") or [],
+                    "wsd_scopes": md.get("wsd_scopes") or [],
+                }
+                save_wsd_device_cache(dev_key, row)
+                self._wsd_device_cache[dev_key] = row
         self._notify()
 
     def _maybe_queue_nmb_probe_for_synthetic_wsd(self, device: Device) -> None:
-        """Queue ``nmblookup -A`` on the LAN IPv4 for synthetic WSD/wsdd labels.
+        """Queue ``nmblookup -A`` / ``nbtstat -A`` on the LAN IPv4 for synthetic WSD/wsdd labels.
 
         Broadcast browse often misses PCs; directed ``-A`` matches what you'd run manually.
         If discovery only has IPv6 (e.g. link-local), resolve IPv4 from kernel neighbor/MAC
         tables—same source as ``ip neigh``—then probe that address for the NetBIOS name.
+        When ARP cache is cold at arrival, the device is queued for periodic retry.
         """
         nmb = self._nmb_discovery
         if nmb is None:
             return
         if (device.source or "").strip().lower() not in {"wsd", "wsdd"}:
             return
+        dev_key = device.key
         if not device.online:
+            # Clean up probe state for this device when it goes offline.
+            with self._wsd_nmb_retry_lock:
+                self._wsd_nmb_pending.pop(dev_key, None)
+            probed_v4 = self._wsd_nmb_probed.pop(dev_key, None)
+            if probed_v4:
+                nmb.remove_directed_ip(probed_v4)
             return
         if (device.type or "").strip().lower() != "computer":
             return
@@ -574,10 +624,66 @@ class DiscoveryManager:
                 return
             target_v4 = lookup_ipv4_for_mac(mac)
             if not target_v4:
+                with self._wsd_nmb_retry_lock:
+                    if dev_key not in self._wsd_nmb_pending:
+                        self._wsd_nmb_pending[dev_key] = (mac, 0)
+                        self._logger.debug(
+                            "wsd_nmb: IPv4 not in ARP cache yet for mac=%s key=%s — scheduling retry",
+                            mac, dev_key,
+                        )
+                        self._schedule_wsd_nmb_retry_locked()
                 return
         else:
             return
         nmb.suggest_directed_ip(target_v4)
+        self._wsd_nmb_probed[dev_key] = target_v4
+
+    def _schedule_wsd_nmb_retry_locked(self) -> None:
+        """Schedule the next retry tick (must be called with ``_wsd_nmb_retry_lock`` held)."""
+        if self._stopped or not self._wsd_nmb_pending:
+            return
+        if self._wsd_nmb_retry_timer is not None:
+            return
+        t = threading.Timer(_WSD_NMB_RETRY_INTERVAL_S, self._retry_wsd_nmb_probes_once)
+        t.daemon = True
+        self._wsd_nmb_retry_timer = t
+        t.start()
+
+    def _retry_wsd_nmb_probes_once(self) -> None:
+        """Fire pending WSD NMB probes whose IPv4 can now be resolved from ARP cache."""
+        from utils.neighbor_mac import lookup_ipv4_for_mac
+
+        with self._wsd_nmb_retry_lock:
+            self._wsd_nmb_retry_timer = None
+            if self._stopped:
+                return
+            still_pending: dict[str, tuple[str, int]] = {}
+            for dev_key, (mac, attempts) in list(self._wsd_nmb_pending.items()):
+                target_v4 = lookup_ipv4_for_mac(mac)
+                if target_v4:
+                    self._logger.debug(
+                        "wsd_nmb retry: resolved mac=%s → %s (attempt %d), queuing NMB probe",
+                        mac, target_v4, attempts + 1,
+                    )
+                    nmb = self._nmb_discovery
+                    if nmb is not None:
+                        nmb.suggest_directed_ip(target_v4)
+                    self._wsd_nmb_probed[dev_key] = target_v4
+                else:
+                    next_attempts = attempts + 1
+                    if next_attempts < _WSD_NMB_MAX_RETRIES:
+                        still_pending[dev_key] = (mac, next_attempts)
+                        self._logger.debug(
+                            "wsd_nmb retry %d/%d: mac=%s still not in ARP cache",
+                            next_attempts, _WSD_NMB_MAX_RETRIES, mac,
+                        )
+                    else:
+                        self._logger.debug(
+                            "wsd_nmb retry: giving up after %d attempts for mac=%s",
+                            _WSD_NMB_MAX_RETRIES, mac,
+                        )
+            self._wsd_nmb_pending = still_pending
+            self._schedule_wsd_nmb_retry_locked()
 
     def _load_ssdp_profile_cache_by_ip(self) -> tuple[dict[str, dict], list[tuple[str, dict]]]:
         """Build SSDP profile cache indexes from disk.
@@ -633,6 +739,28 @@ class DiscoveryManager:
             emit_rows.append((host, row_copy))
             by_host[host] = row_copy
         return by_host, emit_rows
+
+    def _load_nmb_name_cache(self) -> dict[str, dict]:
+        """Load NMB-resolved hostnames from the discovery cache."""
+        cache_blob = load_discovery_cache()
+        raw = cache_blob.get("nmb_name_cache")
+        if not isinstance(raw, dict):
+            return {}
+        entries = raw.get("entries")
+        if not isinstance(entries, dict):
+            return {}
+        return {k: v for k, v in entries.items() if isinstance(v, dict)}
+
+    def _load_wsd_device_cache(self) -> dict[str, dict]:
+        """Load WSD device rows from the discovery cache."""
+        cache_blob = load_discovery_cache()
+        raw = cache_blob.get("wsd_device_cache")
+        if not isinstance(raw, dict):
+            return {}
+        entries = raw.get("entries")
+        if not isinstance(entries, dict):
+            return {}
+        return {k: v for k, v in entries.items() if isinstance(v, dict)}
 
     def _emit_cached_devices(self) -> None:
         """Pre-populate the device store from the SSDP profile disk cache before protocols start.
@@ -717,6 +845,88 @@ class DiscoveryManager:
             emitted,
             len(self._ssdp_profile_cache_emit_rows),
         )
+
+        # Emit NMB-cached hostnames so computers appear with their real name immediately.
+        nmb_emitted = 0
+        for sip, row in self._nmb_name_cache.items():
+            if not isinstance(row, dict):
+                continue
+            updated_raw = row.get("updated_at")
+            if isinstance(updated_raw, str):
+                try:
+                    updated_dt = datetime.fromisoformat(updated_raw)
+                    if updated_dt.tzinfo is None:
+                        updated_dt = updated_dt.replace(tzinfo=timezone.utc)
+                    if (now - updated_dt).total_seconds() > _cache_max_age_s:
+                        continue
+                except ValueError:
+                    pass
+            name = row.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            device = Device(
+                name=name,
+                ip=sip,
+                port=445,
+                type="computer",
+                category=self._category_for_type("computer"),
+                source="nmb",
+                url=None,
+                metadata={"from_nmb_cache": True},
+                online=True,
+            )
+            self.add_or_update_device(device)
+            nmb_emitted += 1
+        if nmb_emitted:
+            self._logger.info("_emit_cached_devices: pre-populated %d NMB name(s)", nmb_emitted)
+
+        # Emit cached WSD devices so they appear immediately on restart.
+        wsd_emitted = 0
+        for dev_key, row in self._wsd_device_cache.items():
+            if not isinstance(row, dict):
+                continue
+            updated_raw = row.get("updated_at")
+            if isinstance(updated_raw, str):
+                try:
+                    updated_dt = datetime.fromisoformat(updated_raw)
+                    if updated_dt.tzinfo is None:
+                        updated_dt = updated_dt.replace(tzinfo=timezone.utc)
+                    if (now - updated_dt).total_seconds() > _cache_max_age_s:
+                        continue
+                except ValueError:
+                    pass
+            name = row.get("name")
+            ip = row.get("ip")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if not isinstance(ip, str) or not ip.strip():
+                continue
+            epr = row.get("wsd_epr", "")
+            metadata: dict = {
+                "from_wsd_cache": True,
+                "wsd_epr": epr,
+                "wsd_xaddrs": row.get("wsd_xaddrs") or [],
+                "wsd_types": row.get("wsd_types") or [],
+                "wsd_scopes": row.get("wsd_scopes") or [],
+            }
+            device_type = row.get("type") or "computer"
+            device_category = row.get("category") or self._category_for_type(device_type)
+            url = row.get("url") or None
+            device = Device(
+                name=name,
+                ip=ip,
+                port=int(row.get("port") or 5357),
+                type=device_type,
+                category=device_category,
+                source="wsd",
+                url=url if url else None,
+                metadata=metadata,
+                online=True,
+            )
+            self.add_or_update_device(device)
+            wsd_emitted += 1
+        if wsd_emitted:
+            self._logger.info("_emit_cached_devices: pre-populated %d WSD device(s)", wsd_emitted)
 
     def _start_tcp_probes_for_cached_devices(self) -> None:
         """Background TCP probe to quickly validate cached devices at startup.

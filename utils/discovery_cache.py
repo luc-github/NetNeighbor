@@ -70,6 +70,22 @@ def load_discovery_cache() -> dict[str, Any]:
     return {}
 
 
+def save_wsd_device_cache(device_key: str, row: dict[str, Any]) -> None:
+    """Persist a WSD device row so restarts can pre-populate it immediately."""
+    entry = dict(row)
+    entry["updated_at"] = datetime.now(timezone.utc).isoformat()
+    save_discovery_cache({"wsd_device_cache": {"entries": {device_key: entry}}})
+
+
+def save_nmb_name_cache(ip: str, name: str, mac: str | None = None) -> None:
+    """Persist an NMB/DNS-resolved hostname so restarts can pre-populate it immediately."""
+    now = datetime.now(timezone.utc).isoformat()
+    entry: dict[str, Any] = {"name": name, "updated_at": now}
+    if mac:
+        entry["mac"] = mac
+    save_discovery_cache({"nmb_name_cache": {"entries": {ip: entry}}})
+
+
 def save_discovery_cache(
     cache_data: dict[str, Any],
     max_age_hours: int = CACHE_MAX_AGE_HOURS,

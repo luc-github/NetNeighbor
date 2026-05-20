@@ -287,6 +287,26 @@ def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
     return _parse_ip_neigh_stdout(out, base)
 
 
+def _ipv4_addrs_for_mac_from_win_arp(mac_norm: str) -> set[str]:
+    """Find IPv4 addresses for a MAC in the Windows ``arp -a`` cache."""
+    out: set[str] = set()
+    for line in _win_arp_table_cached().splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        m = _norm_mac(parts[1])
+        if m != mac_norm:
+            continue
+        ip_tok = parts[0].strip()
+        try:
+            a = ipaddress.ip_address(ip_tok)
+        except ValueError:
+            continue
+        if isinstance(a, ipaddress.IPv4Address):
+            out.add(str(a))
+    return out
+
+
 def _ipv4_addrs_for_mac_from_proc_arp(mac_norm: str) -> set[str]:
     out: set[str] = set()
     text = _read_proc_arp_text_cached()
@@ -353,7 +373,7 @@ def _pick_preferred_ipv4(candidates: list[str]) -> str | None:
 
 
 def lookup_ipv4_for_mac(mac_raw: str | None) -> str | None:
-    """Pick a LAN IPv4 for this MAC from kernel ARP / neighbor tables (Linux).
+    """Pick a LAN IPv4 for this MAC from kernel ARP / neighbor tables.
 
     Complements :func:`lookup_mac_from_neighbor_cache`: when discovery only shows IPv6 but the
     neighbor cache already has an IPv4 for the same ``lladdr``, return it (still no extra packets).
@@ -361,7 +381,10 @@ def lookup_ipv4_for_mac(mac_raw: str | None) -> str | None:
     m = _norm_mac(mac_raw or "")
     if not m:
         return None
-    s = _ipv4_addrs_for_mac_from_proc_arp(m) | _ipv4_addrs_for_mac_from_neigh_show(m)
+    if sys.platform == "win32":
+        s = _ipv4_addrs_for_mac_from_win_arp(m)
+    else:
+        s = _ipv4_addrs_for_mac_from_proc_arp(m) | _ipv4_addrs_for_mac_from_neigh_show(m)
     if not s:
         return None
     return _pick_preferred_ipv4(list(s))

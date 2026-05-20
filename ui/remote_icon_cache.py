@@ -144,17 +144,16 @@ def pixmap_from_icon_bytes(data: bytes, target_size: int, *, min_native_size: in
     return normalized
 
 
-def qicon_from_icon_bytes(data: bytes, target_size: int) -> QIcon | None:
+def qicon_from_icon_bytes(data: bytes, target_size: int, *, min_native_size: int = 0) -> QIcon | None:
     """Build a multi-size ``QIcon`` for the given target size.
 
-    Always uses the device-provided icon regardless of its native resolution;
-    small raster icons are upscaled smoothly rather than falling back to the
-    bundled type icon.  SVG icons render natively at any size.
+    Pass ``min_native_size`` to reject raster icons whose native resolution is
+    below the threshold (avoids blurry upscaling); SVGs are always accepted.
     """
     if target_size <= 0:
         target_size = DEVICE_ICON_REFERENCE_PX
 
-    pix = pixmap_from_icon_bytes(data, target_size)
+    pix = pixmap_from_icon_bytes(data, target_size, min_native_size=min_native_size)
     if pix is None or pix.isNull():
         return None
 
@@ -257,7 +256,8 @@ class QtRemoteIconCache(QObject):
         if not data:
             return None
         display = size if size > 0 else DEVICE_ICON_REFERENCE_PX
-        return qicon_from_icon_bytes(data, display)
+        min_size = (display * 3) // 4
+        return qicon_from_icon_bytes(data, display, min_native_size=min_size)
 
     def bytes_for_device(self, device: Device) -> bytes | None:
         """Return cached icon bytes (memory or disk) without triggering a network fetch."""

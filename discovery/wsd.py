@@ -556,10 +556,11 @@ class WSDiscovery(BaseDiscovery):
                 self._logger.debug("WSD broad searchServices failed", exc_info=True)
                 return
             # Second broad sweep — some stacks (esp. mobile / Wi‑Fi) answer after the first window.
-            try:
-                eng.searchServices(timeout=min(5.0, max(3.0, broad_s * 0.45)))
-            except Exception:
-                self._logger.debug("WSD second broad searchServices failed", exc_info=True)
+            if self._running:
+                try:
+                    eng.searchServices(timeout=min(5.0, max(3.0, broad_s * 0.45)))
+                except Exception:
+                    self._logger.debug("WSD second broad searchServices failed")
             # ThreadedWSDiscovery keeps matches in _remoteServices (no public accessor).
             try:
                 services = list(getattr(eng, "_remoteServices", {}).values())

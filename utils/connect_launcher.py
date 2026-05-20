@@ -145,6 +145,7 @@ def launch_connect_for_uri(
     if not tmpl:
         tmpl = ((templates.get(scheme) if isinstance(templates, dict) else None) or "").strip()
     if not tmpl:
+        _LOG.debug("open: no template for scheme=%s → system default url=%s", scheme, u)
         open_url(u)
         return None
 
@@ -160,5 +161,6 @@ def launch_connect_for_uri(
     if argv is None:
         return _("Invalid command template for this protocol.")
 
+    _LOG.debug("open: scheme=%s template=%r argv=%s", scheme, tmpl, argv)
     spawn_custom_command_detached(argv, on_error=on_spawn_error or (lambda _s: None))
     return None

@@ -165,7 +165,8 @@ class DeviceDetailsDialog(QDialog):
             row = self._add_overview_row(grid, row, label_key, val)
 
         ip6 = (ov.get("ipv6_link_local") or "").strip()
-        if detail_field_value_visible(ip6):
+        ip_field = (ov.get("ip") or "").strip()
+        if detail_field_value_visible(ip6) and ip6 not in ip_field:
             row = self._add_overview_row(grid, row, _("IPv6 (link-local)"), ip6)
 
         for key, value in model.fields:

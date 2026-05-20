@@ -7,9 +7,12 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 from urllib.parse import urlparse
 
 from model.device import Device
+
+_LOG = logging.getLogger(__name__)
 
 # DNS-SD / mDNS service type substrings (after normalization, lowercase).
 _HTTPS = ("_https._tcp",)
@@ -74,6 +77,9 @@ def _collect_https_http_urls(devices: list[Device]) -> tuple[list[str], list[str
     https_u: list[str] = []
     http_u: list[str] = []
     for dev in devices:
+        # WSD/wsdd URLs are protocol endpoints (port 5357), not web interfaces.
+        if (getattr(dev, "source", "") or "").strip().lower() in {"wsd", "wsdd"}:
+            continue
         raw = getattr(dev, "url", None)
         if not isinstance(raw, str) or not raw.strip():
             continue
@@ -274,6 +280,7 @@ def resolve_connect_target(
         # 2. Auto-detected default
         detected = _detected_uri_for_scheme(scheme, devices, services, host)
         if detected:
+            _LOG.debug("resolve_connect: detected scheme=%s uri=%s", scheme, detected)
             return detected
 
         # 3. First additional for this scheme
@@ -286,10 +293,7 @@ def resolve_connect_target(
             if u:
                 return u
 
-    ptype = (primary_type or "").strip().lower()
-    if ptype == "computer":
-        return f"smb://{host}/"
-
+    _LOG.debug("resolve_connect: no target found for ip=%s type=%s", bundle_ip, primary_type)
     return None
 
 
@@ -351,8 +355,5 @@ def resolve_all_connect_targets(
                 u = _build_uri_from_command(scheme, cmd, host)
                 if u:
                     _add(_command_label(scheme, cmd), u)
-
-    if not result and (primary_type or "").strip().lower() == "computer":
-        _add("SMB", f"smb://{host}/")
 
     return result
