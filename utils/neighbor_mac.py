@@ -24,6 +24,13 @@ _NEIGH_FULL_CACHE: tuple[float, str | None] = (0.0, None)
 _ARP_TEXT_CACHE: tuple[float, str | None] = (0.0, None)
 _WIN_ARP_CACHE: tuple[float, str | None] = (0.0, None)
 _WIN_IPV6_NEIGH_CACHE: tuple[float, str | None] = (0.0, None)
+_DARWIN_ARP_CACHE: tuple[float, str | None] = (0.0, None)
+_DARWIN_NDP_CACHE: tuple[float, str | None] = (0.0, None)
+
+# macOS ``arp -an`` line: ``? (192.168.1.1) at aa:bb:cc:dd:ee:ff on en0 ...``
+_DARWIN_ARP_RE = re.compile(
+    r"\(([^)]+)\)\s+at\s+([0-9a-fA-F]{1,2}(?::[0-9a-fA-F]{1,2}){5})\b"
+)
 
 _LLADDR_RE = re.compile(r"\blladdr\s+([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})\b")
 
@@ -235,8 +242,102 @@ def _mac_from_windows_arp(ipv4: str) -> str | None:
     return None
 
 
+def _darwin_arp_table_cached() -> str:
+    global _DARWIN_ARP_CACHE
+    now = _monotonic()
+    if _DARWIN_ARP_CACHE[1] is not None and now - _DARWIN_ARP_CACHE[0] < 0.85:
+        return _DARWIN_ARP_CACHE[1]
+    try:
+        proc = subprocess.run(
+            ["arp", "-an"],
+            capture_output=True, text=True, timeout=4,
+            encoding="utf-8", errors="replace",
+        )
+        text = proc.stdout or "" if proc.returncode == 0 else ""
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
+        _LOG.debug("arp -an failed: %s", e)
+        text = ""
+    _DARWIN_ARP_CACHE = (now, text)
+    return text
+
+
+def _darwin_ndp_table_cached() -> str:
+    global _DARWIN_NDP_CACHE
+    now = _monotonic()
+    if _DARWIN_NDP_CACHE[1] is not None and now - _DARWIN_NDP_CACHE[0] < 0.85:
+        return _DARWIN_NDP_CACHE[1]
+    try:
+        proc = subprocess.run(
+            ["ndp", "-an"],
+            capture_output=True, text=True, timeout=4,
+            encoding="utf-8", errors="replace",
+        )
+        text = proc.stdout or "" if proc.returncode == 0 else ""
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
+        _LOG.debug("ndp -an failed: %s", e)
+        text = ""
+    _DARWIN_NDP_CACHE = (now, text)
+    return text
+
+
+def _mac_from_darwin_arp(ipv4: str) -> str | None:
+    target = ipv4.strip()
+    for line in _darwin_arp_table_cached().splitlines():
+        m = _DARWIN_ARP_RE.search(line)
+        if not m:
+            continue
+        try:
+            if ipaddress.ip_address(m.group(1).strip()) != ipaddress.ip_address(target):
+                continue
+        except ValueError:
+            continue
+        mac = _norm_mac(m.group(2))
+        if mac and mac != "00:00:00:00:00:00":
+            return mac
+    return None
+
+
+def _mac_from_darwin_ndp(ipv6_raw: str) -> str | None:
+    want_base = ipv6_raw.split("%", 1)[0].strip()
+    try:
+        want_addr = ipaddress.ip_address(want_base)
+    except ValueError:
+        return None
+    for line in _darwin_ndp_table_cached().splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        col_ip = parts[0].split("%", 1)[0].strip()
+        try:
+            col_addr = ipaddress.ip_address(col_ip)
+        except ValueError:
+            continue
+        if col_addr != want_addr:
+            continue
+        mac = _norm_mac(parts[1])
+        if mac and mac != "00:00:00:00:00:00":
+            return mac
+    return None
+
+
+def _ipv4_addrs_for_mac_from_darwin_arp(mac_norm: str) -> set[str]:
+    out: set[str] = set()
+    for line in _darwin_arp_table_cached().splitlines():
+        m = _DARWIN_ARP_RE.search(line)
+        if not m or _norm_mac(m.group(2)) != mac_norm:
+            continue
+        ip_tok = m.group(1).strip()
+        try:
+            a = ipaddress.ip_address(ip_tok)
+        except ValueError:
+            continue
+        if isinstance(a, ipaddress.IPv4Address):
+            out.add(str(a))
+    return out
+
+
 def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
-    """Return MAC from OS neighbor/ARP tables if known (Linux ``ip neigh`` / ``/proc/net/arp``, Windows ``arp -a``)."""
+    """Return MAC from OS neighbor/ARP tables if known (Linux ``ip neigh`` / ``/proc/net/arp``, Windows ``arp -a``, macOS ``arp``/``ndp``)."""
     if not ip_raw:
         return None
     if sys.platform == "win32":
@@ -252,6 +353,16 @@ def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
             pass
         return None
     if sys.platform == "darwin":
+        try:
+            base = str(ip_raw).strip().split("%", 1)[0].strip()
+            if not base:
+                return None
+            parsed = ipaddress.ip_address(base)
+            if isinstance(parsed, ipaddress.IPv4Address):
+                return _mac_from_darwin_arp(base)
+            return _mac_from_darwin_ndp(str(ip_raw).strip())
+        except ValueError:
+            pass
         return None
     raw = str(ip_raw).strip()
     base = raw.split("%", 1)[0].strip()
@@ -383,6 +494,8 @@ def lookup_ipv4_for_mac(mac_raw: str | None) -> str | None:
         return None
     if sys.platform == "win32":
         s = _ipv4_addrs_for_mac_from_win_arp(m)
+    elif sys.platform == "darwin":
+        s = _ipv4_addrs_for_mac_from_darwin_arp(m)
     else:
         s = _ipv4_addrs_for_mac_from_proc_arp(m) | _ipv4_addrs_for_mac_from_neigh_show(m)
     if not s:

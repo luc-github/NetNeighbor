@@ -4,8 +4,10 @@
 # License: LGPL3
 """Browser utility to open device URLs."""
 
+import os
 import shutil
 import subprocess
+import sys
 import webbrowser
 from urllib.parse import urlparse
 
@@ -23,6 +25,22 @@ def open_url(url: str) -> bool:
     scheme = urlparse(url).scheme.lower()
     if scheme in _BROWSER_SCHEMES:
         return webbrowser.open(url)
+
+    if sys.platform == "win32":
+        try:
+            os.startfile(url)  # noqa: S606 — URL validated above
+            return True
+        except OSError:
+            return webbrowser.open(url)
+
+    if sys.platform == "darwin":
+        try:
+            subprocess.Popen(["open", url])
+            return True
+        except OSError:
+            return webbrowser.open(url)
+
+    # Linux: prefer a known file manager, fall back to xdg-open.
     if scheme in _FILE_MANAGER_SCHEMES:
         for fm in _FILE_MANAGERS:
             if shutil.which(fm):

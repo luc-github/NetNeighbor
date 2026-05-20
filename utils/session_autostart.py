@@ -2,7 +2,7 @@
 # Internal version : 2.0.0 date: 2026-05-19 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
-"""Session-login autostart: XDG .desktop (Linux/macOS) + registry Run key (Windows)."""
+"""Session-login autostart: XDG .desktop (Linux) / LaunchAgents plist (macOS) / registry Run key (Windows)."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ _LOG = logging.getLogger(__name__)
 _AUTOSTART_FILENAME = "io.esp3d.netneighbor.desktop"
 _WIN_REG_VALUE = "NetNeighbor"
 _WIN_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_MACOS_LAUNCHAGENT_LABEL = "io.esp3d.netneighbor"
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,21 @@ def _resolve_launch_command(*, minimized: bool = True) -> str:
     if main_py.is_file():
         return f'python3 "{main_py}" {suffix}'.strip()
     return f"netneighbor {suffix}".strip()
+
+
+def _resolve_launch_argv(*, minimized: bool = True) -> list[str]:
+    """Return the argv list for the LaunchAgent ProgramArguments key (macOS)."""
+    suffix = "--start-minimized-to-tray" if minimized else None
+    w = shutil.which("netneighbor")
+    if w:
+        argv = [w]
+    else:
+        root = Path(__file__).resolve().parent.parent
+        main_py = root / "main.py"
+        argv = [sys.executable, str(main_py)] if main_py.is_file() else [sys.executable]
+    if suffix:
+        argv.append(suffix)
+    return argv
 
 
 # ── Windows registry ───────────────────────────────────────────────────────────
@@ -81,7 +97,56 @@ def _win_apply_autostart(enabled: bool) -> bool:
         return False
 
 
-# ── XDG .desktop (Linux / macOS) ──────────────────────────────────────────────
+# ── LaunchAgents plist (macOS) ────────────────────────────────────────────────
+
+def _macos_plist_path() -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / f"{_MACOS_LAUNCHAGENT_LABEL}.plist"
+
+
+def _macos_autostart_enabled() -> bool:
+    return _macos_plist_path().is_file()
+
+
+def _macos_apply_autostart(enabled: bool) -> bool:
+    path = _macos_plist_path()
+    if not enabled:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as e:
+            _LOG.warning("Could not remove LaunchAgent plist %s: %s", path, e)
+            return not path.exists()
+        return True
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        _LOG.warning("Could not create LaunchAgents directory: %s", e)
+        return False
+
+    argv = _resolve_launch_argv(minimized=True)
+    args_xml = "\n".join(f"        <string>{a}</string>" for a in argv)
+    plist = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
+        ' "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '<plist version="1.0"><dict>\n'
+        f"    <key>Label</key><string>{_MACOS_LAUNCHAGENT_LABEL}</string>\n"
+        f"    <key>ProgramArguments</key>\n    <array>\n{args_xml}\n    </array>\n"
+        "    <key>RunAtLoad</key><true/>\n"
+        "    <key>KeepAlive</key><false/>\n"
+        "</dict></plist>\n"
+    )
+    try:
+        path.write_text(plist, encoding="utf-8")
+        path.chmod(0o644)
+        _LOG.info("LaunchAgent written: %s", path)
+    except OSError as e:
+        _LOG.warning("Could not write LaunchAgent plist %s: %s", path, e)
+        return False
+    return True
+
+
+# ── XDG .desktop (Linux) ──────────────────────────────────────────────────────
 
 def _xdg_autostart_file_path() -> Path:
     return Path.home() / ".config" / "autostart" / _AUTOSTART_FILENAME
@@ -141,6 +206,8 @@ def autostart_enabled_on_disk() -> bool:
     """Return True if autostart is currently configured for this user."""
     if _is_windows():
         return _win_autostart_enabled()
+    if sys.platform == "darwin":
+        return _macos_autostart_enabled()
     return _xdg_autostart_enabled()
 
 
@@ -148,4 +215,6 @@ def apply_autostart_pref(enabled: bool) -> bool:
     """Enable or disable launch-at-login. Returns True on success."""
     if _is_windows():
         return _win_apply_autostart(enabled)
+    if sys.platform == "darwin":
+        return _macos_apply_autostart(enabled)
     return _xdg_apply_autostart(enabled)

@@ -21,15 +21,43 @@ _SCHEME_ORDER = ("http", "https", "smb", "ftp", "ssh", "telnet", "sftp")
 
 _SKIP_JSON_KEYS = frozenset({"version", "comment", "schema"})
 
-_HARDCODED_DEFAULTS: dict[str, str] = {
-    "http": "xdg-open http://{ip}",
-    "https": "xdg-open https://{ip}",
-    "smb": "nemo smb://{ip}",
-    "ftp": "nemo ftp://{ip}",
-    "ssh": "x-terminal-emulator -e ssh -p {port} {ip}",
-    "telnet": "x-terminal-emulator -e nc {ip} {port}",
-    "sftp": "nemo sftp://{ip}",
+_HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
+    "linux": {
+        "http": "xdg-open http://{ip}",
+        "https": "xdg-open https://{ip}",
+        "smb": "nemo smb://{ip}",
+        "ftp": "nemo ftp://{ip}",
+        "ssh": "x-terminal-emulator -e ssh -p {port} {ip}",
+        "telnet": "x-terminal-emulator -e nc {ip} {port}",
+        "sftp": "nemo sftp://{ip}",
+    },
+    "darwin": {
+        "http": "open http://{ip}",
+        "https": "open https://{ip}",
+        "smb": "open smb://{ip}",
+        "ftp": "open ftp://{ip}",
+        "ssh": "open ssh://{ip}:{port}",
+        "telnet": "open telnet://{ip}:{port}",
+        "sftp": "open sftp://{ip}",
+    },
+    "win32": {
+        "http": 'cmd.exe /c start "" http://{ip}',
+        "https": 'cmd.exe /c start "" https://{ip}',
+        "smb": "explorer \\\\{ip_raw}",
+        "ftp": "explorer ftp://{ip}",
+        "ssh": "cmd.exe /c start ssh -p {port} {ip}",
+        "telnet": "cmd.exe /c start telnet {ip} {port}",
+        "sftp": "explorer sftp://{ip}",
+    },
 }
+
+
+def _get_hardcoded_defaults() -> dict[str, str]:
+    key = _platform_branch_key()
+    out = dict(_HARDCODED_DEFAULTS_BY_OS.get("linux", {}))
+    if key != "linux":
+        out.update(_HARDCODED_DEFAULTS_BY_OS.get(key, {}))
+    return out
 
 
 def _platform_branch_key() -> str:
@@ -89,7 +117,7 @@ def _load_json_defaults() -> dict[str, str]:
 
 
 def default_connect_command_templates() -> dict[str, str]:
-    defaults = dict(_HARDCODED_DEFAULTS)
+    defaults = _get_hardcoded_defaults()
     defaults.update(_load_json_defaults())
     return defaults
 
