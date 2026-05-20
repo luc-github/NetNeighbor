@@ -37,10 +37,10 @@ def _bundled_freedesktop_root() -> Path:
 
 
 def bundled_freedesktop_png_side_sizes() -> tuple[int, ...]:
-    """Square ``{N}x{N}`` subdirs under ``assets/icons/netneighbor``, sorted ascending (e.g. 16 … 1024).
+    """Available icon sizes under ``assets/icons/netneighbor``, sorted ascending.
 
-    Discovered at runtime (cached until the directory ``mtime`` changes) so any
-    export ladder (16–1024, theme-style 22/32/…, etc.) works without a hard-coded list.
+    Supports both flat ``{N}/`` and square ``{N}x{N}/`` subdirectory naming.
+    Discovered at runtime (cached until the directory mtime changes).
     """
     global _bfd_sizes_cache, _bfd_sizes_mtime
     root = _bundled_freedesktop_root()
@@ -52,25 +52,8 @@ def bundled_freedesktop_png_side_sizes() -> tuple[int, ...]:
         return ()
     if _bfd_sizes_cache is not None and _bfd_sizes_mtime == mtime:
         return _bfd_sizes_cache
-    sizes: list[int] = []
-    try:
-        for p in root.iterdir():
-            if not p.is_dir():
-                continue
-            name = p.name
-            if "x" not in name:
-                continue
-            a_str, b_str = name.split("x", 1)
-            if not a_str.isdigit() or not b_str.isdigit():
-                continue
-            a, b = int(a_str), int(b_str)
-            if a == b and 1 <= a <= 4096:
-                sizes.append(a)
-    except OSError:
-        _bfd_sizes_cache = ()
-        _bfd_sizes_mtime = mtime
-        return ()
-    out = tuple(sorted(set(sizes)))
+    from utils.icon_packs import scan_pack_sizes
+    out = tuple(sorted(scan_pack_sizes(root)))
     _bfd_sizes_cache = out
     _bfd_sizes_mtime = mtime
     return out
@@ -82,16 +65,17 @@ def user_custom_icons_dir() -> Path:
 
 
 def iter_bundled_freedesktop_choice_basenames() -> list[str]:
-    """Unique ``*.png`` stems under any ``NxN`` subfolder of ``assets/icons/netneighbor`` (sorted)."""
+    """Unique ``*.png`` stems under any size subfolder of ``assets/icons/netneighbor`` (sorted)."""
     root = _bundled_freedesktop_root()
     names: set[str] = set()
     try:
         for sz in bundled_freedesktop_png_side_sizes():
-            d = root / f"{sz}x{sz}"
-            if not d.is_dir():
-                continue
-            for p in d.glob("*.png"):
-                names.add(p.stem)
+            for fmt in (f"{sz}x{sz}", str(sz)):
+                d = root / fmt
+                if d.is_dir():
+                    for p in d.glob("*.png"):
+                        names.add(p.stem)
+                    break
     except OSError:
         return []
     return sorted(names)
@@ -134,10 +118,11 @@ def resolve_bundled_freedesktop_icon(icon_name: str | None) -> Path | None:
     stem = Path(raw).name
     if not stem or stem != raw:
         return None
+    from utils.icon_packs import find_icon_in_pack
     base = _bundled_freedesktop_root()
     for sz in reversed(bundled_freedesktop_png_side_sizes()):
-        candidate = base / f"{sz}x{sz}" / f"{stem}.png"
-        if candidate.is_file():
+        candidate = find_icon_in_pack(base, sz, stem)
+        if candidate is not None:
             return candidate
     for ext in (".svg", ".png"):
         candidate = base / f"{stem}{ext}"

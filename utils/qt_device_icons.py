@@ -60,8 +60,8 @@ def _bundled_freedesktop_qicon(
     for sz in builtin_sizes:
         p = find_icon_in_pack(pack_root, sz, stem) if pack_root is not None else None
         if p is None:
-            p = builtin_root / f"{sz}x{sz}" / f"{stem}.png"
-            if not p.is_file():
+            p = find_icon_in_pack(builtin_root, sz, stem)
+            if p is None:
                 continue
         icon.addFile(str(p), QSize(sz, sz))
         registered.add(sz)
@@ -80,8 +80,7 @@ def _bundled_freedesktop_qicon(
         best = min(registered, key=lambda s: (abs(s - preferred_px), s))
         p = find_icon_in_pack(pack_root, best, stem) if pack_root is not None else None
         if p is None:
-            p = builtin_root / f"{best}x{best}" / f"{stem}.png"
-            p = p if p.is_file() else None
+            p = find_icon_in_pack(builtin_root, best, stem)
         if p is not None:
             icon.addFile(str(p), QSize(preferred_px, preferred_px))
 

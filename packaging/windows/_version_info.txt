@@ -29,7 +29,14 @@ VSVersionInfo(
       [
       StringTable(
         '040904B0',
-        [StringStruct('FileDescription', 'NetNeighbor')])
+        [StringStruct('CompanyName', 'Luc LEBOSSE'),
+        StringStruct('FileDescription', 'NetNeighbor'),
+        StringStruct('FileVersion', '2.0.0'),
+        StringStruct('InternalName', 'NetNeighbor'),
+        StringStruct('LegalCopyright', 'Copyright (C) Luc LEBOSSE. Licensed under LGPL-3.0-or-later.'),
+        StringStruct('OriginalFilename', 'NetNeighbor.exe'),
+        StringStruct('ProductName', 'NetNeighbor'),
+        StringStruct('ProductVersion', '2.0.0')])
       ]), 
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]

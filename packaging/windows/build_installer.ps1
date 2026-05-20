@@ -34,6 +34,7 @@ if (-not $iscc) {
 }
 
 $iss = Join-Path $WindowsDir "netneighbor.iss"
+
 Write-Host "== Inno Setup =="
 Write-Host "version=$Version iscc=$iscc"
 
