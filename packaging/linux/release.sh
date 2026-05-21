@@ -24,6 +24,12 @@ fi
 echo "== NetNeighbor release =="
 echo "version=${VERSION} arch=${ARCH}"
 
+# Debian version policy forbids underscores; replace with dots.
+DEB_VERSION="${VERSION//_/.}"
+if [[ "${DEB_VERSION}" != "${VERSION}" ]]; then
+  echo "   Note: deb version sanitized: ${VERSION} → ${DEB_VERSION}"
+fi
+
 echo "-- clean previous artifacts"
 # Remove old .deb, .tar.gz, .AppImage, checksums and build staging dirs so
 # no stale artifacts can accidentally be installed or mixed with the new build.
@@ -59,7 +65,7 @@ else
   _appimage_built=0
 fi
 
-DEB_PATH="${DIST_DIR}/netneighbor_${VERSION}_${ARCH}.deb"
+DEB_PATH="${DIST_DIR}/netneighbor_${DEB_VERSION}_${ARCH}.deb"
 TAR_PATH="${DIST_DIR}/netneighbor-${VERSION}.tar.gz"
 APPIMAGE_PATH="${DIST_DIR}/NetNeighbor-${VERSION}-${APPIMAGE_ARCH}.AppImage"
 
@@ -78,8 +84,8 @@ fi
 
 echo "-- verify deb metadata"
 deb_version="$(dpkg-deb -f "${DEB_PATH}" Version)"
-if [[ "${deb_version}" != "${VERSION}" ]]; then
-  echo "Deb Version mismatch: got=${deb_version} expected=${VERSION}" >&2
+if [[ "${deb_version}" != "${DEB_VERSION}" ]]; then
+  echo "Deb Version mismatch: got=${deb_version} expected=${DEB_VERSION}" >&2
   exit 1
 fi
 deb_size="$(dpkg-deb -f "${DEB_PATH}" Installed-Size)"
@@ -135,7 +141,7 @@ fi
 
 echo "-- checksums"
 _checksum_files=(
-  "netneighbor_${VERSION}_${ARCH}.deb"
+  "netneighbor_${DEB_VERSION}_${ARCH}.deb"
   "netneighbor-${VERSION}.tar.gz"
 )
 if [[ "${_appimage_built}" -eq 1 ]]; then

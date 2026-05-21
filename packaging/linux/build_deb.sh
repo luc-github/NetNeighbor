@@ -23,8 +23,13 @@ if [[ -z "${VERSION}" ]]; then
 fi
 
 PKG_NAME="netneighbor"
+# Debian version policy forbids underscores; replace with dots.
+DEB_VERSION="${VERSION//_/.}"
+if [[ "${DEB_VERSION}" != "${VERSION}" ]]; then
+  echo "   Note: version sanitized for Debian: ${VERSION} → ${DEB_VERSION}"
+fi
 BUILD_ROOT="${PROJECT_ROOT}/dist/deb-build"
-PKG_ROOT="${BUILD_ROOT}/${PKG_NAME}_${VERSION}_${ARCH}"
+PKG_ROOT="${BUILD_ROOT}/${PKG_NAME}_${DEB_VERSION}_${ARCH}"
 APP_ROOT="${PKG_ROOT}/usr/share/netneighbor"
 
 rm -rf "${BUILD_ROOT}"
@@ -156,7 +161,7 @@ chmod 0755 \
 INSTALLED_SIZE_KB="$(du -sk "${PKG_ROOT}/usr" | awk '{print $1}')"
 cat > "${PKG_ROOT}/DEBIAN/control" <<EOF
 Package: ${PKG_NAME}
-Version: ${VERSION}
+Version: ${DEB_VERSION}
 Section: net
 Priority: optional
 Architecture: ${ARCH}
@@ -172,7 +177,7 @@ Description: Discover and monitor devices on your local network
  are installed automatically via pip during package installation.
 EOF
 
-OUTPUT_DEB="${PROJECT_ROOT}/dist/${PKG_NAME}_${VERSION}_${ARCH}.deb"
+OUTPUT_DEB="${PROJECT_ROOT}/dist/${PKG_NAME}_${DEB_VERSION}_${ARCH}.deb"
 mkdir -p "${PROJECT_ROOT}/dist"
 dpkg-deb --build "${PKG_ROOT}" "${OUTPUT_DEB}"
 
