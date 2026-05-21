@@ -98,8 +98,11 @@ if [[ ! -f "${runtime_version_file}" ]]; then
   exit 1
 fi
 runtime_version="$(sed -n '1p' "${runtime_version_file}" | tr -d '\r' | sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-if [[ "${runtime_version}" != "${VERSION}" ]]; then
-  echo "Embedded runtime VERSION mismatch: got=${runtime_version} expected=${VERSION}" >&2
+# Strip pre-release suffix (2.0.0-beta1 → 2.0.0): the repo VERSION file holds the
+# stable base version; the tag carries the full pre-release designator.
+base_version="${VERSION%%-*}"
+if [[ "${runtime_version}" != "${base_version}" ]]; then
+  echo "Embedded runtime VERSION mismatch: got=${runtime_version} expected=${base_version} (tag=${VERSION})" >&2
   exit 1
 fi
 

@@ -55,12 +55,11 @@ cd "${PROJECT_ROOT}"
   --name NetNeighbor \
   --distpath "${DIST_DIR}" \
   --workpath "${WORK_DIR}" \
-  --specpath "${SCRIPT_DIR}" \
   --paths "${PROJECT_ROOT}/app" \
-  --add-data "app/assets:assets" \
-  --add-data "app/locale:locale" \
-  --add-data "app/config:config" \
-  --add-data "VERSION:." \
+  --add-data "${PROJECT_ROOT}/app/assets:assets" \
+  --add-data "${PROJECT_ROOT}/app/locale:locale" \
+  --add-data "${PROJECT_ROOT}/app/config:config" \
+  --add-data "${PROJECT_ROOT}/VERSION:." \
   --hidden-import zeroconf \
   --hidden-import WSDiscovery \
   --hidden-import PySide6.QtCore \
