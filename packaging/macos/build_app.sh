@@ -100,6 +100,18 @@ echo "-- strip debug symbols"
 find "${APP_BUNDLE}" \( -name "*.dylib" -o -name "*.so" \) \
   -exec strip -x {} \; 2>/dev/null || true
 
+echo "-- deduplicate Python stdlib (Resources → Frameworks symlink)"
+for fw_py in "${APP_BUNDLE}/Contents/Frameworks/python3_dot_"*; do
+  [[ -d "${fw_py}" ]] || continue
+  name="$(basename "${fw_py}")"
+  res_py="${APP_BUNDLE}/Contents/Resources/${name}"
+  if [[ -d "${res_py}" ]]; then
+    rm -rf "${res_py}"
+    ln -s "../Frameworks/${name}" "${res_py}"
+    echo "   linked Resources/${name} -> Frameworks/${name}"
+  fi
+done
+
 ZIP_OUT="${DIST_DIR}/NetNeighbor-${VERSION}-macos.zip"
 rm -f "${ZIP_OUT}"
 (
