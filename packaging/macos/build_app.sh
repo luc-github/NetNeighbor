@@ -96,6 +96,10 @@ if [[ ! -d "${APP_BUNDLE}" ]]; then
   exit 1
 fi
 
+echo "-- strip debug symbols"
+find "${APP_BUNDLE}" \( -name "*.dylib" -o -name "*.so" \) \
+  -exec strip -x {} \; 2>/dev/null || true
+
 ZIP_OUT="${DIST_DIR}/NetNeighbor-${VERSION}-macos.zip"
 rm -f "${ZIP_OUT}"
 (
