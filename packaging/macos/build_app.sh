@@ -65,6 +65,29 @@ cd "${PROJECT_ROOT}"
   --hidden-import PySide6.QtCore \
   --hidden-import PySide6.QtGui \
   --hidden-import PySide6.QtWidgets \
+  --exclude-module PySide6.QtWebEngine \
+  --exclude-module PySide6.QtWebEngineCore \
+  --exclude-module PySide6.QtWebEngineWidgets \
+  --exclude-module PySide6.Qt3DCore \
+  --exclude-module PySide6.Qt3DRender \
+  --exclude-module PySide6.Qt3DInput \
+  --exclude-module PySide6.Qt3DAnimation \
+  --exclude-module PySide6.Qt3DExtras \
+  --exclude-module PySide6.QtMultimedia \
+  --exclude-module PySide6.QtMultimediaWidgets \
+  --exclude-module PySide6.QtBluetooth \
+  --exclude-module PySide6.QtPositioning \
+  --exclude-module PySide6.QtLocation \
+  --exclude-module PySide6.QtQuick \
+  --exclude-module PySide6.QtQml \
+  --exclude-module PySide6.QtQmlModels \
+  --exclude-module PySide6.QtDataVisualization \
+  --exclude-module PySide6.QtCharts \
+  --exclude-module PySide6.QtPdf \
+  --exclude-module PySide6.QtPdfWidgets \
+  --exclude-module tkinter \
+  --exclude-module unittest \
+  --exclude-module lib2to3 \
   "${ENTRY}"
 
 APP_BUNDLE="${DIST_DIR}/NetNeighbor.app"

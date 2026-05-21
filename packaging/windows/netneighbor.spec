@@ -87,6 +87,24 @@ _hiddenimports = [
     "PySide6.QtSvg",
 ]
 
+_excludes = [
+    # Qt modules not used by NetNeighbor
+    "PySide6.QtWebEngine", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets",
+    "PySide6.Qt3DCore", "PySide6.Qt3DRender", "PySide6.Qt3DInput",
+    "PySide6.Qt3DAnimation", "PySide6.Qt3DExtras", "PySide6.Qt3DLogic",
+    "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets",
+    "PySide6.QtBluetooth", "PySide6.QtNfc",
+    "PySide6.QtPositioning", "PySide6.QtLocation",
+    "PySide6.QtQuick", "PySide6.QtQuickWidgets",
+    "PySide6.QtQml", "PySide6.QtQmlModels",
+    "PySide6.QtDataVisualization", "PySide6.QtCharts",
+    "PySide6.QtRemoteObjects", "PySide6.QtScxml", "PySide6.QtStateMachine",
+    "PySide6.QtTextToSpeech", "PySide6.QtSensors", "PySide6.QtVirtualKeyboard",
+    "PySide6.QtPdf", "PySide6.QtPdfWidgets",
+    # Unused stdlib
+    "tkinter", "unittest", "xmlrpc", "lib2to3",
+]
+
 a = Analysis(
     [str(_entry)],
     pathex=[str(ROOT / "app")],
@@ -96,7 +114,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=_excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
