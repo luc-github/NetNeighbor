@@ -13,4 +13,4 @@ Canonical application entry point: **`main.py`** → `src/app_qt.py` (via `sys.p
 - [ ] **CI** — `continue-on-error: false` on Windows/macOS when local builds pass.
 - [ ] **Signing** — Windows Authenticode, Apple notarization — not planned (cost prohibitive for an open-source project; users may see OS security warnings on first run).
 
-See [`docs/QT_DEV_REQUIREMENTS.md`](../docs/QT_DEV_REQUIREMENTS.md) and [`docs/PACKAGING.md`](../docs/PACKAGING.md).
+See [`docs/operations/PACKAGING.md`](../docs/operations/PACKAGING.md).

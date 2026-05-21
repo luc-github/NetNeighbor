@@ -59,7 +59,7 @@ Stored in `ui_prefs.json`, including view mode, sidebar position, notification m
 type overrides, monitored flags, last-seen overrides, icon appearance overrides (system/provided/custom + custom icon choice), **monitored device
 snapshots** used to show greyed monitored entries after restart before rediscovery, and tray/session flags:
 **`close_to_tray`**, **`start_minimized_to_tray`**, **`start_at_login`**.  
-See [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) for a short key reference; [`MAINTENANCE.md`](MAINTENANCE.md) for paths and tray dependencies.
+See [`COMMUNITY_OVERRIDES.md`](../contributing/COMMUNITY_OVERRIDES.md) for a short key reference; [`MAINTENANCE.md`](../operations/MAINTENANCE.md) for paths and tray dependencies.
 
 ## Styling
 
@@ -68,7 +68,7 @@ See [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) for a short key reference
 ## Internationalization
 
 GNU gettext; catalogs under `locale/`. UI strings use `_()` where wired.  
-See [`I18N.md`](I18N.md) for add/update workflow.
+See [`I18N.md`](../contributing/I18N.md) for add/update workflow.
 
 ## Per-device command model
 
@@ -95,6 +95,6 @@ in `__init__` before `show_all()`.
 
 ## See also
 
-- [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) — DiscoveryManager, override system, device commands.
-- [`MAINTENANCE.md`](MAINTENANCE.md) — paths, tray, packaging-related runtime deps, troubleshooting.  
-- [`PACKAGING.md`](PACKAGING.md) — `.deb` layout and **Recommends** (AppIndicator, `nmblookup`).
+- [`BACKEND_ARCHITECTURE.md`](../reference/BACKEND_ARCHITECTURE.md) — DiscoveryManager, override system, device commands.
+- [`MAINTENANCE.md`](../operations/MAINTENANCE.md) — paths, tray, packaging-related runtime deps, troubleshooting.
+- [`PACKAGING.md`](../operations/PACKAGING.md) — `.deb` layout and **Recommends** (AppIndicator, `nmblookup`).

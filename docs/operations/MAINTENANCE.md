@@ -87,9 +87,9 @@ User packs that use flat `{N}/` directories are handled by `scan_pack_sizes()` /
 
 ## Common tasks
 
-- **Rules tuning**: shipped `config/ssdp_rules.json` / `config/mdns_rules.json`; user overlays in **`~/.config/netneighbor/`** — [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md).
-- **Icons / types**: `config/device_types.json` and [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md); optional user merge from `~/.config/netneighbor/device_types.json` ([`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md)). Icons loaded from SSDP/mDNS URLs are persisted under **`~/.cache/netneighbor/remote_icons/`** with a **`remote_icon_index.json`** host map (see table above).
-- **Translations**: `locale/*/LC_MESSAGES/netneighbor.po`, compile with `msgfmt`; see [`I18N.md`](I18N.md) for full workflow.
+- **Rules tuning**: shipped `config/ssdp_rules.json` / `config/mdns_rules.json`; user overlays in **`~/.config/netneighbor/`** — [`COMMUNITY_OVERRIDES.md`](../contributing/COMMUNITY_OVERRIDES.md).
+- **Icons / types**: `config/device_types.json` and [`CONTRIBUTING_ICONS.md`](../contributing/CONTRIBUTING_ICONS.md); optional user merge from `~/.config/netneighbor/device_types.json` ([`COMMUNITY_OVERRIDES.md`](../contributing/COMMUNITY_OVERRIDES.md)). Icons loaded from SSDP/mDNS URLs are persisted under **`~/.cache/netneighbor/remote_icons/`** with a **`remote_icon_index.json`** host map (see table above).
+- **Translations**: `app/locale/*/LC_MESSAGES/netneighbor.po`, compile with `msgfmt`; see [`I18N.md`](../contributing/I18N.md) for full workflow.
 
 ## Discovery extension hooks
 
@@ -107,7 +107,7 @@ User packs that use flat `{N}/` directories are handled by `scan_pack_sizes()` /
 
 ## Changelog / release notes
 
-Archived in [`archive/CHANGELOG.md`](archive/CHANGELOG.md) (up to **0.8.0**). New release notes go in the repository changelog or release tags.
+Archived in [`archive/CHANGELOG.md`](../archive/CHANGELOG.md) (up to **0.8.0**). New release notes go in the repository changelog or release tags.
 
 ## Suggested additional docs (optional)
 
@@ -124,8 +124,8 @@ Architecture Decision Records (ADR): optional short files under `docs/adr/` for 
 
 - [ ] **`VERSION`** bumped.
 - [ ] `README.md` and `USER_DOCUMENTATION.md` aligned with new behavior.
-- [ ] `docs/MAINTENANCE.md`, `docs/PACKAGING.md`, and `docs/COMMUNITY_OVERRIDES.md` updated if behavior or deps changed.
-- [ ] `docs/TODO.md` updated (move done items, add new known issues).
+- [ ] `docs/operations/MAINTENANCE.md`, `docs/operations/PACKAGING.md`, and `docs/contributing/COMMUNITY_OVERRIDES.md` updated if behavior or deps changed.
+- [ ] `docs/ROADMAP.md` updated (move done items, add new known issues).
 - [ ] Translation catalogs merged (`msgmerge`) and `.mo` files compiled.
 - [ ] Smoke run: start app, discovery, details, tray hide/show, **CLI** `--start-minimized-to-tray`, optional autostart toggle, monitored device restart.
 - [ ] Test Open / double-click with Override and Additional device commands.

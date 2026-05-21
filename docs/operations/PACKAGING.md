@@ -82,7 +82,7 @@ Tarball: extract, `./run.sh`, optional `./install-desktop.sh`.
 - Windows 10/11, Python 3.10+
 - `pip install -r requirements.txt pyinstaller`
 - **Inno Setup 6** (`ISCC.exe` on `PATH`, or `winget install JRSoftware.InnoSetup --source winget`)
-- **VC++ Redistributable** on end-user machines — see [`QT_DEV_REQUIREMENTS.md`](QT_DEV_REQUIREMENTS.md)
+- **VC++ Redistributable** on end-user machines (PySide6 requires it; Windows 10/11 typically ship it already)
 
 ### Build
 

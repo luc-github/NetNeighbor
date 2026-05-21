@@ -4,7 +4,7 @@ NetNeighbor discovers and monitors devices on your local network — a modern eq
 
 **Current release: 2.0.0**
 
-![NetNeighbor main window](docs/screenshots/overview-hero.png)
+![NetNeighbor main window](docs/images/overview-hero.png)
 
 ## Features
 
@@ -98,24 +98,24 @@ Developer documentation: [`docs/README.md`](docs/README.md)
 
 Compile after editing a `.po` file:
 ```bash
-msgfmt locale/fr/LC_MESSAGES/netneighbor.po -o locale/fr/LC_MESSAGES/netneighbor.mo
+msgfmt app/locale/fr/LC_MESSAGES/netneighbor.po -o app/locale/fr/LC_MESSAGES/netneighbor.mo
 ```
 
 Test in a specific language:
 ```bash
-LANG=fr_FR.UTF-8 python main.py
+LANG=fr_FR.UTF-8 python app/main.py
 ```
 
-Full i18n workflow: [`docs/I18N.md`](docs/I18N.md)
+Full i18n workflow: [`docs/contributing/I18N.md`](docs/contributing/I18N.md)
 
 ## Autodetection and corrections
 
 Device names and types are inferred from protocol announcements — they are best-effort.
 Use right-click → **Type / Rename / Location / Icon** for per-device corrections.
-Community rule overlays: [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md).
+Community rule overlays: [`docs/contributing/COMMUNITY_OVERRIDES.md`](docs/contributing/COMMUNITY_OVERRIDES.md).
 
-## Pending work
+## Pending work and roadmap
 
-[`docs/TODO.md`](docs/TODO.md)
+[`docs/ROADMAP.md`](docs/ROADMAP.md)
 
-Contribution and maintenance notes: [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md)
+Contribution and maintenance notes: [`docs/operations/MAINTENANCE.md`](docs/operations/MAINTENANCE.md)

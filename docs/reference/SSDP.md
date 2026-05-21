@@ -93,5 +93,7 @@ Evaluated in order; first match wins.
 ## See also
 
 - [`MDNS.md`](MDNS.md) — parallel mDNS pipeline
-- [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) — user overlay rules
+- [`WSD.md`](WSD.md) — WS-Discovery pipeline
+- [`NETBIOS.md`](NETBIOS.md) — NetBIOS pipeline
+- [`COMMUNITY_OVERRIDES.md`](../contributing/COMMUNITY_OVERRIDES.md) — user overlay rules
 - [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) — discovery manager overview

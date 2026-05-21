@@ -19,7 +19,7 @@ bulk-reset or script defaults; invalid or missing keys fall back to built-in def
 |----------------|---------|
 | `close_to_tray` | If true and a tray icon exists, closing the window hides the app instead of exiting (default true). |
 | `start_minimized_to_tray` | If true and tray works, start hidden to the panel after launch. |
-| `start_at_login` | If true, ensures `~/.config/autostart/io.esp3d.netneighbor.desktop` exists (see [`MAINTENANCE.md`](MAINTENANCE.md)). |
+| `start_at_login` | If true, ensures `~/.config/autostart/io.esp3d.netneighbor.desktop` exists (see [`MAINTENANCE.md`](../operations/MAINTENANCE.md)). |
 | `autostart_onboarding_done` | Set after the first-run **session startup** dialog; prevents showing that prompt again. |
 | `custom_command_template` | Optional shell-like command for **Run custom command** in the device menu; placeholders `{ip}`, `{port}`, `{name}`, `{type}`, `{category}`, `{url}` are expanded (quoted). |
 | `connect_command_templates` | Optional object keyed by **`http`**, **`https`**, **`smb`**, **`ftp`**, **`ssh`**, **`telnet`**, **`sftp`**: shell-like command for **Open** / double-click for that URL scheme; empty value = system default. Same placeholders as `custom_command_template`. |
@@ -139,10 +139,10 @@ haystack matches.
 
 Use **real tokens** from your LAN (inspect device details → raw XML / TXT); replace the
 placeholder substrings (`myvendor-nas`, `my-upnp-gateway`, …) with strings that appear in the
-combined haystack (see [`SSDP.md`](SSDP.md) and [`MDNS.md`](MDNS.md)).
+combined haystack (see [`SSDP.md`](../reference/SSDP.md) and [`MDNS.md`](../reference/MDNS.md)).
 
 ## Contributing upstream
 
 Patterns that help others belong in merge requests updating the bundled `config/` or `data/`
-files; see [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md), [`SSDP.md`](SSDP.md),
-and [`MDNS.md`](MDNS.md).
+files; see [`CONTRIBUTING_ICONS.md`](CONTRIBUTING_ICONS.md), [`SSDP.md`](../reference/SSDP.md),
+and [`MDNS.md`](../reference/MDNS.md).

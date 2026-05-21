@@ -213,8 +213,10 @@ All devices with a loopback IP address (`ipaddress.ip_address(ip).is_loopback`) 
 
 ## See also
 
-- [`UI_ARCHITECTURE.md`](UI_ARCHITECTURE.md) — GTK frontend
+- [`UI_ARCHITECTURE.md`](../archive/UI_ARCHITECTURE.md) — GTK frontend (archived)
 - [`SSDP.md`](SSDP.md) — SSDP protocol detail
 - [`MDNS.md`](MDNS.md) — mDNS protocol detail
-- [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) — user config overlays
-- [`MAINTENANCE.md`](MAINTENANCE.md) — config paths, logging, debugging
+- [`WSD.md`](WSD.md) — WS-Discovery protocol detail
+- [`NETBIOS.md`](NETBIOS.md) — NetBIOS discovery detail
+- [`COMMUNITY_OVERRIDES.md`](../contributing/COMMUNITY_OVERRIDES.md) — user config overlays
+- [`MAINTENANCE.md`](../operations/MAINTENANCE.md) — config paths, logging, debugging

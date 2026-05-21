@@ -15,7 +15,7 @@ One NetNeighbor instance is allowed at a time; a second launch raises the existi
 
 ## Main window
 
-![Main window — icon grid view](docs/screenshots/main-grid.png)
+![Main window — icon grid view](docs/images/main-grid.png)
 
 - **List view** and **icon grid** — toggle from **View → Display**
 - **Sidebar**: categories grouped by device type or location (**View → Arrange**)
@@ -25,7 +25,7 @@ One NetNeighbor instance is allowed at a time; a second launch raises the existi
 
 #### View menu
 
-![View menu](docs/screenshots/menu-view.png)
+![View menu](docs/images/menu-view.png)
 
 | Item | Description |
 |------|-------------|
@@ -39,7 +39,7 @@ One NetNeighbor instance is allowed at a time; a second launch raises the existi
 
 #### Tools menu
 
-![Tools menu](docs/screenshots/menu-tools.png)
+![Tools menu](docs/images/menu-tools.png)
 
 | Item | Description |
 |------|-------------|
@@ -61,7 +61,7 @@ Two arrangement modes controlled by **View → Arrange**:
 
 ### List view
 
-![Main window — list view](docs/screenshots/main-list.png)
+![Main window — list view](docs/images/main-list.png)
 
 Table with columns: **Name · IP · Type · Location · Online**. Click a column header to sort.
 
@@ -87,7 +87,7 @@ listing all of them with labels (`HTTP`, `SSH (Admin)`, `HTTP (override)`, etc.)
 
 ## Right-click menu
 
-![Right-click context menu](docs/screenshots/context-menu.png)
+![Right-click context menu](docs/images/context-menu.png)
 
 | Action | Description |
 |--------|-------------|
@@ -107,7 +107,7 @@ listing all of them with labels (`HTTP`, `SSH (Admin)`, `HTTP (override)`, etc.)
 
 ### Overview tab
 
-![Device details — Overview tab](docs/screenshots/device-details.png)
+![Device details — Overview tab](docs/images/device-details.png)
 
 Summary of discovered fields: IP, name, type, location, last seen, services.
 
@@ -126,14 +126,14 @@ Raw SSDP/UPnP XML received from the device. A **Copy to clipboard** button copie
 
 ### Options tab
 
-![Device details — Options tab](docs/screenshots/device-options.png)
+![Device details — Options tab](docs/images/device-options.png)
 
 **Icon source** — choose between:
 - **System**: use the bundled type icon from the active icon pack
 - **From device**: use the icon fetched from the device's SSDP/mDNS URL (shown only when available)
 - **Custom**: open the icon picker to choose from the active pack or your own PNGs
 
-![Icon picker](docs/screenshots/icon-picker.png)
+![Icon picker](docs/images/icon-picker.png)
 
 The icon picker displays all icons from the active pack (with built-in icons as fallback for any missing ones). The selected id is stored pack-independently — switching packs later applies the new pack's version of that icon automatically.
 
@@ -159,7 +159,7 @@ Open with **View → Preferences…** (`Ctrl+,`).
 
 ### General tab
 
-![Preferences — General tab](docs/screenshots/preferences-general.png)
+![Preferences — General tab](docs/images/preferences-general.png)
 
 **Theme**
 
@@ -205,7 +205,7 @@ The built-in *NetNeighbor* pack lives under `assets/icons/netneighbor/` and is a
 
 ### Locations tab
 
-![Location presets](docs/screenshots/location-presets.png)
+![Location presets](docs/images/location-presets.png)
 
 Manage the list of location labels available in the right-click **Location** menu.
 
@@ -222,7 +222,7 @@ Labels are stored in `~/.config/netneighbor/ui_prefs.json`.
 
 ### Types tab
 
-![Type presets](docs/screenshots/type-presets.png)
+![Type presets](docs/images/type-presets.png)
 
 Manage the list of device types available in the right-click **Device type** menu.
 Each entry has a **Label** (display name) and a **Type ID** (internal slug used for icon lookup).
@@ -236,7 +236,7 @@ Each entry has a **Label** (display name) and a **Type ID** (internal slug used 
 
 ### Applications tab
 
-![External applications](docs/screenshots/external-applications.png)
+![External applications](docs/images/external-applications.png)
 
 Override the command used to open devices **per scheme** (HTTP, HTTPS, SMB, FTP, SSH, Telnet, SFTP).
 Leave a field empty to use the system default (`xdg-open` for HTTP/HTTPS, file manager for SMB/FTP/SFTP, terminal for SSH/Telnet).
@@ -254,7 +254,7 @@ Placeholders: `{url}`, `{ip}`, `{port}`, `{name}`, `{type}`, `{category}`
 
 ## System tray
 
-![System tray menu](docs/screenshots/tray-menu.png)
+![System tray menu](docs/images/tray-menu.png)
 
 When the tray icon is active, the window can be shown/hidden from the tray.
 
@@ -276,7 +276,7 @@ Corrections:
 
 1. **Per-device overrides**: right-click a device tile → **Rename**, **Device type**, **Location**, or **Options** (icon + connection commands).
 2. **User rule overlays**: JSON files in `~/.config/netneighbor/` extend mDNS and SSDP matching
-   (see [`docs/COMMUNITY_OVERRIDES.md`](docs/COMMUNITY_OVERRIDES.md)).
+   (see [`docs/contributing/COMMUNITY_OVERRIDES.md`](docs/contributing/COMMUNITY_OVERRIDES.md)).
 
 ---
 

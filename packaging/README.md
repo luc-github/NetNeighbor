@@ -7,7 +7,7 @@
 | [`macos/`](macos/) | PyInstaller → `.app` bundle |
 | [`POST_PORT.md`](POST_PORT.md) | Checklist after UI port (`app.py`, deps, Linux packages) |
 
-Full documentation: [`docs/PACKAGING.md`](../docs/PACKAGING.md).
+Full documentation: [`docs/operations/PACKAGING.md`](../docs/operations/PACKAGING.md).
 
 ## Quick start
 

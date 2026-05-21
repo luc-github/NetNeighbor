@@ -104,5 +104,7 @@ Evaluated after fixed heuristics. First match wins.
 ## See also
 
 - [`SSDP.md`](SSDP.md) — parallel SSDP pipeline
-- [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md) — user overlay rules
+- [`WSD.md`](WSD.md) — WS-Discovery pipeline
+- [`NETBIOS.md`](NETBIOS.md) — NetBIOS pipeline
+- [`COMMUNITY_OVERRIDES.md`](../contributing/COMMUNITY_OVERRIDES.md) — user overlay rules
 - [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) — discovery manager overview

@@ -257,13 +257,14 @@ cached devices at startup, and no visual distinction between "confirmed live" an
 
 ## Theme F — Discovery enhancements 💡
 
-*Items from `docs/TODO.md` and outstanding ideas — not yet scheduled.*
+*Outstanding ideas — not yet scheduled.*
 
 - SFTP service detection via mDNS (`_sftp-ssh._tcp`)
 - NetBIOS: hint in UI when `nmblookup` is not installed
 - SSDP XML fetches: per-host lock for concurrent descriptor fetches
 - wsdd_client: remove hardcoded 0.35 s sleep between probe and list
-- NetBIOS directed probes: parallel `ThreadPoolExecutor`
+- NetBIOS directed probes: parallel `ThreadPoolExecutor` instead of sequential `nmblookup -A` calls
+- Performance — cache pre-population at startup (emit cached SSDP devices before live discovery completes, so the window is populated in < 100 ms)
 
 ---
 
@@ -285,6 +286,11 @@ cached devices at startup, and no visual distinction between "confirmed live" an
 - Per-device command label in tile tooltip
 - Notifications history: persist across sessions
 - Preferences: expose cache TTL threshold (currently hardcoded 48 h)
+
+## Testing / QA 💡
+
+- Add a repeatable manual smoke-test checklist per release (see `operations/MAINTENANCE.md`)
+- Unit tests for `_normalize_command_list`, `resolve_connect_target` priority logic, and `resolve_all_connect_targets` label generation
 
 ---
 
@@ -409,7 +415,7 @@ The app looked like malware — dozens of semi-transparent windows that could no
 closed, requiring Task Manager to kill the process tree.
 
 Fix: `multiprocessing.freeze_support()` must be the **first statement** inside
-`if __name__ == "__main__":`, before any import. See `main.py` and `docs/PACKAGING.md`.
+`if __name__ == "__main__":`, before any import. See `app/main.py` and `docs/operations/PACKAGING.md`.
 
 **Bug 2 — `subprocess` without `CREATE_NO_WINDOW`** (`utils/neighbor_mac.py`)
 
@@ -418,7 +424,7 @@ device on every UI refresh (~10–30 calls/cycle). Each call created a visible c
 window, flooding the desktop with flashing terminal windows.
 
 Fix: added `CREATE_NO_WINDOW` flag + an 850 ms cache so `arp -a` runs at most once
-per refresh cycle regardless of device count. See `docs/PACKAGING.md` for the rule
+per refresh cycle regardless of device count. See `docs/operations/PACKAGING.md` for the rule
 that applies to all future `subprocess` calls on Windows code paths.
 
 ### I-4 macOS packaging (PyInstaller `.app` + `.dmg`) 📋
@@ -495,6 +501,6 @@ Theme H     ✅  Translation review (H-1 → H-3) — 74 strings, 8 languages
 Theme I     🔄  Packaging — I-0 ✅  I-1 ✅  I-1b ✅  I-3 ✅  I-2 📋 (Linux .deb)  I-4/I-5 💡
 ```
 
-> **Windows maintainers:** read the ⚠️ CRITICAL section in I-3 and `docs/PACKAGING.md`
+> **Windows maintainers:** read the ⚠️ CRITICAL section in I-3 and `docs/operations/PACKAGING.md`
 > before any PyInstaller build. The `freeze_support()` and `CREATE_NO_WINDOW` bugs
 > cause the app to appear as malware on first launch.
