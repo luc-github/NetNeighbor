@@ -42,14 +42,3 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
-[Code]
-function InitializeSetup(): Boolean;
-begin
-  if not DirExists(ExpandConstant('{#PyInstallerDir}')) then
-  begin
-    MsgBox('PyInstaller output not found. Run packaging\windows\build.ps1 first.', mbError, MB_OK);
-    Result := False;
-  end
-  else
-    Result := True;
-end;
