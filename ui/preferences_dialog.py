@@ -90,6 +90,7 @@ class PreferencesDialog(QDialog):
         on_connect_templates_saved: Callable[[dict[str, str], str], None] | None = None,
         on_clear_icon_cache: Callable[[], None] | None = None,
         on_icon_pack_changed: Callable[[str], None] | None = None,
+        on_restart: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(_("Preferences"))
@@ -100,6 +101,7 @@ class PreferencesDialog(QDialog):
         self._on_connect_templates_saved = on_connect_templates_saved
         self._on_clear_icon_cache        = on_clear_icon_cache
         self._on_icon_pack_changed       = on_icon_pack_changed
+        self._on_restart                 = on_restart
         self._icon_packs: list = []
         self._icon_folder_opened: bool = False
 
@@ -405,8 +407,9 @@ class PreferencesDialog(QDialog):
             return
         if self._on_clear_icon_cache is not None:
             self._on_clear_icon_cache()
-        self._btn_clear_icon_cache.setEnabled(False)
-        self._btn_clear_icon_cache.setText(_("Reset done — please restart"))
+        self.reject()
+        if self._on_restart is not None:
+            self._on_restart()
 
     # ------------------------------------------------------------------
     # Load / save

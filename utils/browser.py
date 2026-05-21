@@ -4,12 +4,23 @@
 # License: LGPL3
 """Browser utility to open device URLs."""
 
+import logging
 import os
 import shutil
 import subprocess
 import sys
+import threading
 import webbrowser
 from urllib.parse import urlparse
+
+_LOG = logging.getLogger(__name__)
+
+try:
+    import win32netcon
+    import win32wnet
+    _HAS_WIN32WN = True
+except ImportError:
+    _HAS_WIN32WN = False
 
 _BROWSER_SCHEMES = {"http", "https", ""}
 
@@ -17,6 +28,44 @@ _BROWSER_SCHEMES = {"http", "https", ""}
 # xdg-open silently fails for smb:// on many Linux desktops (Cinnamon, GNOME, etc.).
 _FILE_MANAGER_SCHEMES = {"smb", "ftp", "sftp", "nfs", "dav", "davs"}
 _FILE_MANAGERS = ["nemo", "nautilus", "dolphin", "thunar", "pcmanfm"]
+
+
+def _win32_smb_worker(unc: str) -> None:
+    """Background thread: connect via WNet then open explorer."""
+    if _HAS_WIN32WN:
+        try:
+            try:
+                win32wnet.WNetCancelConnection2(unc, 0, True)
+            except Exception:
+                pass
+            flags = win32netcon.CONNECT_INTERACTIVE | win32netcon.CONNECT_PROMPT
+            win32wnet.WNetAddConnection2(
+                win32netcon.RESOURCETYPE_DISK,
+                None,
+                unc,
+                None,
+                "",
+                "",
+                flags,
+            )
+            _LOG.debug("WNetAddConnection2 ok: %r", unc)
+            subprocess.Popen(["explorer.exe", unc])  # noqa: S603,S607
+            return
+        except Exception as exc:
+            if getattr(exc, "winerror", None) == 1223:
+                return  # User cancelled — not an error.
+            _LOG.warning("WNetAddConnection2 failed (%s): %r", exc, unc)
+    # Fallback: no pywin32 or WNet failed — open directly (no credential prompt).
+    try:
+        subprocess.Popen(["explorer.exe", unc])  # noqa: S603,S607
+    except OSError as exc:
+        _LOG.warning("explorer.exe also failed: %s", exc)
+
+
+def _win32_open_smb(unc: str) -> bool:
+    """Spawn a background thread to open *unc*, keeping the UI responsive."""
+    threading.Thread(target=_win32_smb_worker, args=(unc,), daemon=True).start()
+    return True
 
 
 def open_url(url: str) -> bool:
@@ -27,6 +76,11 @@ def open_url(url: str) -> bool:
         return webbrowser.open(url)
 
     if sys.platform == "win32":
+        if scheme == "smb":
+            parsed = urlparse(url)
+            path = parsed.path.replace("/", "\\")
+            unc = f"\\\\{parsed.netloc}{path}"
+            return _win32_open_smb(unc)
         try:
             os.startfile(url)  # noqa: S606 — URL validated above
             return True

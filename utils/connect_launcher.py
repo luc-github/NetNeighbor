@@ -43,7 +43,7 @@ _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
     "win32": {
         "http": 'cmd.exe /c start "" http://{ip}',
         "https": 'cmd.exe /c start "" https://{ip}',
-        "smb": "explorer \\\\{ip_raw}",
+        "smb": "localsmb://{ip}",
         "ftp": "explorer ftp://{ip}",
         "ssh": "cmd.exe /c start ssh -p {port} {ip}",
         "telnet": "cmd.exe /c start telnet {ip} {port}",
@@ -96,9 +96,19 @@ def _merge_templates_from_json_doc(data: dict) -> dict[str, str]:
         linux_b = data.get("linux")
         if isinstance(linux_b, dict):
             merged.update(_coerce_scheme_map(linux_b))
-        plat = data.get(_platform_branch_key())
-        if isinstance(plat, dict):
-            merged.update(_coerce_scheme_map(plat))
+        plat_key = _platform_branch_key()
+        if plat_key != "linux":
+            plat = data.get(plat_key)
+            if isinstance(plat, dict):
+                for k, v in plat.items():
+                    if not isinstance(k, str) or k in _SKIP_JSON_KEYS:
+                        continue
+                    if isinstance(v, str):
+                        if v.strip():
+                            merged[k] = v
+                        else:
+                            # Explicit empty in platform branch clears the linux default.
+                            merged.pop(k, None)
         return merged
     return _coerce_scheme_map(data)
 
@@ -175,6 +185,18 @@ def launch_connect_for_uri(
     if not tmpl:
         _LOG.debug("open: no template for scheme=%s → system default url=%s", scheme, u)
         open_url(u)
+        return None
+
+    # localsmb:// is a Windows-native pseudo-scheme — route to open_url as smb://.
+    if tmpl.lower().startswith("localsmb:"):
+        smb_url = (
+            tmpl
+            .replace("{ip}", str(effective_ip))
+            .replace("{port}", str(effective_port))
+            .replace("localsmb://", "smb://", 1)
+        )
+        _LOG.debug("open: localsmb pseudo-scheme → %s", smb_url)
+        open_url(smb_url)
         return None
 
     argv = build_argv_from_template(

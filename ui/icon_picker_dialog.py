@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pathlib import Path
+
 from ui.icons import iter_icon_picker_entries, user_custom_icons_dir
 
 
@@ -33,9 +35,15 @@ def pick_device_icon_id(
     *,
     preferred_type: str | None,
     current_id: str | None,
+    active_pack_root: Path | None = None,
 ) -> str | None:
     """Run modal picker; returns ``bundled:…`` / ``custom:…`` id or ``None`` if cancelled."""
-    dlg = IconPickerDialog(parent, preferred_type=preferred_type, current_id=current_id)
+    dlg = IconPickerDialog(
+        parent,
+        preferred_type=preferred_type,
+        current_id=current_id,
+        active_pack_root=active_pack_root,
+    )
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
     return dlg.selected_icon_id()
@@ -44,7 +52,14 @@ def pick_device_icon_id(
 class IconPickerDialog(QDialog):
     """Grid of pack + custom icons (same ids as the legacy device details dialog)."""
 
-    def __init__(self, parent: QWidget | None, *, preferred_type: str | None, current_id: str | None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None,
+        *,
+        preferred_type: str | None,
+        current_id: str | None,
+        active_pack_root: Path | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(_("Choose icon"))
         self.resize(620, 484)
@@ -57,7 +72,7 @@ class IconPickerDialog(QDialog):
         )
         hint.setWordWrap(True)
 
-        entries = iter_icon_picker_entries(preferred_type)
+        entries = iter_icon_picker_entries(preferred_type, active_pack_root)
         scroll: QScrollArea | None = None
         if not entries:
             empty = QLabel(

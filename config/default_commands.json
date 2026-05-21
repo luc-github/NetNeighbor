@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "comment": "Per-OS defaults for Tools / External applications (scheme to command). Placeholders: {ip} {ip_raw} {port} {name} {type} {category} {url}. Use {ip_raw} where shell quoting breaks UNC (Windows SMB). A flat legacy file (scheme strings only) is still read as Linux-only overrides.",
+  "comment": "Per-OS defaults for Tools / External applications (scheme to command). Placeholders: {ip} {port} {name} {type} {category} {url}. localsmb:// is a Windows-native pseudo-scheme (WNetAddConnection2).",
   "linux": {
     "http": "xdg-open http://{ip}",
     "https": "xdg-open https://{ip}",
@@ -22,7 +22,7 @@
   "win32": {
     "http": "cmd.exe /c start \"\" http://{ip}",
     "https": "cmd.exe /c start \"\" https://{ip}",
-    "smb": "explorer \\\\\\\\{ip_raw}",
+    "smb": "localsmb://{ip}",
     "ftp": "explorer ftp://{ip}",
     "ssh": "cmd.exe /c start ssh -p {port} {ip}",
     "telnet": "cmd.exe /c start telnet {ip} {port}",

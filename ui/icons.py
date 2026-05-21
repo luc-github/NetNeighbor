@@ -81,8 +81,14 @@ def iter_bundled_freedesktop_choice_basenames() -> list[str]:
     return sorted(names)
 
 
-def resolve_persisted_icon_id_to_path(icon_id: str | None) -> Path | None:
-    """Resolve a stored icon id (``bundled:stem``, ``custom:file.png``, ``builtin:file.png``)."""
+def resolve_persisted_icon_id_to_path(
+    icon_id: str | None,
+    active_pack_root: Path | None = None,
+) -> Path | None:
+    """Resolve a stored icon id (``bundled:stem``, ``custom:file.png``, ``builtin:file.png``).
+
+    For ``bundled:`` ids, *active_pack_root* is tried first; falls back to the built-in pack.
+    """
     if not icon_id or not isinstance(icon_id, str):
         return None
     s = icon_id.strip()
@@ -97,7 +103,7 @@ def resolve_persisted_icon_id_to_path(icon_id: str | None) -> Path | None:
         pfx = prefix.strip().lower()
         if pfx == "bundled":
             stem = Path(name).stem
-            return resolve_bundled_freedesktop_icon(stem)
+            return _resolve_picker_preview(stem, active_pack_root)
         if pfx == "custom":
             p = user_custom_icons_dir() / name
             return p if p.is_file() else None
@@ -131,10 +137,25 @@ def resolve_bundled_freedesktop_icon(icon_name: str | None) -> Path | None:
     return None
 
 
-def iter_icon_picker_entries(preferred_type: str | None) -> list[tuple[str, str, Path | None]]:
+def _resolve_picker_preview(stem: str, active_pack_root: Path | None) -> Path | None:
+    """Return best preview path for *stem*: active pack → built-in fallback."""
+    if active_pack_root is not None:
+        from utils.icon_packs import find_icon_in_pack, scan_pack_sizes
+        for sz in reversed(scan_pack_sizes(active_pack_root)):
+            candidate = find_icon_in_pack(active_pack_root, sz, stem)
+            if candidate is not None:
+                return candidate
+    return resolve_bundled_freedesktop_icon(stem)
+
+
+def iter_icon_picker_entries(
+    preferred_type: str | None,
+    active_pack_root: Path | None = None,
+) -> list[tuple[str, str, Path | None]]:
     """Rows for GTK/Qt icon pickers: ``(icon_id, label, preview_path)``.
 
     ``preview_path`` may be ``None`` only if a file disappeared between scan and open.
+    Icons are previewed from *active_pack_root* when provided, falling back to built-in.
     """
     from gettext import gettext as _
 
@@ -142,7 +163,7 @@ def iter_icon_picker_entries(preferred_type: str | None) -> list[tuple[str, str,
 
     rows: list[tuple[str, str, Path | None]] = []
     for stem in iter_bundled_freedesktop_choice_basenames():
-        p = resolve_bundled_freedesktop_icon(stem)
+        p = _resolve_picker_preview(stem, active_pack_root)
         rows.append((f"bundled:{stem}", f"{stem} ({_('App icon pack')})", p))
     cdir = user_custom_icons_dir()
     if cdir.is_dir():

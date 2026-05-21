@@ -505,7 +505,7 @@ class DeviceDetailsDialog(QDialog):
         hint = QLabel(
             _("Override or add connection endpoints per protocol. "
               "For 'custom' scheme, enter the command template in IP/Host "
-              "({ip}, {ip_raw}, {port}, {name}, {type}, {category}, {url}). "
+              "({ip}, {port}, {name}, {type}, {category}, {url}). "
               "IP/Host and Port are optional for other schemes.")
         )
         hint.setWordWrap(True)

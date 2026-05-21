@@ -1102,6 +1102,7 @@ class NetNeighborMainWindow(QMainWindow):
             on_connect_templates_saved=self._apply_connect_templates,
             on_clear_icon_cache=self._clear_icon_cache,
             on_icon_pack_changed=self._apply_icon_pack,
+            on_restart=self._restart_app,
         )
         dlg.exec()
 
@@ -1119,6 +1120,24 @@ class NetNeighborMainWindow(QMainWindow):
         from utils.device_remote_icon import clear_all_app_data
         clear_all_app_data()
         self._remote_icon_cache.clear()
+
+    def _restart_app(self) -> None:
+        import subprocess
+        import sys
+        from PySide6.QtNetwork import QLocalServer
+        from PySide6.QtWidgets import QApplication
+        from utils.qt_single_instance import SINGLETON_SERVER_NAME
+        app = QApplication.instance()
+        # Release the single-instance lock before the new process starts.
+        srv = getattr(app, "_qt_activation_server", None)
+        if srv is not None:
+            srv.close()
+        QLocalServer.removeServer(SINGLETON_SERVER_NAME)
+        if getattr(sys, "frozen", False):
+            subprocess.Popen([sys.executable])
+        else:
+            subprocess.Popen([sys.executable, sys.argv[0]])
+        app.quit()
 
     def _apply_icon_pack(self, pack_id: str) -> None:
         from utils.icon_packs import invalidate_icon_pack_cache
@@ -1658,9 +1677,13 @@ class NetNeighborMainWindow(QMainWindow):
         custom_id = self._custom_icon_overrides.get(ep) if mode == "custom" else None
 
         def _pick_custom() -> str | None:
+            from utils.icon_packs import active_icon_pack_root
             cur = self._custom_icon_overrides.get(ep) if mode == "custom" else None
             return pick_device_icon_id(
-                self, preferred_type=bundle.primary.type, current_id=cur
+                self,
+                preferred_type=bundle.primary.type,
+                current_id=cur,
+                active_pack_root=active_icon_pack_root(),
             )
 
         provided_pixmap = None
@@ -1832,7 +1855,8 @@ class NetNeighborMainWindow(QMainWindow):
         if mode == "custom":
             cid = self._custom_icon_overrides.get(ep)
             if cid:
-                p = resolve_persisted_icon_id_to_path(cid)
+                from utils.icon_packs import active_icon_pack_root
+                p = resolve_persisted_icon_id_to_path(cid, active_icon_pack_root())
                 if p is not None:
                     ic = QIcon(str(p))
                     if not ic.isNull():
