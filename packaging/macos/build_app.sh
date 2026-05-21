@@ -61,7 +61,8 @@ cd "${PROJECT_ROOT}"
   --add-data "${PROJECT_ROOT}/app/config:config" \
   --add-data "${PROJECT_ROOT}/VERSION:." \
   --hidden-import zeroconf \
-  --hidden-import WSDiscovery \
+  --hidden-import wsdiscovery \
+  --hidden-import wsdiscovery.discovery \
   --hidden-import PySide6.QtCore \
   --hidden-import PySide6.QtGui \
   --hidden-import PySide6.QtWidgets \

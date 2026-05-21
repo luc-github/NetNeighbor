@@ -41,7 +41,7 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: Install build dependencies
         run: |
@@ -62,7 +62,7 @@ jobs:
           ./packaging/linux/release.sh "${{ needs.version.outputs.version }}"
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: linux-${{ needs.version.outputs.version }}
           path: |
@@ -76,9 +76,9 @@ jobs:
     runs-on: windows-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: "3.12"
 
@@ -94,7 +94,7 @@ jobs:
           .\packaging\windows\build_installer.ps1 -Version ${{ needs.version.outputs.version }}
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: windows-${{ needs.version.outputs.version }}
           path: dist/NetNeighbor-*-win64-setup.exe
@@ -104,9 +104,9 @@ jobs:
     runs-on: macos-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.6.0
         with:
           python-version: "3.12"
 
@@ -118,7 +118,7 @@ jobs:
           bash packaging/macos/build_app.sh "${{ needs.version.outputs.version }}"
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: macos-${{ needs.version.outputs.version }}
           path: dist/NetNeighbor-*-macos.zip
@@ -128,7 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always() && needs.linux.result == 'success' && github.event_name == 'push'
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4.3.0
         with:
           path: release-assets
           merge-multiple: true
@@ -142,7 +142,7 @@ jobs:
           \) -exec cp {} dist-flat/ \;
 
       - name: Attach to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.3.2
         with:
           tag_name: ${{ github.ref_name }}
           files: dist-flat/*
