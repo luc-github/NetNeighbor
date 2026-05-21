@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Build NetNeighbor.app with PyInstaller (PySide6). Entry: app.py (fallback app_qt.py).
+# Build NetNeighbor.app with PyInstaller (PySide6, onefile). Entry: app/main.py.
+#
+# --onefile packs everything into a single self-extracting binary inside the
+# .app bundle (~200-300 MB vs ~800 MB for onedir). On first launch after
+# install or reboot, PyInstaller extracts to $TMPDIR/_MEI<hash>/ (~3-5 s);
+# subsequent launches reuse the cache and start instantly.
 #
 # Prerequisites (macOS):
 #   python3 -m venv .venv && source .venv/bin/activate
@@ -51,6 +56,7 @@ mkdir -p "${DIST_DIR}"
 cd "${PROJECT_ROOT}"
 "${PY}" -m PyInstaller \
   --noconfirm \
+  --onefile \
   --windowed \
   --name NetNeighbor \
   --distpath "${DIST_DIR}" \
@@ -96,31 +102,6 @@ if [[ ! -d "${APP_BUNDLE}" ]]; then
   echo "Expected bundle not found: ${APP_BUNDLE}" >&2
   exit 1
 fi
-
-echo "-- strip debug symbols"
-find "${APP_BUNDLE}" \( -name "*.dylib" -o -name "*.so" \) \
-  -exec strip -x {} \; 2>/dev/null || true
-
-echo "-- bundle layout (Frameworks/ Resources/ top-level)"
-echo "   Frameworks/:"; ls "${APP_BUNDLE}/Contents/Frameworks/" 2>/dev/null || echo "   (empty)"
-echo "   Resources/:";  ls "${APP_BUNDLE}/Contents/Resources/"  2>/dev/null || echo "   (empty)"
-
-echo "-- deduplicate dirs present in both Frameworks/ and Resources/"
-_dedup_count=0
-for fw_entry in "${APP_BUNDLE}/Contents/Frameworks/"*/; do
-  [[ -d "${fw_entry}" ]] || continue
-  name="$(basename "${fw_entry%/}")"
-  res_entry="${APP_BUNDLE}/Contents/Resources/${name}"
-  if [[ -d "${res_entry}" && ! -L "${res_entry}" ]]; then
-    _fw_size="$(du -sk "${fw_entry}" | awk '{print $1}')"
-    _res_size="$(du -sk "${res_entry}" | awk '{print $1}')"
-    rm -rf "${res_entry}"
-    ln -s "../Frameworks/${name}" "${res_entry}"
-    echo "   linked Resources/${name} -> Frameworks/${name} (freed ~${_res_size}KB)"
-    _dedup_count=$((_dedup_count + 1))
-  fi
-done
-echo "   deduped ${_dedup_count} director(ies)"
 
 ZIP_OUT="${DIST_DIR}/NetNeighbor-${VERSION}-macos.zip"
 rm -f "${ZIP_OUT}"
