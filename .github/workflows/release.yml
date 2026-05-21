@@ -97,9 +97,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ needs.version.outputs.version }}
-          path: |
-            dist/NetNeighbor-*-win64.zip
-            dist/NetNeighbor-*-win64-setup.exe
+          path: dist/NetNeighbor-*-win64-setup.exe
 
   macos:
     needs: version
