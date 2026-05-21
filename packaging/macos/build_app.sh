@@ -3,7 +3,7 @@
 #
 # Prerequisites (macOS):
 #   python3 -m venv .venv && source .venv/bin/activate
-#   pip install -r requirements-qt.txt pyinstaller
+#   pip install -r requirements.txt pyinstaller
 #
 # Usage:
 #   bash packaging/macos/build_app.sh
@@ -34,25 +34,20 @@ if [[ -z "${PY}" && -x "${PROJECT_ROOT}/.venv/bin/python" ]]; then
 fi
 PY="${PY:-python3}"
 
-ENTRY="${PROJECT_ROOT}/app.py"
+ENTRY="${PROJECT_ROOT}/app/main.py"
 if [[ ! -f "${ENTRY}" ]]; then
-  ENTRY="${PROJECT_ROOT}/app_qt.py"
-  echo "Note: app.py not found — using app_qt.py until rename (see packaging/POST_PORT.md)"
-fi
-if [[ ! -f "${ENTRY}" ]]; then
-  echo "Missing app.py (or app_qt.py during transition)" >&2
+  echo "Missing app/main.py" >&2
   exit 1
 fi
 
 echo "== NetNeighbor macOS PyInstaller =="
-echo "version=${VERSION} entry=${ENTRY##*/}"
+echo "version=${VERSION} entry=app/${ENTRY##*/}"
 
-"${PY}" -m pip install -q -r "${PROJECT_ROOT}/requirements-qt.txt" pyinstaller
+"${PY}" -m pip install -q -r "${PROJECT_ROOT}/requirements.txt" pyinstaller
 
 rm -rf "${WORK_DIR}"
 mkdir -p "${DIST_DIR}"
 
-# Reuse Windows spec (onedir COLLECT); produce .app via --windowed on macOS.
 cd "${PROJECT_ROOT}"
 "${PY}" -m PyInstaller \
   --noconfirm \
@@ -61,10 +56,10 @@ cd "${PROJECT_ROOT}"
   --distpath "${DIST_DIR}" \
   --workpath "${WORK_DIR}" \
   --specpath "${SCRIPT_DIR}" \
-  --add-data "assets:assets" \
-  --add-data "locale:locale" \
-  --add-data "data:data" \
-  --add-data "config:config" \
+  --paths "${PROJECT_ROOT}/app" \
+  --add-data "app/assets:assets" \
+  --add-data "app/locale:locale" \
+  --add-data "app/config:config" \
   --add-data "VERSION:." \
   --hidden-import zeroconf \
   --hidden-import WSDiscovery \

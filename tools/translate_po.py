@@ -5,7 +5,7 @@
 """Translate untranslated entries in a .po file using the Anthropic API.
 
 Usage:
-    python tools/translate_po.py locale/fr/LC_MESSAGES/netneighbor.po
+    python tools/translate_po.py app/locale/fr/LC_MESSAGES/netneighbor.po
 
 .env file (project root or current directory):
     ANTROPIC=sk-ant-...

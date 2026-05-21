@@ -18,7 +18,7 @@ There is **no** Freedesktop theme, **no** Windows Shell stock, and **no** ``QSty
 
 Square folders (`16x16` … `1024x1024`, etc.) under ``netneighbor/`` are auto-discovered.
 
-## Per-device JSON icons (`data/device_types.json`)
+## Per-device JSON icons (`config/device_types.json`)
 
 The ``icon`` field may still name a file under ``assets/icons/`` (e.g. ``router.png``). If that file exists, it is shown before the type pack (device row logic in the UI).
 

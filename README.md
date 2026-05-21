@@ -1,6 +1,6 @@
 # NetNeighbor
 
-NetNeighbor discovers and monitors devices on your local network — a modern equivalent of the Windows Network Neighborhood experience. Runs on Linux and Windows.
+NetNeighbor discovers and monitors devices on your local network — a modern equivalent of the Windows Network Neighborhood experience. Runs on Windows, Linux and macOS.
 
 **Current release: 2.0.0**
 
@@ -13,24 +13,32 @@ NetNeighbor discovers and monitors devices on your local network — a modern eq
 - **List and icon grid** views with sidebar categories (by type or location)
 - **Open devices** in one click — HTTP, HTTPS, SMB, SSH, FTP, SFTP, Telnet with configurable priority
 - **Per-device overrides** — custom name, type, location, icon, and connection commands
+- **Icon packs** — switch between icon themes; install community packs or create your own
 - **System tray** — minimize to tray, start minimized, session autostart
 - **Localised** — French, Spanish, German, Italian, Dutch, Japanese, Chinese (Simplified/Traditional)
-- **Packaged** as `.deb` (Ubuntu/Mint/Debian), `.AppImage`, and tarball
+- **Packaged** as `.exe` (Windows), `.deb` (Ubuntu/Mint/Debian), `.AppImage`, and tarball
 
 ## Download
 
 Latest release: [GitHub Releases](https://github.com/luc-github/NetNeighbor/releases)
 
-Available formats: `.deb` · `.AppImage` · `.tar.gz`
+Available formats: `.exe` · `.deb` · `.AppImage` · `.tar.gz`
 
 ## Requirements
 
-- Python 3.10+
-- PySide6 6.5+
-
-No system-level GUI libraries required beyond what PySide6 brings.
+| Platform | Requirement |
+|----------|-------------|
+| Windows | Windows 10 or later |
+| Linux | Ubuntu 22.04+, Linux Mint 21+, Debian 12+, or equivalent |
+| macOS | macOS 12 (Monterey) or later |
+| From source | Python 3.10+ · PySide6 6.5+ |
 
 ## Install
+
+**Windows installer:**
+```
+NetNeighbor-2.0.0-win64-setup.exe
+```
 
 **`.deb` package (recommended, Linux):**
 ```bash
@@ -57,7 +65,7 @@ bash run.sh
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-qt.txt
+pip install -r requirements.txt
 python main.py
 ```
 
@@ -65,13 +73,13 @@ python main.py
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements-qt.txt
+pip install -r requirements.txt
 python main.py
 ```
 
 ## Documentation
 
-User documentation: [`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md)
+User documentation: [`USER_DOCUMENTATION.md`](docs/USER_DOCUMENTATION.md)
 
 Developer documentation: [`docs/README.md`](docs/README.md)
 

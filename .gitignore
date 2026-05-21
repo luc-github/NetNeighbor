@@ -48,14 +48,6 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Translations
-# .mo and .pot are typically ignored in Python projects but NetNeighbor needs
-# them committed: .mo for running from source, .pot for translators.
-# !locale/ exceptions override the generic rules for this project only.
-*.mo
-*.pot
-!locale/**/*.mo
-!locale/netneighbor.pot
 
 # Django stuff:
 *.log

@@ -197,7 +197,7 @@ All devices with a loopback IP address (`ipaddress.ip_address(ip).is_loopback`) 
 | `config/ssdp_rules.json` | SSDP name / info / type classification rules |
 | `config/mdns_rules.json` | mDNS TXT → summary mapping + type rules |
 | `config/default_commands.json` | Default command templates per URL scheme and OS (`linux` / `darwin` / `win32` objects; legacy flat map still supported). Used by Tools → External applications. Optional `{ip_raw}` (see `utils/custom_command.py`) for templates where quoting breaks UNC paths. |
-| `data/device_types.json` | Icon, display name, and mDNS service type → device type mapping |
+| `config/device_types.json` | Icon, display name, and mDNS service type → device type mapping |
 | `~/.config/netneighbor/discovery.json` | Discovery toggles, intervals, merge order |
 | `~/.config/netneighbor/ui_prefs.json` | All user overrides + UI state |
 

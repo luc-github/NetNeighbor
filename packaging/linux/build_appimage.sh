@@ -108,13 +108,13 @@ mkdir -p \
   "${APP_SHARE}"
 
 # ── App sources ────────────────────────────────────────────────────────────
-for path in main.py app_qt.py i18n.py requirements.txt requirements-qt.txt \
-            discovery model ui utils data config assets \
-            locale LICENSE README.md USER_DOCUMENTATION.md VERSION; do
+for path in app requirements.txt \
+            LICENSE README.md VERSION; do
   if [[ -e "${PROJECT_ROOT}/${path}" ]]; then
     cp -a "${PROJECT_ROOT}/${path}" "${APP_SHARE}/"
   fi
 done
+cp -a "${PROJECT_ROOT}/docs/USER_DOCUMENTATION.md" "${APP_SHARE}/"
 
 # Remove dev artifacts
 find "${APP_SHARE}" \
@@ -123,11 +123,11 @@ find "${APP_SHARE}" \
 
 # The assets/icons/hicolor subtree contains relative symlinks valid only in
 # the source tree.  Icons are installed explicitly below.
-rm -rf "${APP_SHARE}/assets/icons/hicolor"
+rm -rf "${APP_SHARE}/app/assets/icons/hicolor"
 
 # Trim netneighbor icon set to only the resolutions needed by the Qt UI (saves ~143 MB).
 # Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
-_bfd="${APP_SHARE}/assets/icons/netneighbor"
+_bfd="${APP_SHARE}/app/assets/icons/netneighbor"
 if [ -d "${_bfd}" ]; then
     for _d in "${_bfd}"/*/; do
         case "$(basename "${_d%/}")" in
@@ -139,7 +139,7 @@ fi
 
 # ── Compile .po → .mo ─────────────────────────────────────────────────────
 if command -v msgfmt >/dev/null 2>&1; then
-  find "${APP_SHARE}/locale" -name "*.po" | while read -r _po; do
+  find "${APP_SHARE}/app/locale" -name "*.po" | while read -r _po; do
     _mo="${_po%.po}.mo"
     if [[ ! -f "${_mo}" ]] || [[ "${_po}" -nt "${_mo}" ]]; then
       msgfmt "${_po}" -o "${_mo}" || true
@@ -151,7 +151,7 @@ fi
 # $APPDIR is set by the AppImage runtime to the squashfs mount point.
 cat > "${APP_DIR}/AppRun" <<'EOF'
 #!/usr/bin/env bash
-exec python3 "${APPDIR}/usr/share/netneighbor/main.py" "$@"
+exec python3 "${APPDIR}/usr/share/netneighbor/app/main.py" "$@"
 EOF
 chmod 0755 "${APP_DIR}/AppRun"
 
@@ -171,16 +171,16 @@ chmod 0644 "${APP_DIR}/usr/share/applications/netneighbor.desktop"
 
 # ── Icons ──────────────────────────────────────────────────────────────────
 # Root icon: must match the Icon= value in the desktop file (no extension).
-install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor_icon.svg" \
+install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor_icon.svg" \
   "${APP_DIR}/io.esp3d.netneighbor.svg"
 
 # hicolor tree (used by appimaged / desktop integration)
-install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor_icon.svg" \
+install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor_icon.svg" \
   "${APP_DIR}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg"
-install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor-tray.svg" \
+install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor-tray.svg" \
   "${APP_DIR}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg"
 
-_sym_svg="${PROJECT_ROOT}/assets/svg/netneighbor-tray-symbolic.svg"
+_sym_svg="${PROJECT_ROOT}/app/assets/svg/netneighbor-tray-symbolic.svg"
 if [[ -f "${_sym_svg}" ]]; then
   install -m 0644 "${_sym_svg}" \
     "${APP_DIR}/usr/share/icons/hicolor/scalable/status/io.esp3d.netneighbor-tray-symbolic.svg"

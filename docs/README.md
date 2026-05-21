@@ -2,7 +2,7 @@
 
 This folder contains technical documentation for contributors and maintainers. End-user
 documentation remains in the repository root [`README.md`](../README.md) and
-[`USER_DOCUMENTATION.md`](../USER_DOCUMENTATION.md).
+[`USER_DOCUMENTATION.md`](USER_DOCUMENTATION.md).
 
 ## Documents
 
@@ -27,7 +27,7 @@ documentation remains in the repository root [`README.md`](../README.md) and
 ## Quick orientation
 
 - **Discovery**: `discovery/base.py` (contract), `discovery/manager.py` (cache + merges + override system), `discovery/ssdp.py`, `discovery/mdns.py`, `discovery/wsd.py` (WS-Discovery; PyPI `WSDiscovery`), `discovery/netbios.py`.
-- **UI**: `app_qt.py` (single instance, activation), `ui/` (`NetNeighborMainWindow`, `MainThreadScheduler`, `PreferencesDialog`, `NetNeighborTray`, …), `requirements-qt.txt`, `utils/session_autostart.py` (XDG/registry login entry).
+- **UI**: `app_qt.py` (single instance, activation), `ui/` (`NetNeighborMainWindow`, `MainThreadScheduler`, `PreferencesDialog`, `NetNeighborTray`, …), `requirements.txt`, `utils/session_autostart.py` (XDG/registry login entry).
 - **Connect**: `utils/double_click_open.py` (target resolution), `utils/connect_launcher.py` (command templates + launch).
 - **Config**:
   - `~/.config/netneighbor/ui_prefs.json` (UI state + user choices/rules/overrides including `device_commands`)

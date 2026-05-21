@@ -65,15 +65,14 @@ _version_info = VSVersionInfo(
 _version_info_path = Path(SPECPATH) / "_version_info.txt"
 _version_info_path.write_text(str(_version_info), encoding="utf-8")
 
-_entry = ROOT / "main.py"
+_entry = ROOT / "app" / "main.py"
 
 block_cipher = None
 
 _datas = [
-    (str(ROOT / "assets"), "assets"),
-    (str(ROOT / "locale"), "locale"),
-    (str(ROOT / "data"), "data"),
-    (str(ROOT / "config"), "config"),
+    (str(ROOT / "app" / "assets"), "assets"),
+    (str(ROOT / "app" / "locale"), "locale"),
+    (str(ROOT / "app" / "config"), "config"),
     (str(ROOT / "VERSION"), "."),
 ]
 
@@ -90,7 +89,7 @@ _hiddenimports = [
 
 a = Analysis(
     [str(_entry)],
-    pathex=[str(ROOT)],
+    pathex=[str(ROOT / "app")],
     binaries=[],
     datas=_datas,
     hiddenimports=_hiddenimports,
@@ -122,8 +121,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(ROOT / "assets" / "icons" / "netneighbor.ico")
-    if (ROOT / "assets" / "icons" / "netneighbor.ico").is_file()
+    icon=str(ROOT / "app" / "assets" / "icons" / "netneighbor.ico")
+    if (ROOT / "app" / "assets" / "icons" / "netneighbor.ico").is_file()
     else None,
     version=str(_version_info_path),
 )

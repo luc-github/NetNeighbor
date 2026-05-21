@@ -20,7 +20,7 @@ Layout: [`packaging/README.md`](../packaging/README.md).
 From repository root:
 
 ```bash
-chmod +x packaging/linux/*.sh packaging/checksums.sh
+chmod +x packaging/linux/*.sh
 ./packaging/linux/release.sh
 ```
 
@@ -41,7 +41,7 @@ Version defaults to the first line of `VERSION`; override with `./packaging/linu
 | `netneighbor_<version>_<arch>.deb` | System install under `/usr/share/netneighbor` |
 | `netneighbor-<version>.tar.gz` | Portable tree + `run.sh` |
 | `NetNeighbor-<version>-<arch>.AppImage` | Optional; skipped if appimagetool missing |
-| `SHA256SUMS-<version>.txt` | Checksums (via `packaging/checksums.sh`) |
+| `SHA256SUMS-<version>.txt` | Checksums (via `packaging/linux/checksums.sh`) |
 
 ### Runtime dependencies (`.deb`)
 
@@ -80,7 +80,7 @@ Tarball: extract, `./run.sh`, optional `./install-desktop.sh`.
 ### Prerequisites
 
 - Windows 10/11, Python 3.10+
-- `pip install -r requirements-qt.txt pyinstaller`
+- `pip install -r requirements.txt pyinstaller`
 - **Inno Setup 6** (`ISCC.exe` on `PATH`, or `winget install JRSoftware.InnoSetup --source winget`)
 - **VC++ Redistributable** on end-user machines — see [`QT_DEV_REQUIREMENTS.md`](QT_DEV_REQUIREMENTS.md)
 
@@ -101,7 +101,7 @@ Optional: `-Version 2.0.0` on both scripts. Uses `.venv\Scripts\python.exe` when
 | `NetNeighbor-<version>-win64.zip` | Zipped folder |
 | `NetNeighbor-<version>-win64-setup.exe` | Inno Setup installer |
 
-PyInstaller spec: `packaging/windows/netneighbor.spec` — entry `main.py`.
+PyInstaller spec: `packaging/windows/netneighbor.spec` — entry `app/main.py`, `pathex` includes `app/`.
 
 ---
 
@@ -171,7 +171,7 @@ uses `_subprocess_no_window_kwargs()` for this — follow the same pattern.
 ### Prerequisites
 
 - macOS 12+, Python 3.10+ (venv recommended)
-- `pip install -r requirements-qt.txt pyinstaller`
+- `pip install -r requirements.txt pyinstaller`
 - Xcode Command Line Tools (`xcode-select --install`) if pip/build tools complain
 
 ### Build
@@ -187,14 +187,14 @@ bash packaging/macos/build_app.sh
 | `NetNeighbor.app` | Application bundle |
 | `NetNeighbor-<version>-macos.zip` | Zipped bundle |
 
-Distribution outside dev machines will need **code signing and notarization** (documented in `POST_PORT.md`).
+Code signing (Windows Authenticode, Apple notarization) is not planned — cost prohibitive for an open-source project. Users may see an OS security warning on first run; this is expected and harmless.
 
 ---
 
 ## Checksums (all platforms)
 
 ```bash
-packaging/checksums.sh <version> [basename ...]
+packaging/linux/checksums.sh <version> [basename ...]
 ```
 
 Without basenames, includes known patterns already in `dist/`. Linux `release.sh` calls this automatically.

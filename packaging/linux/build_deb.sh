@@ -43,7 +43,7 @@ rm -f /usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png || true
 find /usr/share/netneighbor -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 # Install Python dependencies (PySide6, zeroconf, WSDiscovery) via pip.
 # --break-system-packages is required on Python 3.11+ (Ubuntu 24.04 / Mint 22+).
-_reqs=/usr/share/netneighbor/requirements-qt.txt
+_reqs=/usr/share/netneighbor/requirements.txt
 pip3 install --quiet --break-system-packages -r "$_reqs" 2>/dev/null \
   || pip3 install --quiet -r "$_reqs" || true
 # Precompile all sources so the app starts without a write to /usr/share at runtime.
@@ -91,11 +91,12 @@ EOF
 
 # Copy application sources directly from the working tree.
 # This ensures local modifications (committed or not) are always included.
-for path in main.py app_qt.py i18n.py requirements.txt requirements-qt.txt discovery model ui utils data config assets locale LICENSE README.md USER_DOCUMENTATION.md VERSION; do
+for path in app requirements.txt LICENSE README.md VERSION; do
   if [[ -e "${PROJECT_ROOT}/${path}" ]]; then
     cp -a "${PROJECT_ROOT}/${path}" "${APP_ROOT}/"
   fi
 done
+cp -a "${PROJECT_ROOT}/docs/USER_DOCUMENTATION.md" "${APP_ROOT}/"
 
 # Remove dev artifacts that must not land in the package.
 find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) -exec rm -rf {} + 2>/dev/null || true
@@ -103,11 +104,11 @@ find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) -
 # (../../../../svg/...) that are valid in the source tree but broken once
 # installed under /usr/share/netneighbor/.  The actual hicolor icons are
 # installed explicitly to /usr/share/icons/hicolor/ by the lines below.
-rm -rf "${APP_ROOT}/assets/icons/hicolor"
+rm -rf "${APP_ROOT}/app/assets/icons/hicolor"
 
 # Trim netneighbor icon set to only the resolutions needed by the Qt UI (saves ~143 MB).
 # Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
-_bfd="${APP_ROOT}/assets/icons/netneighbor"
+_bfd="${APP_ROOT}/app/assets/icons/netneighbor"
 if [ -d "${_bfd}" ]; then
     for _d in "${_bfd}"/*/; do
         case "$(basename "${_d%/}")" in
@@ -119,7 +120,7 @@ fi
 
 # Compile .po → .mo for any catalog missing or older than its source.
 if command -v msgfmt >/dev/null 2>&1; then
-  find "${APP_ROOT}/locale" -name "*.po" | while read -r _po; do
+  find "${APP_ROOT}/app/locale" -name "*.po" | while read -r _po; do
     _mo="${_po%.po}.mo"
     if [[ ! -f "${_mo}" ]] || [[ "${_po}" -nt "${_mo}" ]]; then
       msgfmt "${_po}" -o "${_mo}" || true
@@ -132,12 +133,12 @@ sed "s/@APP_VERSION@/${VERSION}/g" "${SCRIPT_DIR}/netneighbor.desktop" > "${PKG_
 chmod 0644 "${PKG_ROOT}/usr/share/applications/netneighbor.desktop"
 # App icon (launcher, window): full-colour SVG.
 mkdir -p "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps"
-install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor_icon.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg"
+install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor_icon.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg"
 # Tray coloured icon: used on light GTK themes (non-symbolic fallback).
-install -m 0644 "${PROJECT_ROOT}/assets/svg/netneighbor-tray.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg"
+install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor-tray.svg" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor-tray.svg"
 # Tray symbolic (white): used on dark GTK themes; recoloured by AppIndicator/panel.
 # hicolor/scalable/status/ is the standard location for symbolic status icons.
-_sym_svg="${PROJECT_ROOT}/assets/svg/netneighbor-tray-symbolic.svg"
+_sym_svg="${PROJECT_ROOT}/app/assets/svg/netneighbor-tray-symbolic.svg"
 if [[ -f "${_sym_svg}" ]]; then
   mkdir -p "${PKG_ROOT}/usr/share/icons/hicolor/scalable/status"
   install -m 0644 "${_sym_svg}" "${PKG_ROOT}/usr/share/icons/hicolor/scalable/status/io.esp3d.netneighbor-tray-symbolic.svg"

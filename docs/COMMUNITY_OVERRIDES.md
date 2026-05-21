@@ -33,7 +33,7 @@ unknown keys as opaque unless you grep the codebase for `save_ui_preferences` / 
 
 | File | Merges with | Behaviour |
 |------|-------------|-----------|
-| `device_types.json` | `data/device_types.json` | Deep-merge per `mdns` / `ssdp` service key; shallow merge `fallback`. |
+| `device_types.json` | `config/device_types.json` | Deep-merge per `mdns` / `ssdp` service key; shallow merge `fallback`. |
 | `icons.json` | `config/icons.json` | Shallow-merge the top-level ``types`` object: each slug maps to an ordered list of **basename** strings for `assets/icons/netneighbor/{N}x{N}/<basename>.png` (replaces the shipped list for that slug when you supply it). |
 | `ssdp_rules.json` | `config/ssdp_rules.json` | Shallow merge `name_rules` and `information_rules` (user keys win). **`type_rules`:** user list is **prepended** (first match wins over shipped rules). |
 | `mdns_rules.json` | `config/mdns_rules.json` | **`summary_from_txt`:** same label merges `keys` lists (user aliases first, then bundled). **`type_rules`:** user list **prepended**. |

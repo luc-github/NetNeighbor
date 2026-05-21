@@ -80,7 +80,7 @@ Evaluated in order; first match wins.
 
 1. Put specific `contains_any` groups **before** generic ones.
 2. Use tokens that appear in your network's actual SSDP/XML (check SSDP details dialog).
-3. Keep `type` values consistent with `data/device_types.json`.
+3. Keep `type` values consistent with `config/device_types.json`.
 4. Validate: `python -m json.tool config/ssdp_rules.json`
 5. Restart the app.
 

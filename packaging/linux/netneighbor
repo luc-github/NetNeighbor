@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec python3 /usr/share/netneighbor/main.py "$@"
+exec python3 /usr/share/netneighbor/app/main.py "$@"

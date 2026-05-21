@@ -9,9 +9,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 SOURCE_DIRS = [
-    ROOT / "ui",
-    ROOT / "discovery",
-    ROOT / "utils",
+    ROOT / "app" / "ui",
+    ROOT / "app" / "discovery",
+    ROOT / "app" / "utils",
 ]
 
 def extract_strings(path: Path) -> set[str]:
@@ -33,6 +33,10 @@ def extract_strings(path: Path) -> set[str]:
             out.add(node.args[0].value)
     return out
 
+def _pot_unescape(s: str) -> str:
+    """Unescape gettext escape sequences so comparisons match Python strings."""
+    return s.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r").replace('\\"', '"').replace("\\\\", "\\")
+
 def load_pot_msgids(pot_path: Path) -> set[str]:
     msgids: set[str] = set()
     current: list[str] = []
@@ -47,7 +51,7 @@ def load_pot_msgids(pot_path: Path) -> set[str]:
             current.append(line[1:-1])
         else:
             if in_msgid and current:
-                msgids.add("".join(current))
+                msgids.add(_pot_unescape("".join(current)))
             in_msgid = False
             current = []
     return msgids
@@ -59,7 +63,7 @@ for d in SOURCE_DIRS:
     for f in d.rglob("*.py"):
         all_strings.update(extract_strings(f))
 
-pot_path = ROOT / "locale" / "netneighbor.pot"
+pot_path = ROOT / "app" / "locale" / "netneighbor.pot"
 pot_ids = load_pot_msgids(pot_path)
 
 new_strings = sorted(s for s in all_strings if s and s not in pot_ids)

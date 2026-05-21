@@ -32,13 +32,13 @@ mkdir -p "${ROOT_DIR}" "${DIST_DIR}"
 # modifications (committed or not) are always included — same approach as
 # build_deb.sh.  Using "git archive HEAD" would silently exclude any change
 # not yet committed, making test builds impossible.
-for path in main.py app_qt.py i18n.py requirements.txt requirements-qt.txt \
-            discovery model ui utils data config assets locale \
-            LICENSE README.md USER_DOCUMENTATION.md VERSION; do
+for path in app requirements.txt \
+            LICENSE README.md VERSION; do
   if [[ -e "${PROJECT_ROOT}/${path}" ]]; then
     cp -a "${PROJECT_ROOT}/${path}" "${ROOT_DIR}/"
   fi
 done
+cp -a "${PROJECT_ROOT}/docs/USER_DOCUMENTATION.md" "${ROOT_DIR}/"
 
 # Remove dev artifacts that must not land in the tarball.
 find "${ROOT_DIR}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) \
@@ -46,7 +46,7 @@ find "${ROOT_DIR}" \( -name "__pycache__" -o -name "*.pyc" -o -name "*.pyo" \) \
 
 # Trim netneighbor icon set to only the resolutions needed by the Qt UI (saves ~143 MB).
 # Source tree keeps all resolutions for archival; packages ship only 16/32/48/96/256.
-_bfd="${ROOT_DIR}/assets/icons/netneighbor"
+_bfd="${ROOT_DIR}/app/assets/icons/netneighbor"
 if [ -d "${_bfd}" ]; then
     for _d in "${_bfd}"/*/; do
         case "$(basename "${_d%/}")" in
@@ -58,7 +58,7 @@ fi
 
 # Compile .po → .mo for any catalog missing or older than its source.
 if command -v msgfmt >/dev/null 2>&1; then
-  find "${ROOT_DIR}/locale" -name "*.po" | while read -r _po; do
+  find "${ROOT_DIR}/app/locale" -name "*.po" | while read -r _po; do
     _mo="${_po%.po}.mo"
     if [[ ! -f "${_mo}" ]] || [[ "${_po}" -nt "${_mo}" ]]; then
       msgfmt "${_po}" -o "${_mo}" || true
@@ -70,7 +70,7 @@ cat > "${ROOT_DIR}/run.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 "${SCRIPT_DIR}/main.py" "$@"
+exec python3 "${SCRIPT_DIR}/app/main.py" "$@"
 EOF
 chmod 0755 "${ROOT_DIR}/run.sh"
 

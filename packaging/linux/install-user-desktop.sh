@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ICON_64="${ROOT}/assets/icons/logo.png"
-ICON_256="${ROOT}/assets/icons/logo-256.png"
+ICON_64="${ROOT}/app/assets/icons/logo.png"
+ICON_256="${ROOT}/app/assets/icons/logo-256.png"
 DESKTOP_DST="${HOME}/.local/share/applications/io.esp3d.netneighbor.desktop"
 ICON_DST_64="${HOME}/.local/share/icons/hicolor/64x64/apps/io.esp3d.netneighbor.png"
 ICON_DST_256="${HOME}/.local/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png"

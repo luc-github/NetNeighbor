@@ -2,10 +2,9 @@
 
 | Path | Role |
 |------|------|
-| [`linux/`](linux/) | `.deb`, `tar.gz`, AppImage, `release.sh` (PySide6/Qt, 2.0) |
-| [`windows/`](windows/) | PyInstaller → `.exe`, Inno Setup → installer (Qt skeleton) |
-| [`macos/`](macos/) | PyInstaller → `.app` bundle (Qt skeleton) |
-| [`checksums.sh`](checksums.sh) | `SHA256SUMS-<version>.txt` for `dist/` artifacts |
+| [`linux/`](linux/) | `.deb`, `tar.gz`, AppImage, `release.sh`, `checksums.sh` (PySide6/Qt, 2.0) |
+| [`windows/`](windows/) | PyInstaller → `.exe`, Inno Setup → installer |
+| [`macos/`](macos/) | PyInstaller → `.app` bundle |
 | [`POST_PORT.md`](POST_PORT.md) | Checklist after UI port (`app.py`, deps, Linux packages) |
 
 Full documentation: [`docs/PACKAGING.md`](../docs/PACKAGING.md).
@@ -15,7 +14,7 @@ Full documentation: [`docs/PACKAGING.md`](../docs/PACKAGING.md).
 **Linux (Debian/Ubuntu):**
 
 ```bash
-chmod +x packaging/linux/*.sh packaging/checksums.sh
+chmod +x packaging/linux/*.sh
 ./packaging/linux/release.sh
 ```
 

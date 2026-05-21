@@ -34,12 +34,15 @@ rm -f  "${DIST_DIR}"/netneighbor_*.deb \
 rm -rf "${DIST_DIR}/deb-build" "${DIST_DIR}/tarball-stage" "${DIST_DIR}/appimage-build"
 echo "   dist/ cleaned"
 
+echo "-- update file headers"
+python3 "${PROJECT_ROOT}/tools/add_headers.py" --apply
+
 echo "-- sanity checks"
 python3 -m py_compile \
-  "${PROJECT_ROOT}/app.py" \
-  "${PROJECT_ROOT}/ui/main_window.py" \
-  "${PROJECT_ROOT}/discovery/manager.py" \
-  "${PROJECT_ROOT}/utils/app_version.py"
+  "${PROJECT_ROOT}/app/app_qt.py" \
+  "${PROJECT_ROOT}/app/ui/main_window.py" \
+  "${PROJECT_ROOT}/app/discovery/manager.py" \
+  "${PROJECT_ROOT}/app/utils/app_version.py"
 bash -n "${SCRIPT_DIR}/build_deb.sh"
 bash -n "${SCRIPT_DIR}/build_tarball.sh"
 bash -n "${SCRIPT_DIR}/build_appimage.sh"
@@ -102,8 +105,8 @@ fi
 
 # Spot-check: verify the packaged source matches the local working tree.
 # Compares a checksum of a key file between the deb payload and the source tree.
-_mw_pkg="${tmp_extract}/usr/share/netneighbor/ui/main_window.py"
-_mw_src="${PROJECT_ROOT}/ui/main_window.py"
+_mw_pkg="${tmp_extract}/usr/share/netneighbor/app/ui/main_window.py"
+_mw_src="${PROJECT_ROOT}/app/ui/main_window.py"
 if [[ -f "${_mw_pkg}" && -f "${_mw_src}" ]]; then
   _sum_pkg="$(md5sum "${_mw_pkg}" | awk '{print $1}')"
   _sum_src="$(md5sum "${_mw_src}" | awk '{print $1}')"
@@ -135,7 +138,7 @@ _checksum_files=(
 if [[ "${_appimage_built}" -eq 1 ]]; then
   _checksum_files+=("NetNeighbor-${VERSION}-${APPIMAGE_ARCH}.AppImage")
 fi
-checksum_file="$(bash "${PACKAGING_DIR}/checksums.sh" "${VERSION}" "${_checksum_files[@]}")"
+checksum_file="$(bash "${SCRIPT_DIR}/checksums.sh" "${VERSION}" "${_checksum_files[@]}")"
 
 echo "Release artifacts ready:"
 echo "  ${DEB_PATH}"

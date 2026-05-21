@@ -1,2 +1,7 @@
+# NetNeighbor 2.0 — dépendances Python
+# Usage: python -m pip install -r requirements.txt
+# (depuis un venv ; Python 3.10+)
 zeroconf
 WSDiscovery>=2.1
+PySide6>=6.5.0
+pywin32>=306; sys_platform == "win32"

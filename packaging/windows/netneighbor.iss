@@ -23,7 +23,7 @@ LicenseFile={#SourcePath}\..\..\LICENSE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-WizardSmallImageFile={#SourcePath}\..\..\assets\icons\logo-installer.png
+WizardSmallImageFile={#SourcePath}\..\..\app\assets\icons\logo-installer.png
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]

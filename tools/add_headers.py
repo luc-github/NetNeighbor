@@ -12,15 +12,27 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import sys
 from pathlib import Path
 
-VERSION = "2.0.0"
-DATE = "2026-05-19 00:00"
+_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _read_version() -> str:
+    vf = _ROOT / "VERSION"
+    ver = vf.read_text(encoding="utf-8").strip()
+    if "#" in ver:
+        ver = ver.split("#", 1)[0].strip()
+    return ver
+
+
+VERSION = _read_version()
+DATE = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 # Directories to scan (relative to project root)
-SCAN_DIRS = [".", "discovery", "model", "ui", "utils", "tools"]
+SCAN_DIRS = ["app", "tools"]
 # Do NOT recurse into these
 EXCLUDE_DIRS = {"__pycache__", ".venv", ".git", ".claude", "dist", "build"}
 
@@ -92,11 +104,10 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Write changes (default: dry-run)")
     args = parser.parse_args()
 
-    project_root = Path(__file__).resolve().parent.parent
     counts = {"added": 0, "updated": 0, "ok": 0, "empty": 0, "error": 0}
 
     for scan in SCAN_DIRS:
-        scan_path = project_root / scan
+        scan_path = _ROOT / scan
         if not scan_path.is_dir():
             continue
         for py in sorted(scan_path.rglob("*.py")):
@@ -106,7 +117,7 @@ def main() -> int:
             # For root "." scan, only take direct children (not subdirs handled separately)
             if scan == "." and py.parent != project_root:
                 continue
-            rel = py.relative_to(project_root)
+            rel = py.relative_to(_ROOT)
             status = _process(py, args.apply)
             if status.startswith("ERROR"):
                 counts["error"] += 1

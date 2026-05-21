@@ -23,13 +23,13 @@ Typical service types discovered:
 | Provider | `discovery/mdns.py` | `MDNSDiscovery` — zeroconf browser/listener, TXT decode, host aggregation |
 | Contract | `discovery/base.py` | `BaseDiscovery._emit("device", payload)` → normalized dict to manager |
 | Orchestration | `discovery/manager.py` | Receives `mdns` payloads, applies overrides, stores and notifies |
-| Mapping hints | `data/device_types.json` | Per-service defaults (`type`, `icon`, `default_port`) |
+| Mapping hints | `config/device_types.json` | Per-service defaults (`type`, `icon`, `default_port`) |
 | UI payload | `utils/details_payload.py` | `build_mdns_payload` — per-service sections for the Services tab |
 | Rules | `config/mdns_rules.json` | TXT → summary line mappings and optional `type_rules` |
 
 ## Browse strategy
 
-- Service types from `data/device_types.json` (`mdns` section) are browsed immediately.
+- Service types from `config/device_types.json` (`mdns` section) are browsed immediately.
 - **DNS-SD enumeration** (`_services._dns-sd._udp`) runs in background to catch unlisted types.
 - Enumeration repeats on a timer and on `refresh()` — no types need to be listed statically.
 

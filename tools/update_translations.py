@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-SOURCE_DIRS = [ROOT / "ui", ROOT / "discovery", ROOT / "utils"]
+SOURCE_DIRS = [ROOT / "app" / "ui", ROOT / "app" / "discovery", ROOT / "app" / "utils"]
 
 # ---------------------------------------------------------------------------
 # Translations for all 74 new strings.
@@ -872,7 +872,7 @@ for d in SOURCE_DIRS:
         for f in d.rglob("*.py"):
             all_source_strings.update(extract_strings(f))
 
-pot_path = ROOT / "locale" / "netneighbor.pot"
+pot_path = ROOT / "app" / "locale" / "netneighbor.pot"
 existing_pot = load_pot_msgids(pot_path)
 new_strings = sorted(s for s in all_source_strings if s and s not in existing_pot)
 print(f"New strings to add: {len(new_strings)}")
@@ -898,7 +898,7 @@ print(f"Updated {pot_path.name} (+{len(new_strings)} entries)")
 LOCALES = ["fr", "de", "es", "it", "nl", "ja", "zh_CN", "zh_TW"]
 
 for locale in LOCALES:
-    po_path = ROOT / "locale" / locale / "LC_MESSAGES" / "netneighbor.po"
+    po_path = ROOT / "app" / "locale" / locale / "LC_MESSAGES" / "netneighbor.po"
     existing = load_po_msgids(po_path)
     additions = []
     for s in new_strings:
@@ -937,7 +937,7 @@ def _strip_obsolete_from_po(po_path: "Path") -> int:
 
 
 for locale in LOCALES:
-    po_path = ROOT / "locale" / locale / "LC_MESSAGES" / "netneighbor.po"
+    po_path = ROOT / "app" / "locale" / locale / "LC_MESSAGES" / "netneighbor.po"
     mo_path = po_path.with_suffix(".mo")
     try:
         removed = _strip_obsolete_from_po(po_path)

@@ -14,7 +14,7 @@ KEYS = ["Manufacturer", "Model", "Manufacturer URL", "Model URL",
         "Ports", "IP", "Type", "Location"]
 
 for lang in LOCALES:
-    path = ROOT / "locale" / lang / "LC_MESSAGES" / "netneighbor.po"
+    path = ROOT / "app" / "locale" / lang / "LC_MESSAGES" / "netneighbor.po"
     text = path.read_text(encoding="utf-8")
     missing = []
     for k in KEYS:

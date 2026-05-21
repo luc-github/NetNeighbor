@@ -29,7 +29,7 @@ echo ""
 # ── 1. Kill running process ──────────────────────────────────────────────────
 echo "-- stopping running instance"
 if pkill -f "python3.*netneighbor" 2>/dev/null || \
-   pkill -f "python3.*/usr/share/netneighbor/main.py" 2>/dev/null; then
+   pkill -f "python3.*/usr/share/netneighbor/app/main.py" 2>/dev/null; then
   sleep 0.5
   _done "process killed"
 else

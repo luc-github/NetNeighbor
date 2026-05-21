@@ -11,8 +11,9 @@ param(
 $ErrorActionPreference = "Stop"
 $WindowsDir = $PSScriptRoot
 $Root = (Resolve-Path (Join-Path $WindowsDir "..\..")).Path
-$DistDir = Join-Path $Root "dist"
-$BuildDir = Join-Path $Root "build\pyinstaller-windows"
+$DistDir    = Join-Path $Root "dist"
+$BuildDir   = Join-Path $Root "build\pyinstaller-windows"
+$PyDistDir  = Join-Path $Root "build\windows"
 
 if (-not $Version) {
     $vf = Join-Path $Root "VERSION"
@@ -34,16 +35,20 @@ if (-not $py) {
     if (Test-Path $venvPy) { $py = $venvPy } else { $py = "python" }
 }
 
-& $py -m pip install -q -r (Join-Path $Root "requirements-qt.txt") pyinstaller
+Write-Host "== Update file headers =="
+& $py (Join-Path $Root "tools\add_headers.py") --apply
 
-New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
+& $py -m pip install -q -r (Join-Path $Root "requirements.txt") pyinstaller
+
+New-Item -ItemType Directory -Force -Path $DistDir   | Out-Null
+New-Item -ItemType Directory -Force -Path $PyDistDir | Out-Null
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $BuildDir
 
 Push-Location $Root
 try {
     & $py -m PyInstaller `
         --noconfirm `
-        --distpath $DistDir `
+        --distpath $PyDistDir `
         --workpath $BuildDir `
         (Join-Path $WindowsDir "netneighbor.spec")
 }
@@ -51,7 +56,7 @@ finally {
     Pop-Location
 }
 
-$outFolder = Join-Path $DistDir "NetNeighbor"
+$outFolder = Join-Path $PyDistDir "NetNeighbor"
 if (-not (Test-Path $outFolder)) {
     throw "PyInstaller output not found: $outFolder"
 }

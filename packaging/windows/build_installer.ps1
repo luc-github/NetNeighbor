@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $WindowsDir = $PSScriptRoot
 $Root = (Resolve-Path (Join-Path $WindowsDir "..\..")).Path
 $DistDir = Join-Path $Root "dist"
-$PyOut = Join-Path $DistDir "NetNeighbor"
+$PyOut   = Join-Path $Root "build\windows\NetNeighbor"
 
 if (-not $Version) {
     $vf = Join-Path $Root "VERSION"
