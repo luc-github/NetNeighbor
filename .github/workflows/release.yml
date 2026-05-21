@@ -1,6 +1,10 @@
 # Build release artifacts when a version tag is pushed (v*).
-# Linux: full PySide6 chain (.deb, tar.gz, AppImage, checksums).
-# Windows / macOS: PyInstaller builds (continue-on-error until validated locally).
+# Linux  : .deb + tar.gz + AppImage + SHA256SUMS (PySide6, validated).
+# Windows: PyInstaller onedir + zip + Inno Setup installer (continue-on-error until CI is stable).
+# macOS  : PyInstaller .app + zip (continue-on-error, unvalidated without a macOS machine).
+#
+# workflow_dispatch: manual trigger for CI validation without creating a tag or release.
+#   Tags with '-' (e.g. v2.0.0-rc1) are published as GitHub pre-releases.
 
 name: Release
 
@@ -8,6 +12,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g. 2.0.0-rc1)"
+        required: true
+        default: "2.0.0-dev"
 
 permissions:
   contents: write
@@ -20,8 +30,12 @@ jobs:
     steps:
       - id: v
         run: |
-          ref="${GITHUB_REF_NAME}"
-          echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            ref="${GITHUB_REF_NAME}"
+            echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
+          fi
 
   linux:
     needs: version
@@ -32,7 +46,15 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev
+          sudo apt-get install -y dpkg-dev gettext
+
+      - name: Download appimagetool
+        run: |
+          arch="$(uname -m)"
+          mkdir -p tools
+          wget -q -O "tools/appimagetool-${arch}.AppImage" \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${arch}.AppImage"
+          chmod +x "tools/appimagetool-${arch}.AppImage"
 
       - name: Build Linux artifacts
         run: |
@@ -60,18 +82,24 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
       - name: Build Windows bundle
         run: |
-          python -m pip install -r requirements.txt pyinstaller
           .\packaging\windows\build.ps1 -Version ${{ needs.version.outputs.version }}
+
+      - name: Build Windows installer
+        run: |
+          .\packaging\windows\build_installer.ps1 -Version ${{ needs.version.outputs.version }}
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ needs.version.outputs.version }}
           path: |
-            dist/NetNeighbor/
             dist/NetNeighbor-*-win64.zip
+            dist/NetNeighbor-*-win64-setup.exe
 
   macos:
     needs: version
@@ -84,9 +112,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python dependencies
+        run: python3 -m pip install -r requirements.txt pyinstaller
+
       - name: Build macOS app bundle
         run: |
-          python3 -m pip install -r requirements.txt pyinstaller
           bash packaging/macos/build_app.sh "${{ needs.version.outputs.version }}"
 
       - name: Upload macOS artifacts
@@ -100,7 +130,7 @@ jobs:
   github-release:
     needs: [version, linux, windows, macos]
     runs-on: ubuntu-latest
-    if: always() && needs.linux.result == 'success'
+    if: always() && needs.linux.result == 'success' && github.event_name == 'push'
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -112,7 +142,7 @@ jobs:
           mkdir -p dist-flat
           find release-assets -type f \( \
             -name '*.deb' -o -name '*.tar.gz' -o -name '*.AppImage' -o \
-            -name '*.zip' -o -name 'SHA256SUMS-*.txt' \
+            -name '*.zip' -o -name '*.exe' -o -name 'SHA256SUMS-*.txt' \
           \) -exec cp {} dist-flat/ \;
 
       - name: Attach to GitHub Release
@@ -121,5 +151,6 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: dist-flat/*
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
