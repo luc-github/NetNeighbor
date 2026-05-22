@@ -45,8 +45,8 @@ _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
         "https": 'cmd.exe /c start "" https://{ip}',
         "smb": "localsmb://{ip}",
         "ftp": "explorer ftp://{ip}",
-        "ssh": "cmd.exe /c start ssh -p {port} {ip}",
-        "telnet": "cmd.exe /c start telnet {ip} {port}",
+        "ssh": 'cmd.exe /c start "SSH" cmd.exe /k ssh -p {port} {ip}',
+        "telnet": 'cmd.exe /c start "Telnet" cmd.exe /k telnet {ip} {port}',
         "sftp": "explorer sftp://{ip}",
     },
 }
