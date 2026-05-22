@@ -18,6 +18,7 @@ from utils.custom_command import build_argv_from_template, spawn_custom_command_
 
 _LOG = logging.getLogger(__name__)
 _SCHEME_ORDER = ("http", "https", "smb", "ftp", "ssh", "telnet", "sftp")
+_SCHEME_DEFAULT_PORT = {"ssh": 22, "sftp": 22, "telnet": 23, "ftp": 21, "http": 80, "https": 443}
 
 _SKIP_JSON_KEYS = frozenset({"version", "comment", "schema"})
 
@@ -45,8 +46,8 @@ _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
         "https": 'cmd.exe /c start "" https://{ip}',
         "smb": "localsmb://{ip}",
         "ftp": "explorer ftp://{ip}",
-        "ssh": 'cmd.exe /c start "SSH" cmd.exe /k ssh -p {port} {ip}',
-        "telnet": 'cmd.exe /c start "Telnet" cmd.exe /k telnet {ip} {port}',
+        "ssh": "cmd.exe /c start cmd.exe /k ssh -p {port} {ip}",
+        "telnet": "cmd.exe /c start cmd.exe /k telnet {ip} {port}",
         "sftp": "explorer sftp://{ip}",
     },
 }
@@ -177,6 +178,8 @@ def launch_connect_for_uri(
     # Prefer ip/port embedded in the URI (handles endpoint overrides automatically).
     effective_ip = parsed.hostname or ip
     effective_port = parsed.port if parsed.port is not None else port
+    if effective_port == 0:
+        effective_port = _SCHEME_DEFAULT_PORT.get(scheme, 0)
 
     # Per-device command override > scheme template > open_url fallback.
     tmpl = (device_cmd_override or "").strip()
