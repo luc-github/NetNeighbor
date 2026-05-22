@@ -10,6 +10,7 @@ import logging
 import re
 import shlex
 import subprocess
+import sys
 import threading
 from collections.abc import Callable
 
@@ -88,7 +89,10 @@ def spawn_custom_command_detached(
     def _run() -> None:
         _LOG.debug("spawn: %s", argv)
         try:
-            subprocess.Popen(argv, close_fds=True, start_new_session=True)
+            if sys.platform == "win32":
+                subprocess.Popen(argv, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            else:
+                subprocess.Popen(argv, close_fds=True, start_new_session=True)
         except OSError as e:
             _LOG.warning("custom command spawn failed: %s", e)
 
