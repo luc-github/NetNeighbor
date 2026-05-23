@@ -65,8 +65,6 @@ fi
 echo "== NetNeighbor macOS PyInstaller =="
 echo "version=${VERSION} arch=${ARCH} entry=app/${ENTRY##*/}"
 
-"${PY}" -m pip install -q -r "${PROJECT_ROOT}/requirements.txt" pyinstaller
-
 rm -rf "${WORK_DIR}"
 mkdir -p "${DIST_DIR}"
 

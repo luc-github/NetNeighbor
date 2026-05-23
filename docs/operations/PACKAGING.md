@@ -168,16 +168,31 @@ uses `_subprocess_no_window_kwargs()` for this — follow the same pattern.
 
 ## macOS (`packaging/macos/`)
 
+Two separate builds are produced: one for Apple Silicon (arm64) and one for Intel (x86_64).
+
 ### Prerequisites
 
-- macOS 12+, Python 3.10+ (venv recommended)
-- `pip install -r requirements.txt pyinstaller`
+**Apple Silicon (arm64) — macOS 12+**
+- Python 3.10+, `pip install -r requirements.txt pyinstaller`
 - Xcode Command Line Tools (`xcode-select --install`) if pip/build tools complain
+
+**Intel (x86_64) — macOS 11 Big Sur+**
+- **Python 3.11.x** — PySide6 6.5.x requires Python < 3.12; Python 3.12+ can only install PySide6 6.6+ which requires macOS 12+. Download from [python.org](https://www.python.org/downloads/).
+- `pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller`
+  PySide6 6.5.x is the last series supporting macOS 11. PySide6 6.6+ requires macOS 12+.
+- Xcode Command Line Tools (`xcode-select --install`) if needed
 
 ### Build
 
 ```bash
-bash packaging/macos/build_app.sh
+# Apple Silicon
+bash packaging/macos/build_app.sh 2.0.0 arm64
+
+# Intel (run on an Intel Mac or macos-13 CI runner)
+bash packaging/macos/build_app.sh 2.0.0 x86_64
+
+# Native arch (detects automatically)
+bash packaging/macos/build_app.sh 2.0.0
 ```
 
 ### Outputs (`dist/`)
@@ -185,9 +200,23 @@ bash packaging/macos/build_app.sh
 | Artifact | Description |
 |----------|-------------|
 | `NetNeighbor.app` | Application bundle |
-| `NetNeighbor-<version>-macos.zip` | Zipped bundle |
+| `NetNeighbor-<version>-macos-arm64.zip` | Apple Silicon bundle (macOS 12+) |
+| `NetNeighbor-<version>-macos-intel.zip` | Intel bundle (macOS 11 Big Sur+) |
 
-Code signing (Windows Authenticode, Apple notarization) is not planned — cost prohibitive for an open-source project. Users may see an OS security warning on first run; this is expected and harmless.
+### Local testing on a Big Sur Intel VM (VirtualBox)
+
+The Intel build can be built and tested directly on a Big Sur machine:
+
+```bash
+# Install Python 3.11 from python.org first, then:
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller
+bash packaging/macos/build_app.sh 2.0.0 x86_64
+# The resulting NetNeighbor.app can be launched immediately to verify
+```
+
+Code signing (Apple notarization) is not planned — cost prohibitive for an open-source project. Users may see an OS security warning on first run; this is expected and harmless.
 
 ---
 
