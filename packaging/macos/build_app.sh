@@ -100,12 +100,13 @@ cd "${PROJECT_ROOT}"
 # shellcheck disable=SC2086
 "${PY}" -m PyInstaller \
   --noconfirm \
-  --onefile \
+  --onedir \
   --windowed \
   --name NetNeighbor \
   --target-arch "${ARCH}" \
   --distpath "${DIST_DIR}" \
   --workpath "${WORK_DIR}" \
+  --specpath "${WORK_DIR}" \
   --paths "${PROJECT_ROOT}/app" \
   --add-data "${PROJECT_ROOT}/app/assets:assets" \
   --add-data "${PROJECT_ROOT}/app/locale:locale" \
@@ -149,6 +150,20 @@ if [[ ! -d "${APP_BUNDLE}" ]]; then
   exit 1
 fi
 
+# Remove intermediate onedir collection left by PyInstaller in dist/
+rm -rf "${DIST_DIR}/NetNeighbor"
+
+# Trim device icon pack to the 5 sizes used by the UI (same as Linux/Windows builds).
+# Source tree has ~151 MB across 10 resolutions; keeping 16/32/48/96/256 saves ~143 MB.
+ICONS_DIR="${APP_BUNDLE}/Contents/MacOS/assets/icons/netneighbor"
+if [[ -d "${ICONS_DIR}" ]]; then
+  echo "== Trimming device icon pack =="
+  find "${ICONS_DIR}" -mindepth 1 -maxdepth 1 -type d \
+    ! -name "16" ! -name "32" ! -name "48" ! -name "96" ! -name "256" \
+    -exec rm -rf {} +
+  echo "  kept: 16 32 48 96 256"
+fi
+
 # ---------------------------------------------------------------------------
 # Package as DMG
 # Prefer create-dmg (brew install create-dmg) for the full drag-to-Applications
@@ -166,7 +181,10 @@ if command -v create-dmg &> /dev/null; then
   BACKGROUND_ARG=""
   _BG="${SCRIPT_DIR}/dmg_background.png"
   if [[ -f "${_BG}" ]]; then
+    echo "  background: ${_BG}"
     BACKGROUND_ARG="--background ${_BG}"
+  else
+    echo "  background: NOT FOUND at ${_BG} — DMG will have no background"
   fi
   # shellcheck disable=SC2086
   create-dmg \
@@ -196,6 +214,6 @@ else
 fi
 
 echo "Built:"
-echo "  ${APP_BUNDLE}  (kept for smoke testing — safe to delete after)"
+echo "  ${APP_BUNDLE}  (intermediate — safe to delete after testing)"
 echo "  ${DMG_OUT}"
 echo "Post-port: signing/notarization — see packaging/POST_PORT.md"

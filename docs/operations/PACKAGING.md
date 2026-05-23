@@ -172,17 +172,26 @@ Two separate builds are produced: one for Apple Silicon (arm64) and one for Inte
 
 ### Prerequisites
 
+**Homebrew** (required for `create-dmg` — both architectures) :
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install create-dmg
+```
+
+Homebrew requires Xcode Command Line Tools; the installer will prompt to install them automatically if missing.
+
+---
+
 **Apple Silicon (arm64) — macOS 12+**
+- Homebrew + `create-dmg` (see above)
 - Python 3.10+, `pip install -r requirements.txt pyinstaller`
-- `brew install create-dmg` (recommended — produces the drag-to-Applications DMG layout)
-- Xcode Command Line Tools (`xcode-select --install`) if pip/build tools complain
 
 **Intel (x86_64) — macOS 11 Big Sur+**
+- Homebrew + `create-dmg` (see above)
 - **Python 3.11.x** — PySide6 6.5.x requires Python < 3.12; Python 3.12+ can only install PySide6 6.6+ which requires macOS 12+. Download from [python.org](https://www.python.org/downloads/).
 - `pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller`
   PySide6 6.5.x is the last series supporting macOS 11. PySide6 6.6+ requires macOS 12+.
-- `brew install create-dmg` (recommended)
-- Xcode Command Line Tools (`xcode-select --install`) if needed
 
 ### Build
 
@@ -197,11 +206,25 @@ bash packaging/macos/build_app.sh 2.0.0 x86_64
 bash packaging/macos/build_app.sh 2.0.0
 ```
 
+### DMG background images
+
+`packaging/macos/dmg_background.png` (560×300 px) and `dmg_background@2x.png` (1120×600 px) are the drag-to-Applications background shown in the Finder window.
+
+**Important — macOS DPI:** these files must be saved at **72 DPI** (not 96 DPI which is the Windows/Linux default). At 96 DPI macOS renders the image at 75% of its pixel size (560 px → 420 px), leaving a gray border around the background. Most image editors have a resolution/DPI setting in the export dialog — set it to 72.
+
+To verify or fix on macOS:
+```bash
+sips -g dpiWidth packaging/macos/dmg_background.png        # must show 72.000
+# Fix if needed (sips -s takes px/cm, not DPI: 72 DPI = 28.346 px/cm):
+sips -s dpiWidth 28.346 -s dpiHeight 28.346 packaging/macos/dmg_background.png
+sips -s dpiWidth 56.693 -s dpiHeight 56.693 packaging/macos/dmg_background@2x.png
+```
+
 ### Outputs (`dist/`)
 
 | Artifact | Description |
 |----------|-------------|
-| `NetNeighbor.app` | Application bundle (intermediate) |
+| `NetNeighbor.app` | Application bundle (intermediate, deleted by CI after smoke test) |
 | `NetNeighbor-<version>-macos-arm64.dmg` | Apple Silicon installer DMG (macOS 12+) |
 | `NetNeighbor-<version>-macos-intel.dmg` | Intel installer DMG (macOS 11 Big Sur+) |
 
@@ -210,12 +233,19 @@ bash packaging/macos/build_app.sh 2.0.0
 The Intel build can be built and tested directly on a Big Sur machine:
 
 ```bash
-# Install Python 3.11 from python.org first, then:
+# 1. Install Homebrew (includes Xcode Command Line Tools if missing)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install create-dmg
+
+# 2. Install Python 3.11 from python.org, then:
 python3.11 -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip
 pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller
+
+# 3. Build
 bash packaging/macos/build_app.sh 2.0.0 x86_64
-# The resulting NetNeighbor.app can be launched immediately to verify
+# → dist/NetNeighbor-2.0.0-macos-intel.dmg
 ```
 
 Code signing (Apple notarization) is not planned — cost prohibitive for an open-source project. Users may see an OS security warning on first run; this is expected and harmless.
