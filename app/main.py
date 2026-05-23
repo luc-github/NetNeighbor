@@ -15,6 +15,9 @@ if __name__ == "__main__":
     # PySide6 6.5.x crashes on macOS in QLocale.system() when LANG is unset
     # (apps launched from Finder/Dock don't inherit shell env vars).
     # Detect the system locale; fall back to C.UTF-8 (encoding-safe, language-neutral).
+    # libpng warning from Qt/PySide6 internal resources on macOS — not fixable at source.
+    if sys.platform == "darwin":
+        os.environ.setdefault("QT_LOGGING_RULES", "qt.gui.imageio=false")
     if sys.platform == "darwin" and not os.environ.get("LANG"):
         import locale as _locale
         try:
