@@ -178,6 +178,22 @@ def main(argv: list[str] | None = None) -> int:
     if not _start_hidden:
         window.show()
 
+    if sys.platform == "darwin":
+        # On macOS, clicking the Dock icon when the window is hidden fires
+        # QEvent.Type.ApplicationActivate.  Handle it so the window reappears
+        # (e.g. after --start-minimized-to-tray / autostart at login).
+        from PySide6.QtCore import QEvent, QObject
+
+        class _DockClickFilter(QObject):
+            def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+                if event.type() == QEvent.Type.ApplicationActivate:
+                    if not window.isVisible():
+                        window.bring_to_front()
+                return False
+
+        app._qt_dock_filter = _DockClickFilter(app)
+        app.installEventFilter(app._qt_dock_filter)
+
     if os.environ.get("NETNEIGHBOR_DEBUG_TOPLEVEL"):
         from ui.main_window import _debug_log_extra_top_level_widgets
 

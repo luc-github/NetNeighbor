@@ -174,12 +174,14 @@ Two separate builds are produced: one for Apple Silicon (arm64) and one for Inte
 
 **Apple Silicon (arm64) — macOS 12+**
 - Python 3.10+, `pip install -r requirements.txt pyinstaller`
+- `brew install create-dmg` (recommended — produces the drag-to-Applications DMG layout)
 - Xcode Command Line Tools (`xcode-select --install`) if pip/build tools complain
 
 **Intel (x86_64) — macOS 11 Big Sur+**
 - **Python 3.11.x** — PySide6 6.5.x requires Python < 3.12; Python 3.12+ can only install PySide6 6.6+ which requires macOS 12+. Download from [python.org](https://www.python.org/downloads/).
 - `pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller`
   PySide6 6.5.x is the last series supporting macOS 11. PySide6 6.6+ requires macOS 12+.
+- `brew install create-dmg` (recommended)
 - Xcode Command Line Tools (`xcode-select --install`) if needed
 
 ### Build
@@ -199,9 +201,9 @@ bash packaging/macos/build_app.sh 2.0.0
 
 | Artifact | Description |
 |----------|-------------|
-| `NetNeighbor.app` | Application bundle |
-| `NetNeighbor-<version>-macos-arm64.zip` | Apple Silicon bundle (macOS 12+) |
-| `NetNeighbor-<version>-macos-intel.zip` | Intel bundle (macOS 11 Big Sur+) |
+| `NetNeighbor.app` | Application bundle (intermediate) |
+| `NetNeighbor-<version>-macos-arm64.dmg` | Apple Silicon installer DMG (macOS 12+) |
+| `NetNeighbor-<version>-macos-intel.dmg` | Intel installer DMG (macOS 11 Big Sur+) |
 
 ### Local testing on a Big Sur Intel VM (VirtualBox)
 

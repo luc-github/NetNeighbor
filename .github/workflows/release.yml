@@ -113,7 +113,10 @@ jobs:
       - name: Install Python dependencies
         run: python3 -m pip install -r requirements.txt pyinstaller
 
-      - name: Build macOS arm64 app bundle
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build macOS arm64 app bundle + DMG
         run: |
           bash packaging/macos/build_app.sh "${{ needs.version.outputs.version }}" arm64
 
@@ -142,7 +145,7 @@ jobs:
         uses: actions/upload-artifact@v4.6.2
         with:
           name: macos-arm64-${{ needs.version.outputs.version }}
-          path: dist/NetNeighbor-*-macos-arm64.zip
+          path: dist/NetNeighbor-*-macos-arm64.dmg
 
   macos-intel:
     needs: version
@@ -161,7 +164,10 @@ jobs:
         # PySide6 6.5.x requires Python <3.12, so we use Python 3.11.
         run: python3 -m pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller
 
-      - name: Build macOS Intel app bundle
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build macOS Intel app bundle + DMG
         run: |
           bash packaging/macos/build_app.sh "${{ needs.version.outputs.version }}" x86_64
 
@@ -189,7 +195,7 @@ jobs:
         uses: actions/upload-artifact@v4.6.2
         with:
           name: macos-intel-${{ needs.version.outputs.version }}
-          path: dist/NetNeighbor-*-macos-intel.zip
+          path: dist/NetNeighbor-*-macos-intel.dmg
 
   github-release:
     needs: [version, linux, windows, macos-arm64, macos-intel]
@@ -206,7 +212,7 @@ jobs:
           mkdir -p dist-flat
           find release-assets -type f \( \
             -name '*.deb' -o -name '*.tar.gz' -o -name '*.AppImage' -o \
-            -name '*.zip' -o -name '*.exe' -o -name 'SHA256SUMS-*.txt' \
+            -name '*.zip' -o -name '*.dmg' -o -name '*.exe' -o -name 'SHA256SUMS-*.txt' \
           \) -exec cp {} dist-flat/ \;
 
       - name: Attach to GitHub Release
