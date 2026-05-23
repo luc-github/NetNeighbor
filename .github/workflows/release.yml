@@ -99,7 +99,7 @@ jobs:
           name: windows-${{ needs.version.outputs.version }}
           path: dist/NetNeighbor-*-win64-setup.exe
 
-  macos:
+  macos-arm64:
     needs: version
     runs-on: macos-latest
     continue-on-error: true
@@ -113,18 +113,85 @@ jobs:
       - name: Install Python dependencies
         run: python3 -m pip install -r requirements.txt pyinstaller
 
-      - name: Build macOS app bundle
+      - name: Build macOS arm64 app bundle
         run: |
-          bash packaging/macos/build_app.sh "${{ needs.version.outputs.version }}"
+          bash packaging/macos/build_app.sh "${{ needs.version.outputs.version }}" arm64
 
-      - name: Upload macOS artifacts
+      - name: Smoke test arm64 binary
+        run: |
+          APP="dist/NetNeighbor.app/Contents/MacOS/NetNeighbor"
+          echo "Launching $APP for 5 s..."
+          "$APP" &
+          PID=$!
+          sleep 5
+          if kill -0 "$PID" 2>/dev/null; then
+            kill "$PID"
+            echo "PASS: process still alive after 5 s"
+          else
+            wait "$PID"; CODE=$?
+            # 0 = clean exit, 124 = killed by timeout — both acceptable
+            if [ "$CODE" -eq 0 ] || [ "$CODE" -eq 124 ]; then
+              echo "PASS: process exited cleanly (code $CODE)"
+            else
+              echo "FAIL: process crashed (exit code $CODE)"
+              exit 1
+            fi
+          fi
+
+      - name: Upload macOS arm64 artifacts
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: macos-${{ needs.version.outputs.version }}
-          path: dist/NetNeighbor-*-macos.zip
+          name: macos-arm64-${{ needs.version.outputs.version }}
+          path: dist/NetNeighbor-*-macos-arm64.zip
+
+  macos-intel:
+    needs: version
+    runs-on: macos-13
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-python@v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        # PySide6 6.5.x is the last series supporting macOS 11 (Big Sur).
+        # PySide6 6.6+ raised the minimum to macOS 12.
+        run: python3 -m pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller
+
+      - name: Build macOS Intel app bundle
+        run: |
+          bash packaging/macos/build_app.sh "${{ needs.version.outputs.version }}" x86_64
+
+      - name: Smoke test Intel binary
+        run: |
+          APP="dist/NetNeighbor.app/Contents/MacOS/NetNeighbor"
+          echo "Launching $APP for 5 s..."
+          "$APP" &
+          PID=$!
+          sleep 5
+          if kill -0 "$PID" 2>/dev/null; then
+            kill "$PID"
+            echo "PASS: process still alive after 5 s"
+          else
+            wait "$PID"; CODE=$?
+            if [ "$CODE" -eq 0 ] || [ "$CODE" -eq 124 ]; then
+              echo "PASS: process exited cleanly (code $CODE)"
+            else
+              echo "FAIL: process crashed (exit code $CODE)"
+              exit 1
+            fi
+          fi
+
+      - name: Upload macOS Intel artifacts
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: macos-intel-${{ needs.version.outputs.version }}
+          path: dist/NetNeighbor-*-macos-intel.zip
 
   github-release:
-    needs: [version, linux, windows, macos]
+    needs: [version, linux, windows, macos-arm64, macos-intel]
     runs-on: ubuntu-latest
     if: always() && needs.linux.result == 'success' && github.event_name == 'push'
     steps:

@@ -13,6 +13,8 @@
 # Usage:
 #   bash packaging/macos/build_app.sh
 #   bash packaging/macos/build_app.sh 2.0.0
+#   bash packaging/macos/build_app.sh 2.0.0 arm64
+#   bash packaging/macos/build_app.sh 2.0.0 x86_64
 
 set -euo pipefail
 
@@ -29,9 +31,24 @@ if [[ -z "${VERSION}" ]]; then
   fi
 fi
 if [[ -z "${VERSION}" ]]; then
-  echo "Usage: $0 [version]" >&2
+  echo "Usage: $0 [version] [arch]" >&2
   exit 1
 fi
+
+# arch: arm64 | x86_64 | (empty = native)
+ARCH="${2:-}"
+if [[ -z "${ARCH}" ]]; then
+  ARCH="$(uname -m)"
+fi
+
+case "${ARCH}" in
+  arm64)   ARCH_SUFFIX="arm64"   ;;
+  x86_64)  ARCH_SUFFIX="intel"   ;;
+  *)
+    echo "Unknown arch: ${ARCH}" >&2
+    exit 1
+    ;;
+esac
 
 PY="${NETNEIGHBOR_PYTHON:-}"
 if [[ -z "${PY}" && -x "${PROJECT_ROOT}/.venv/bin/python" ]]; then
@@ -46,7 +63,7 @@ if [[ ! -f "${ENTRY}" ]]; then
 fi
 
 echo "== NetNeighbor macOS PyInstaller =="
-echo "version=${VERSION} entry=app/${ENTRY##*/}"
+echo "version=${VERSION} arch=${ARCH} entry=app/${ENTRY##*/}"
 
 "${PY}" -m pip install -q -r "${PROJECT_ROOT}/requirements.txt" pyinstaller
 
@@ -59,6 +76,7 @@ cd "${PROJECT_ROOT}"
   --onefile \
   --windowed \
   --name NetNeighbor \
+  --target-arch "${ARCH}" \
   --distpath "${DIST_DIR}" \
   --workpath "${WORK_DIR}" \
   --paths "${PROJECT_ROOT}/app" \
@@ -103,7 +121,7 @@ if [[ ! -d "${APP_BUNDLE}" ]]; then
   exit 1
 fi
 
-ZIP_OUT="${DIST_DIR}/NetNeighbor-${VERSION}-macos.zip"
+ZIP_OUT="${DIST_DIR}/NetNeighbor-${VERSION}-macos-${ARCH_SUFFIX}.zip"
 rm -f "${ZIP_OUT}"
 (
   cd "${DIST_DIR}"
