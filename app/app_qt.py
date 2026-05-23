@@ -89,7 +89,16 @@ def main(argv: list[str] | None = None) -> int:
     _qt_translator = QTranslator(app)
     _qt_translations_path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
     _active_lang = active_language()
-    _qt_locale = QLocale(_active_lang) if _active_lang else QLocale.system()
+    if _active_lang:
+        _qt_locale = QLocale(_active_lang)
+    elif sys.platform == "darwin":
+        # QLocale.system() crashes on macOS 11 (Big Sur) with PySide6 6.5.x —
+        # null ptr in pyStringToQString, uncatchable SIGSEGV.
+        # Use the LANG env var (set in main.py) as a safe fallback.
+        _sys_lang = os.environ.get("LANG", "en_US.UTF-8").split(".")[0]
+        _qt_locale = QLocale(_sys_lang.replace("_", "-")) if _sys_lang and _sys_lang != "C" else QLocale(QLocale.Language.English)
+    else:
+        _qt_locale = QLocale.system()
     if _qt_translator.load(_qt_locale, "qtbase", "_", _qt_translations_path):
         app.installTranslator(_qt_translator)
         _log.debug("Qt base translator loaded for %s", _qt_locale.name())
