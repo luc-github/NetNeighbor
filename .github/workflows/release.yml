@@ -141,6 +141,9 @@ jobs:
             fi
           fi
 
+      - name: Cleanup .app bundle (DMG only in release)
+        run: rm -rf dist/NetNeighbor.app
+
       - name: Upload macOS arm64 artifacts
         uses: actions/upload-artifact@v4.6.2
         with:
@@ -190,6 +193,9 @@ jobs:
               exit 1
             fi
           fi
+
+      - name: Cleanup .app bundle (DMG only in release)
+        run: rm -rf dist/NetNeighbor.app
 
       - name: Upload macOS Intel artifacts
         uses: actions/upload-artifact@v4.6.2

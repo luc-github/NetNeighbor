@@ -163,16 +163,22 @@ if command -v create-dmg &> /dev/null; then
   if [[ -f "${ICNS_OUT}" ]]; then
     ICON_VOL_ARG="--volicon ${ICNS_OUT}"
   fi
+  BACKGROUND_ARG=""
+  _BG="${SCRIPT_DIR}/dmg_background.png"
+  if [[ -f "${_BG}" ]]; then
+    BACKGROUND_ARG="--background ${_BG}"
+  fi
   # shellcheck disable=SC2086
   create-dmg \
     --volname "NetNeighbor ${VERSION}" \
     ${ICON_VOL_ARG} \
+    ${BACKGROUND_ARG} \
     --window-pos 200 120 \
     --window-size 560 300 \
     --icon-size 128 \
-    --icon "NetNeighbor.app" 160 145 \
+    --icon "NetNeighbor.app" 120 145 \
     --hide-extension "NetNeighbor.app" \
-    --app-drop-link 400 145 \
+    --app-drop-link 440 145 \
     "${DMG_OUT}" \
     "${APP_BUNDLE}"
 else
@@ -190,6 +196,6 @@ else
 fi
 
 echo "Built:"
-echo "  ${APP_BUNDLE}"
+echo "  ${APP_BUNDLE}  (kept for smoke testing — safe to delete after)"
 echo "  ${DMG_OUT}"
 echo "Post-port: signing/notarization — see packaging/POST_PORT.md"

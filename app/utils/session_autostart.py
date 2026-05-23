@@ -51,6 +51,14 @@ def _resolve_launch_command(*, minimized: bool = True) -> str:
 def _resolve_launch_argv(*, minimized: bool = True) -> list[str]:
     """Return the argv list for the LaunchAgent ProgramArguments key (macOS)."""
     suffix = "--start-minimized-to-tray" if minimized else None
+    # Frozen PyInstaller bundle: sys.executable IS the stable binary path
+    # (e.g. /Applications/NetNeighbor.app/Contents/MacOS/NetNeighbor).
+    # Do NOT reference main.py — it lives in a per-run _MEI temp dir.
+    if getattr(sys, "frozen", False):
+        argv = [sys.executable]
+        if suffix:
+            argv.append(suffix)
+        return argv
     w = shutil.which("netneighbor")
     if w:
         argv = [w]
@@ -107,9 +115,36 @@ def _macos_autostart_enabled() -> bool:
     return _macos_plist_path().is_file()
 
 
+def _macos_launchctl(action: str, path: Path) -> None:
+    """Run launchctl load/unload for the given plist (best-effort, errors are logged)."""
+    import subprocess
+    import os
+    try:
+        if action == "load":
+            # macOS 11+: bootstrap; fall back to legacy load -w
+            uid = os.getuid()
+            r = subprocess.run(
+                ["launchctl", "bootstrap", f"gui/{uid}", str(path)],
+                capture_output=True,
+            )
+            if r.returncode != 0:
+                subprocess.run(["launchctl", "load", "-w", str(path)], capture_output=True)
+        else:
+            uid = os.getuid()
+            r = subprocess.run(
+                ["launchctl", "bootout", f"gui/{uid}", str(path)],
+                capture_output=True,
+            )
+            if r.returncode != 0:
+                subprocess.run(["launchctl", "unload", "-w", str(path)], capture_output=True)
+    except OSError as e:
+        _LOG.warning("launchctl %s failed: %s", action, e)
+
+
 def _macos_apply_autostart(enabled: bool) -> bool:
     path = _macos_plist_path()
     if not enabled:
+        _macos_launchctl("unload", path)
         try:
             path.unlink(missing_ok=True)
         except OSError as e:
@@ -143,6 +178,7 @@ def _macos_apply_autostart(enabled: bool) -> bool:
     except OSError as e:
         _LOG.warning("Could not write LaunchAgent plist %s: %s", path, e)
         return False
+    _macos_launchctl("load", path)
     return True
 
 
