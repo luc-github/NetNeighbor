@@ -16,13 +16,13 @@ NetNeighbor discovers and monitors devices on your local network — a modern eq
 - **Icon packs** — switch between icon themes; install community packs or create your own
 - **System tray** — minimize to tray, start minimized, session autostart
 - **Localised** — French, Spanish, German, Italian, Dutch, Japanese, Chinese (Simplified/Traditional)
-- **Packaged** as `.exe` (Windows), `.deb` (Ubuntu/Mint/Debian), `.AppImage`, and tarball
+- **Packaged** as `.exe` + installer (Windows), `.dmg` (macOS), `.deb` (Ubuntu/Mint/Debian), `.AppImage`, and tarball
 
 ## Download
 
 Latest release: [GitHub Releases](https://github.com/luc-github/NetNeighbor/releases)
 
-Available formats: `.exe` · `.deb` · `.AppImage` · `.tar.gz`
+Available formats: `.exe` · `.dmg` (Apple Silicon & Intel) · `.deb` · `.AppImage` · `.tar.gz`
 
 ## Requirements
 
@@ -30,7 +30,8 @@ Available formats: `.exe` · `.deb` · `.AppImage` · `.tar.gz`
 |----------|-------------|
 | Windows | Windows 10 or later |
 | Linux | Ubuntu 22.04+, Linux Mint 21+, Debian 12+, or equivalent |
-| macOS | macOS 12 (Monterey) or later |
+| macOS (Apple Silicon) | macOS 12 (Monterey) or later |
+| macOS (Intel) | macOS 11 (Big Sur) or later |
 | From source | Python 3.10+ · PySide6 6.5+ |
 
 ## Install
@@ -39,6 +40,14 @@ Available formats: `.exe` · `.deb` · `.AppImage` · `.tar.gz`
 ```
 NetNeighbor-2.0.0-win64-setup.exe
 ```
+
+> **Note:** the installer is not code-signed. Windows Defender SmartScreen may show a warning — click **More info** → **Run anyway**.
+
+**macOS:**
+
+Open `NetNeighbor-2.0.0-macos-arm64.dmg` (Apple Silicon) or `NetNeighbor-2.0.0-macos-intel.dmg` (Intel), then drag NetNeighbor to Applications.
+
+> **Note:** the app is not notarized. On first launch Gatekeeper may block it — right-click → **Open** → **Open**, or run `xattr -cr /Applications/NetNeighbor.app` in Terminal.
 
 **`.deb` package (recommended, Linux):**
 ```bash
