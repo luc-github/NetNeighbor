@@ -193,6 +193,8 @@ Homebrew requires Xcode Command Line Tools; the installer will prompt to install
 - `pip install "PySide6>=6.5,<6.6" -r requirements.txt pyinstaller`
   PySide6 6.5.x is the last series supporting macOS 11. PySide6 6.6+ requires macOS 12+.
 
+CI uses `macos-15-intel` runner (Intel x86_64, macOS 15) — faster queue than the deprecated `macos-13`.
+
 ### Build
 
 ```bash

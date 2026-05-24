@@ -152,8 +152,7 @@ jobs:
 
   macos-intel:
     needs: version
-    runs-on: macos-13
-    if: false  # macos-13 runner queue too slow — build manually and attach to release
+    runs-on: macos-15-intel
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4.2.2
