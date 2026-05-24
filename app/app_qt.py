@@ -198,19 +198,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if sys.platform == "darwin":
         # On macOS, clicking the Dock icon when the window is hidden fires
-        # QEvent.Type.ApplicationActivate.  Handle it so the window reappears
-        # (e.g. after --start-minimized-to-tray / autostart at login).
+        # QEvent.Type.ApplicationActivate.  Handle it so the window reappears.
+        # Guard: only act if the window has been shown at least once — macOS also
+        # sends ApplicationActivate at login (not a user action), which must not
+        # force the window open when starting minimized.
         from PySide6.QtCore import QEvent, QObject
 
         class _DockClickFilter(QObject):
+            _window_shown_once: bool = not _start_hidden
+
             def eventFilter(self, obj: QObject, event: QEvent) -> bool:
                 if event.type() == QEvent.Type.ApplicationActivate:
-                    if not window.isVisible():
+                    if self._window_shown_once and not window.isVisible():
                         window.bring_to_front()
+                elif event.type() == QEvent.Type.Show and obj is window:
+                    self._window_shown_once = True
                 return False
 
         app._qt_dock_filter = _DockClickFilter(app)
         app.installEventFilter(app._qt_dock_filter)
+        window.installEventFilter(app._qt_dock_filter)
 
     if os.environ.get("NETNEIGHBOR_DEBUG_TOPLEVEL"):
         from ui.main_window import _debug_log_extra_top_level_widgets

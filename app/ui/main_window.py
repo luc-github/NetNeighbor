@@ -2117,12 +2117,13 @@ class NetNeighborMainWindow(QMainWindow):
             QTimer.singleShot(0, self._hide_to_tray)
 
     def _hide_to_tray(self) -> None:
-        """Hide window and switch to Accessory policy on macOS (no Dock icon)."""
-        import sys
+        """Hide window and switch to Accessory policy on macOS (no Dock icon).
+        Window must be hidden before changing policy — macOS rejects Accessory
+        while a visible window exists."""
+        self.hide()
         if sys.platform == "darwin":
             from utils.macos_activation import set_policy_accessory
             set_policy_accessory()
-        self.hide()
 
     def closeEvent(self, event) -> None:
         from utils.ui_prefs import load_ui_preferences

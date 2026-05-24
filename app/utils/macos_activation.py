@@ -37,6 +37,7 @@ else:
     _POLICY_ACCESSORY = 1  # NSApplicationActivationPolicyAccessory
 
     def _shared_app() -> int:
+        # Get NSApp — set argtypes/restype for this specific call signature
         _lib.objc_msgSend.restype = ctypes.c_void_p
         _lib.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
         return _lib.objc_msgSend(
@@ -46,10 +47,13 @@ else:
 
     def _set_policy(policy: int) -> None:
         try:
+            # Resolve NSApp first — _shared_app() modifies argtypes internally,
+            # so it must be called before we set the 3-arg signature below.
+            nsapp = _shared_app()
             _lib.objc_msgSend.restype = ctypes.c_void_p
             _lib.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
             _lib.objc_msgSend(
-                _shared_app(),
+                nsapp,
                 _lib.sel_registerName(b"setActivationPolicy:"),
                 ctypes.c_long(policy),
             )
