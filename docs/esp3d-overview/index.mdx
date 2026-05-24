@@ -1,6 +1,6 @@
 ---
 title: NetNeighbor
-description: Discover and monitor devices on your local network — free desktop application for Windows, Linux and macOS.
+description: Discover and monitor devices on your local network — free desktop application for Windows, Linux and macOS (Apple Silicon & Intel).
 ---
 
 import { Card, CardGrid, LinkButton, Badge } from '@astrojs/starlight/components';
@@ -98,6 +98,16 @@ NetNeighbor can minimise to the system tray and start silently at login.
     ```
     NetNeighbor-2.0.0-win64-setup.exe
     ```
+
+    > Not code-signed — SmartScreen may warn: click **More info** → **Run anyway**.
+  </Card>
+  <Card title="macOS DMG" icon="apple">
+    Drag NetNeighbor to Applications and launch.
+
+    - `NetNeighbor-2.0.0-macos-arm64.dmg` — Apple Silicon (macOS 12+)
+    - `NetNeighbor-2.0.0-macos-intel.dmg` — Intel (macOS 11+)
+
+    > Not notarized — if Gatekeeper blocks it: right-click → **Open** → **Open**, or run `xattr -cr /Applications/NetNeighbor.app` in Terminal.
   </Card>
   <Card title=".deb package" icon="linux">
     **Recommended** for Ubuntu, Linux Mint, and Debian.
@@ -119,7 +129,7 @@ NetNeighbor can minimise to the system tray and start silently at login.
     Windows, Linux and macOS.
 
     ```bash
-    pip install -r requirements-qt.txt
+    pip install -r requirements.txt
     python main.py
     ```
   </Card>
@@ -140,7 +150,8 @@ NetNeighbor can minimise to the system tray and start silently at login.
 |----------|-------------|
 | **Windows** | Windows 10 or later |
 | **Linux** | Ubuntu 22.04+, Linux Mint 21+, Debian 12+, or equivalent |
-| **macOS** | macOS 12 (Monterey) or later |
+| **macOS (Apple Silicon)** | macOS 12 (Monterey) or later |
+| **macOS (Intel)** | macOS 11 (Big Sur) or later |
 | **From source** | Python 3.10+ · PySide6 6.5+ |
 
 For **NetBIOS name resolution** on Linux (Windows device names):
@@ -156,12 +167,12 @@ sudo apt install samba-common-bin
   <Card title="User documentation" icon="open-book">
     Detailed guide covering all features, dialogs, preferences, and troubleshooting.
 
-    [Read USER_DOCUMENTATION →](https://github.com/luc-github/NetNeighbor/blob/main/USER_DOCUMENTATION.md)
+    [Read USER_DOCUMENTATION →](https://github.com/luc-github/NetNeighbor/blob/2.0/docs/USER_DOCUMENTATION.md)
   </Card>
   <Card title="Icon packs" icon="seti:image">
     How to install community icon packs or create your own.
 
-    [Read CONTRIBUTING_ICONS →](https://github.com/luc-github/NetNeighbor/blob/main/docs/CONTRIBUTING_ICONS.md)
+    [Read CONTRIBUTING_ICONS →](https://github.com/luc-github/NetNeighbor/blob/2.0/docs/contributing/CONTRIBUTING_ICONS.md)
   </Card>
   <Card title="Source code" icon="github">
     LGPL-3.0, contributions welcome.
