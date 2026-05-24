@@ -178,15 +178,12 @@ def main(argv: list[str] | None = None) -> int:
     # tray is not ready yet (common at login time on macOS before the menu bar
     # is available).  A retry timer creates the tray once it becomes available.
     _start_hidden = args.start_minimized_to_tray
-    if _start_hidden and sys.platform == "darwin":
-        from utils.macos_activation import set_policy_accessory
-        set_policy_accessory()
     if not _start_hidden:
         window.show()
 
     if args.start_minimized_to_tray and _tray is None:
         def _retry_tray() -> None:
-            if app._qt_tray is not None:  # type: ignore[attr-defined]
+            if getattr(app, "_qt_tray", None) is not None:
                 return
             if QSystemTrayIcon.isSystemTrayAvailable():
                 tray = NetNeighborTray(app.windowIcon(), window, parent=app)
@@ -199,20 +196,22 @@ def main(argv: list[str] | None = None) -> int:
     if sys.platform == "darwin":
         # On macOS, clicking the Dock icon when the window is hidden fires
         # QEvent.Type.ApplicationActivate.  Handle it so the window reappears.
-        # Guard: only act if the window has been shown at least once — macOS also
-        # sends ApplicationActivate at login (not a user action), which must not
-        # force the window open when starting minimized.
+        # At login macOS also sends ApplicationActivate automatically — guard
+        # against this by only reacting once the window has been shown at least
+        # once by a real user action (tray click, single-instance activation…).
         from PySide6.QtCore import QEvent, QObject
 
-        class _DockClickFilter(QObject):
-            _window_shown_once: bool = not _start_hidden
+        # True from the start for normal launches; False until user shows window
+        # for minimized launches.  Tracked via QEvent.Type.Show on the window.
+        _window_was_shown = [not _start_hidden]
 
+        class _DockClickFilter(QObject):
             def eventFilter(self, obj: QObject, event: QEvent) -> bool:
                 if event.type() == QEvent.Type.ApplicationActivate:
-                    if self._window_shown_once and not window.isVisible():
+                    if _window_was_shown[0] and not window.isVisible():
                         window.bring_to_front()
-                elif event.type() == QEvent.Type.Show and obj is window:
-                    self._window_shown_once = True
+                elif event.type() == QEvent.Type.Show:
+                    _window_was_shown[0] = True
                 return False
 
         app._qt_dock_filter = _DockClickFilter(app)

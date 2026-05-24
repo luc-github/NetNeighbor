@@ -29,6 +29,7 @@ class NetNeighborTray(QSystemTrayIcon):
         self._action_quit = self._menu.addAction(_("Quit"))
         self.setContextMenu(self._menu)
         self._sync_show_hide_label()
+        self._menu.aboutToShow.connect(self._sync_show_hide_label)
         self._action_show_hide.triggered.connect(self._toggle_window)
         self._action_quit.triggered.connect(self._quit)
         self.activated.connect(self._on_activated)
