@@ -153,6 +153,15 @@ fi
 # Remove intermediate onedir collection left by PyInstaller in dist/
 rm -rf "${DIST_DIR}/NetNeighbor"
 
+# Patch Info.plist: LSUIElement=true hides the app from the Dock.
+# NetNeighbor is a menu-bar/tray app — no Dock icon needed, and without this
+# macOS may force the main window to the front at login time.
+/usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" \
+    "${APP_BUNDLE}/Contents/Info.plist" 2>/dev/null || \
+/usr/libexec/PlistBuddy -c "Set :LSUIElement bool true" \
+    "${APP_BUNDLE}/Contents/Info.plist"
+echo "  LSUIElement=true → app hidden from Dock"
+
 # Trim device icon pack to the 5 sizes used by the UI (same as Linux/Windows builds).
 # Source tree has ~151 MB across 10 resolutions; keeping 16/32/48/96/256 saves ~143 MB.
 ICONS_DIR="${APP_BUNDLE}/Contents/MacOS/assets/icons/netneighbor"
