@@ -169,6 +169,7 @@ def _macos_apply_autostart(enabled: bool) -> bool:
         f"    <key>ProgramArguments</key>\n    <array>\n{args_xml}\n    </array>\n"
         "    <key>RunAtLoad</key><true/>\n"
         "    <key>KeepAlive</key><false/>\n"
+        "    <key>ProcessType</key><string>Background</string>\n"
         "</dict></plist>\n"
     )
     try:

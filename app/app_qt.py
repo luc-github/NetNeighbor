@@ -174,9 +174,24 @@ def main(argv: list[str] | None = None) -> int:
         _tray.show()
         app._qt_tray = _tray
 
-    _start_hidden = args.start_minimized_to_tray and _tray is not None
+    # Hide the window when --start-minimized-to-tray is set, even if the system
+    # tray is not ready yet (common at login time on macOS before the menu bar
+    # is available).  A retry timer creates the tray once it becomes available.
+    _start_hidden = args.start_minimized_to_tray
     if not _start_hidden:
         window.show()
+
+    if args.start_minimized_to_tray and _tray is None:
+        def _retry_tray() -> None:
+            if app._qt_tray is not None:  # type: ignore[attr-defined]
+                return
+            if QSystemTrayIcon.isSystemTrayAvailable():
+                tray = NetNeighborTray(app.windowIcon(), window, parent=app)
+                tray.show()
+                app._qt_tray = tray  # type: ignore[attr-defined]
+            else:
+                QTimer.singleShot(2000, _retry_tray)
+        QTimer.singleShot(2000, _retry_tray)
 
     if sys.platform == "darwin":
         # On macOS, clicking the Dock icon when the window is hidden fires
