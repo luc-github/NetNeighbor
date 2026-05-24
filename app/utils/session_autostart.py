@@ -179,7 +179,9 @@ def _macos_apply_autostart(enabled: bool) -> bool:
     except OSError as e:
         _LOG.warning("Could not write LaunchAgent plist %s: %s", path, e)
         return False
-    _macos_launchctl("load", path)
+    # Do NOT call launchctl bootstrap here — RunAtLoad=true would launch a second
+    # instance immediately while the app is already running.  launchd picks up the
+    # plist automatically at next login.
     return True
 
 
