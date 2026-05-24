@@ -178,6 +178,9 @@ def main(argv: list[str] | None = None) -> int:
     # tray is not ready yet (common at login time on macOS before the menu bar
     # is available).  A retry timer creates the tray once it becomes available.
     _start_hidden = args.start_minimized_to_tray
+    if _start_hidden and sys.platform == "darwin":
+        from utils.macos_activation import set_policy_accessory
+        set_policy_accessory()
     if not _start_hidden:
         window.show()
 

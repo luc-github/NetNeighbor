@@ -2114,18 +2114,30 @@ class NetNeighborMainWindow(QMainWindow):
             and QSystemTrayIcon.isSystemTrayAvailable()
         ):
             event.ignore()
-            QTimer.singleShot(0, self.hide)
+            QTimer.singleShot(0, self._hide_to_tray)
+
+    def _hide_to_tray(self) -> None:
+        """Hide window and switch to Accessory policy on macOS (no Dock icon)."""
+        import sys
+        if sys.platform == "darwin":
+            from utils.macos_activation import set_policy_accessory
+            set_policy_accessory()
+        self.hide()
 
     def closeEvent(self, event) -> None:
         from utils.ui_prefs import load_ui_preferences
         prefs = load_ui_preferences()
         if prefs.get("close_to_tray", True) and QSystemTrayIcon.isSystemTrayAvailable():
             event.ignore()
-            self.hide()
+            self._hide_to_tray()
         else:
             event.accept()
 
     def bring_to_front(self) -> None:
+        import sys
+        if sys.platform == "darwin":
+            from utils.macos_activation import set_policy_regular
+            set_policy_regular()
         self.showNormal()
         self.raise_()
         self.activateWindow()

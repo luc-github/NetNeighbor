@@ -49,7 +49,7 @@ class NetNeighborTray(QSystemTrayIcon):
 
     def _toggle_window(self) -> None:
         if self._window.isVisible():
-            self._window.hide()
+            self._window._hide_to_tray()
         else:
             self._window.bring_to_front()
         self._sync_show_hide_label()
