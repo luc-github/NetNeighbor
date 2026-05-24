@@ -18,6 +18,12 @@ NetNeighbor discovers and monitors devices on your local network — a modern eq
 - **Localised** — French, Spanish, German, Italian, Dutch, Japanese, Chinese (Simplified/Traditional)
 - **Packaged** as `.exe` + installer (Windows), `.dmg` (macOS), `.deb` (Ubuntu/Mint/Debian), `.AppImage`, and tarball
 
+> [!WARNING]
+>### Disclaimer
+> The software is provided 'as is,' without any warranty of any kind, expressed or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
+>It is essential that you carefully read and understand this disclaimer before using this software and its components. If you do not agree with any part of this disclaimer, please refrain from using the software.  
+
+
 ## Download
 
 Latest release: [GitHub Releases](https://github.com/luc-github/NetNeighbor/releases)
