@@ -123,6 +123,24 @@ LANG=fr_FR.UTF-8 python app/main.py
 
 Full i18n workflow: [`docs/contributing/I18N.md`](docs/contributing/I18N.md)
 
+## Icon packs
+
+Five community icon packs are available in [`icons_packs/`](icons_packs/):
+
+| Pack | Style |
+|------|-------|
+| [Clay 3D](icons_packs/clay3d/) | Colourful 3D clay-style icons |
+| [Dark RGB](icons_packs/darkrgb/) | Dark theme with RGB accent colours |
+| [OSX Aqua](icons_packs/osx_aqua/) | macOS Aqua-inspired look |
+| [White Frost](icons_packs/whitefrost/) | Flat white / frosted glass |
+| [Windows 11 Fluent](icons_packs/win11fluent/) | Windows 11 Fluent Design |
+
+Copy a pack folder to `~/.config/netneighbor_icon_packs/`, rename `infopack.json` → `iconpack.json` and `{name}_preview.png` → `preview.png`, then select it in **Preferences → General → Icon pack**.
+
+Full instructions and pack format: [`icons_packs/README.md`](icons_packs/README.md)
+
+---
+
 ## Autodetection and corrections
 
 Device names and types are inferred from protocol announcements — they are best-effort.
