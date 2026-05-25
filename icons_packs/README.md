@@ -9,6 +9,21 @@ Each pack replaces the built-in device icons. Switch between packs in
 
 ## Available packs
 
+
+
+### Cartoon
+
+![Windows 11 Fluent preview](cartoon/cartoon_preview.png)
+
+| | |
+|---|---|
+| **Folder** | `cartoon` |
+| **Version** | 1.0 |
+| **License** | LGPL-3.0 |
+
+
+---
+
 ### Clay 3D
 
 ![Clay 3D preview](clay3d/clay3d_preview.png)
@@ -45,6 +60,19 @@ Each pack replaces the built-in device icons. Switch between packs in
 
 ---
 
+### Pinky
+
+![Windows 11 Fluent preview](pinky/pinky_preview.png)
+
+| | |
+|---|---|
+| **Folder** | `pinky` |
+| **Version** | 1.0 |
+| **License** | LGPL-3.0 |
+
+
+---
+
 ### White Frost
 
 ![White Frost preview](whitefrost/whitefrost_preview.png)
@@ -66,6 +94,7 @@ Each pack replaces the built-in device icons. Switch between packs in
 | **Folder** | `win11fluent` |
 | **Version** | 1.0 |
 | **License** | LGPL-3.0 |
+
 
 ---
 

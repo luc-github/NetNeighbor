@@ -129,9 +129,11 @@ Five community icon packs are available in [`icons_packs/`](icons_packs/):
 
 | Pack | Style |
 |------|-------|
+| [Cartoon](icons_packs/cartoon/) | Funny cartoon-style icons |
 | [Clay 3D](icons_packs/clay3d/) | Colourful 3D clay-style icons |
 | [Dark RGB](icons_packs/darkrgb/) | Dark theme with RGB accent colours |
 | [OSX Aqua](icons_packs/osx_aqua/) | macOS Aqua-inspired look |
+| [Pinky](icons_packs/pinky/) | Pink glossy-style icons |
 | [White Frost](icons_packs/whitefrost/) | Flat white / frosted glass |
 | [Windows 11 Fluent](icons_packs/win11fluent/) | Windows 11 Fluent Design |
 
