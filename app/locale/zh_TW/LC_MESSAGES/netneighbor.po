@@ -1118,6 +1118,15 @@ msgstr "隱藏的裝置"
 msgid "Hide device"
 msgstr "隱藏裝置"
 
+#: ui/device_context_menu.py ui/main_window.py
+msgid "Clear device"
+msgstr "清除裝置"
+
+#: ui/main_window.py
+#, python-brace-format
+msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
+msgstr "將 {name}（{ip}）從快取和所有偏好設定中移除？\n\n此操作無法復原。如果在網路上重新發現該裝置，它將再次出現。"
+
 #: ui/
 msgid "Hide sidebar"
 msgstr "隱藏側邊欄"

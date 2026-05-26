@@ -1157,6 +1157,15 @@ msgstr "Appareils masqués"
 msgid "Hide device"
 msgstr "Masquer l'appareil"
 
+#: ui/device_context_menu.py ui/main_window.py
+msgid "Clear device"
+msgstr "Effacer l'appareil"
+
+#: ui/main_window.py
+#, python-brace-format
+msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
+msgstr "Supprimer {name} ({ip}) du cache et de toutes les préférences ?\n\nCette action est irréversible. L'appareil réapparaîtra s'il est redécouvert sur le réseau."
+
 #: ui/
 msgid "Hide sidebar"
 msgstr "Masquer la barre latérale"

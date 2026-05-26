@@ -1,5 +1,5 @@
-# File remote_icon_cache.py for NetNeighbor version 2.0.0
-# Internal version : 2.0.0 date: 2026-05-19 00:00
+# File remote_icon_cache.py for NetNeighbor version 2.0.1
+# Internal version : 2.0.1 date: 2026-05-26 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """In-memory Qt pixmaps for device-provided icons (HTTP fetch + GTK-compatible disk cache)."""
@@ -184,6 +184,14 @@ class QtRemoteIconCache(QObject):
         self._bytes_by_key.clear()
         self._bytes_by_host.clear()
         self._failed.clear()
+
+    def evict_for_ip(self, ip: str) -> None:
+        """Remove in-memory cached icon data for a specific device IP."""
+        sip = str(ip).strip()
+        if not sip:
+            return
+        self._bytes_by_host.pop(sip, None)
+        self._failed.discard(sip)
 
     def prefetch_from_index(self) -> None:
         """Pre-warm in-memory cache from the on-disk icon index.

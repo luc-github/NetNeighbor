@@ -1,5 +1,5 @@
-# File device_remote_icon.py for NetNeighbor version 2.0.0
-# Internal version : 2.0.0 date: 2026-05-19 00:00
+# File device_remote_icon.py for NetNeighbor version 2.0.1
+# Internal version : 2.0.1 date: 2026-05-26 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Device-provided icon URLs and local cache index (shared GTK/Qt, no UI deps)."""
@@ -453,6 +453,40 @@ def persist_remote_icon_index_entry(sip: str, canonical_url: str) -> None:
         os.replace(tmp, _REMOTE_ICON_INDEX_PATH)
     except OSError:
         pass
+
+
+def purge_remote_icon_for_ip(ip: str) -> None:
+    """Remove the cached remote icon for *ip* from both the index and disk."""
+    global _index_cache
+    sip = str(ip).strip()
+    if not sip or sip in {"0.0.0.0", "::"}:
+        return
+    hosts = dict(_load_index())
+    row = hosts.pop(sip, None)
+    if row is None:
+        return
+    _index_cache = hosts
+    try:
+        _REMOTE_ICON_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+        blob = {
+            "version": 2,
+            "hosts": dict(sorted(hosts.items())),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        tmp = _REMOTE_ICON_INDEX_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(blob, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, _REMOTE_ICON_INDEX_PATH)
+    except OSError:
+        pass
+    sha = row.get("payload_sha256", "")
+    if isinstance(sha, str) and sha.strip():
+        still_used = any(r.get("payload_sha256") == sha for r in hosts.values())
+        if not still_used:
+            payload_path = _REMOTE_ICON_DISK_DIR / f"{sha}.payload"
+            try:
+                payload_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def urlopen_remote_icon(url: str):

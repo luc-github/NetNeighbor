@@ -1,5 +1,5 @@
-# File main_window.py for NetNeighbor version 2.0.0
-# Internal version : 2.0.0 date: 2026-05-19 00:00
+# File main_window.py for NetNeighbor version 2.0.1
+# Internal version : 2.0.1 date: 2026-05-26 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Main window — list & icon views (NetNeighbor 2.0)."""
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -74,7 +75,9 @@ from utils.device_details_view import build_device_details_view_model
 from utils.device_remote_icon import (
     bundle_has_device_icon_source,
     bundle_provided_icon_display,
+    purge_remote_icon_for_ip,
 )
+from utils.discovery_cache import purge_device_from_discovery_cache
 from utils.discovery_config import normalize_information_precedence_list
 from utils.double_click_open import resolve_all_connect_targets, resolve_connect_target
 from utils.location_label import normalize_location_options
@@ -1351,6 +1354,45 @@ class NetNeighborMainWindow(QMainWindow):
         self._schedule_persist_ui_prefs()
         self._apply_hidden_visibility_immediate(removed_bundle_key=removed_key)
 
+    def _clear_bundle(self, bundle: DeviceBundle) -> None:
+        """Completely purge a device bundle from cache, prefs, and in-memory state."""
+        reply = QMessageBox.question(
+            self,
+            _("Clear device"),
+            _("Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network.").format(
+                name=bundle.name, ip=bundle.ip
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        ip = bundle.ip
+        port = int(bundle.port)
+        ep = (ip, port)
+
+        # Remove icon overrides (keyed by (ip, port)).
+        self._custom_icon_overrides.pop(ep, None)
+        self._icon_source_overrides.pop(ep, None)
+
+        # Remove hidden device meta for this bundle.
+        if self._discovery_manager is not None:
+            host_key = self._discovery_manager.canonical_host_identity_key(ip, port)
+            if host_key:
+                self._hidden_device_meta.pop(host_key, None)
+            # Remove all in-memory devices and overrides from the manager.
+            self._discovery_manager.purge_bundle(ip, port)
+
+        # Purge on-disk discovery cache entries for this IP.
+        purge_device_from_discovery_cache({ip})
+
+        # Purge on-disk and in-memory remote icon cache for this IP.
+        purge_remote_icon_for_ip(ip)
+        self._remote_icon_cache.evict_for_ip(ip)
+
+        self._schedule_persist_ui_prefs()
+
     def set_devices(self, devices: Iterable[Device]) -> None:
         """Replace views from discovery snapshot (coalesced to reduce flicker)."""
         self._pending_devices = list(devices)
@@ -1626,6 +1668,7 @@ class NetNeighborMainWindow(QMainWindow):
             on_rename=lambda: self._rename_bundle(bundle),
             on_location=lambda loc: self._set_bundle_location(bundle, loc),
             on_type=lambda slug: self._set_bundle_type(bundle, slug),
+            on_clear=lambda: self._clear_bundle(bundle),
         )
 
     def _normalized_icon_mode(self, bundle: DeviceBundle) -> str:

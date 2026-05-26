@@ -1138,6 +1138,15 @@ msgstr "Dispositivi nascosti"
 msgid "Hide device"
 msgstr "Nascondi dispositivo"
 
+#: ui/device_context_menu.py ui/main_window.py
+msgid "Clear device"
+msgstr "Cancella dispositivo"
+
+#: ui/main_window.py
+#, python-brace-format
+msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
+msgstr "Rimuovere {name} ({ip}) dalla cache e da tutte le preferenze?\n\nQuesta azione non può essere annullata. Il dispositivo riapparirà se viene riscoperto nella rete."
+
 #: ui/
 msgid "Hide sidebar"
 msgstr "Nascondi barra laterale"

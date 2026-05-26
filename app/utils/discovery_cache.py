@@ -1,5 +1,5 @@
-# File discovery_cache.py for NetNeighbor version 2.0.0
-# Internal version : 2.0.0 date: 2026-05-19 00:00
+# File discovery_cache.py for NetNeighbor version 2.0.1
+# Internal version : 2.0.1 date: 2026-05-26 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Persistence helpers for volatile discovery cache data."""
@@ -84,6 +84,42 @@ def save_nmb_name_cache(ip: str, name: str, mac: str | None = None) -> None:
     if mac:
         entry["mac"] = mac
     save_discovery_cache({"nmb_name_cache": {"entries": {ip: entry}}})
+
+
+def purge_device_from_discovery_cache(ips: set[str]) -> None:
+    """Remove all cache entries that belong to any of the given IP addresses."""
+    if not ips:
+        return
+    try:
+        existing = load_discovery_cache()
+        if not existing:
+            return
+        changed = False
+        for section in existing.values():
+            if not isinstance(section, dict):
+                continue
+            entries = section.get("entries")
+            if not isinstance(entries, dict):
+                continue
+            to_remove: set[str] = set()
+            for key, val in entries.items():
+                if key in ips:
+                    # nmb_name_cache: key is the IP itself
+                    to_remove.add(key)
+                elif isinstance(val, dict) and str(val.get("ip", "") or "").strip() in ips:
+                    # wsd_device_cache: key is device key, val has an "ip" field
+                    to_remove.add(key)
+            if to_remove:
+                for key in to_remove:
+                    del entries[key]
+                changed = True
+        if changed:
+            _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            _CACHE_FILE.write_text(
+                json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8"
+            )
+    except OSError:
+        return
 
 
 def save_discovery_cache(

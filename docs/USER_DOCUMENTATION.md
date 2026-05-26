@@ -98,6 +98,7 @@ listing all of them with labels (`HTTP`, `SSH (Admin)`, `HTTP (override)`, etc.)
 | **Monitor** / **Unfollow** | Keep the device visible when offline (greyed tile) / stop monitoring |
 | **Hide device** | Remove this device from the main view (recoverable via **Tools → Hidden devices**) |
 | **Rename** | Set a custom display name for this device |
+| **Clear device** | Completely purge this device from the cache, icons, and all preferences. The device will disappear immediately; if it is still active on the network it will reappear on the next discovery scan with fresh, complete data. Useful to clean up incomplete or duplicate entries caused by interrupted scans. |
 | **Location ▶** | Assign a location label (Auto or preset list) |
 | **Device type ▶** | Override the auto-detected device type (Auto or preset list) |
 

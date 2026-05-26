@@ -1,5 +1,5 @@
-# File device_context_menu.py for NetNeighbor version 2.0.0
-# Internal version : 2.0.0 date: 2026-05-19 00:00
+# File device_context_menu.py for NetNeighbor version 2.0.1
+# Internal version : 2.0.1 date: 2026-05-26 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Right-click context menu for devices (parity with GTK ``DeviceList``)."""
@@ -53,6 +53,7 @@ def show_device_context_menu(
     on_rename: Callable[[], None],
     on_location: Callable[[str | None], None],
     on_type: Callable[[str | None], None],
+    on_clear: Callable[[], None],
 ) -> None:
     menu = QMenu(parent)
 
@@ -88,6 +89,10 @@ def show_device_context_menu(
 
     act_rename = menu.addAction(_("Rename"))
     act_rename.triggered.connect(on_rename)
+    menu.addSeparator()
+
+    act_clear = menu.addAction(_("Clear device"))
+    act_clear.triggered.connect(on_clear)
     menu.addSeparator()
 
     current_location: str | None = None

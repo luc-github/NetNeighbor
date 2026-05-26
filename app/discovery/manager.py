@@ -1,5 +1,5 @@
-# File manager.py for NetNeighbor version 2.0.0
-# Internal version : 2.0.0 date: 2026-05-19 00:00
+# File manager.py for NetNeighbor version 2.0.1
+# Internal version : 2.0.1 date: 2026-05-26 00:00
 # Owner: Luc LEBOSSE all copyrights
 # License: LGPL3
 """Orchestrates all protocol providers and keeps a simple device cache."""
@@ -3110,6 +3110,46 @@ class DiscoveryManager:
         if device is None:
             return
         self.set_bundle_monitored(str(device.ip), int(device.port), monitored)
+
+    def purge_bundle(self, ip: str, port: int) -> None:
+        """Completely remove a bundle from in-memory state (devices + all overrides)."""
+        sip = str(ip).strip()
+        if not sip or sip == "0.0.0.0":
+            return
+        # Collect all devices that share this IP (any source/port — they form the bundle).
+        to_remove: list[Device] = [
+            d for d in self._devices_snapshot()
+            if str(d.ip).strip() == sip
+        ]
+        all_override_keys: set[str] = {f"host:ip:{sip}"}
+        for device in to_remove:
+            all_override_keys.update(self._monitored_lookup_keys_for_device(device))
+            all_override_keys.add(self._make_override_key_for_device(device))
+        override_stores: list[dict] = [
+            self._type_overrides,
+            self._name_overrides,
+            self._location_overrides,
+            self._url_overrides,
+            self._monitored_overrides,
+            self._hidden_overrides,
+            self._last_seen_overrides,
+            self._device_commands,
+            self._custom_command_overrides,
+            self._field_mapping_rules,
+        ]
+        for store in override_stores:
+            for key in all_override_keys:
+                store.pop(key, None)
+        for device in to_remove:
+            self._devices.pop(device.key, None)
+        # Clear in-memory protocol caches for this IP.
+        self._nmb_name_cache.pop(sip, None)
+        wsd_keys_to_drop = [k for k, v in self._wsd_device_cache.items()
+                            if isinstance(v, dict) and str(v.get("ip", "") or "").strip() == sip]
+        for k in wsd_keys_to_drop:
+            self._wsd_device_cache.pop(k, None)
+        if to_remove:
+            self._notify()
 
     def set_bundle_hidden(self, ip: str, port: int, hidden: bool, *, notify: bool = True) -> None:
         """Hide/show a UI bundle (same identity keys as follow/monitor)."""
