@@ -1253,6 +1253,47 @@ class SSDPDiscovery(BaseDiscovery):
             out[key.strip()] = (seen_at, dict(row))
         return out
 
+    def purge_ip_from_profile_cache(self, ip: str) -> None:
+        """Remove all profile-cache entries whose URLs resolve to *ip*."""
+        sip = str(ip).strip()
+        if not sip:
+            return
+        removed = 0
+        for key in list(self._profile_disk_cache.keys()):
+            cached = self._profile_disk_cache.get(key)
+            if not isinstance(cached, tuple) or len(cached) < 2:
+                continue
+            row = cached[1]
+            if not isinstance(row, dict):
+                continue
+            urls: list[str] = []
+            loc = row.get("ssdp_location")
+            if isinstance(loc, str) and loc.strip():
+                urls.append(loc.strip())
+            url = row.get("url")
+            if isinstance(url, str) and url.strip():
+                urls.append(url.strip())
+            xf = row.get("xml_fields")
+            if isinstance(xf, dict):
+                pres = xf.get("presentationURL")
+                if isinstance(pres, str) and pres.strip():
+                    urls.append(pres.strip())
+            matched = False
+            for u in urls:
+                try:
+                    host = urlparse(u).hostname
+                except ValueError:
+                    continue
+                if host and str(host).strip() == sip:
+                    matched = True
+                    break
+            if matched:
+                self._profile_disk_cache.pop(key, None)
+                removed += 1
+        if removed:
+            self._logger.debug("SSDP profile cache purged %d entries for %s", removed, sip)
+            self._flush_persistent_caches_if_due(force=True)
+
     def _build_persistent_profile_cache_entries(self) -> dict[str, dict]:
         entries: dict[str, dict] = {}
         now = datetime.now(timezone.utc)

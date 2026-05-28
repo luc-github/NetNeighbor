@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 _CACHE_DIR = Path.home() / ".cache" / "netneighbor"
 _CACHE_FILE = _CACHE_DIR / "discovery-cache.json"
@@ -86,6 +87,30 @@ def save_nmb_name_cache(ip: str, name: str, mac: str | None = None) -> None:
     save_discovery_cache({"nmb_name_cache": {"entries": {ip: entry}}})
 
 
+def _host_from_urls(row: dict) -> str | None:
+    """Extract a hostname/IP from SSDP profile-cache URLs."""
+    urls: list[str] = []
+    loc = row.get("ssdp_location")
+    if isinstance(loc, str) and loc.strip():
+        urls.append(loc.strip())
+    url = row.get("url")
+    if isinstance(url, str) and url.strip():
+        urls.append(url.strip())
+    xf = row.get("xml_fields")
+    if isinstance(xf, dict):
+        pres = xf.get("presentationURL")
+        if isinstance(pres, str) and pres.strip():
+            urls.append(pres.strip())
+    for u in urls:
+        try:
+            host = urlparse(u).hostname
+        except ValueError:
+            continue
+        if host:
+            return str(host).strip()
+    return None
+
+
 def purge_device_from_discovery_cache(ips: set[str]) -> None:
     """Remove all cache entries that belong to any of the given IP addresses."""
     if not ips:
@@ -95,7 +120,7 @@ def purge_device_from_discovery_cache(ips: set[str]) -> None:
         if not existing:
             return
         changed = False
-        for section in existing.values():
+        for section_name, section in existing.items():
             if not isinstance(section, dict):
                 continue
             entries = section.get("entries")
@@ -109,6 +134,11 @@ def purge_device_from_discovery_cache(ips: set[str]) -> None:
                 elif isinstance(val, dict) and str(val.get("ip", "") or "").strip() in ips:
                     # wsd_device_cache: key is device key, val has an "ip" field
                     to_remove.add(key)
+                elif section_name == "ssdp_profile_cache" and isinstance(val, dict):
+                    # ssdp_profile_cache: keys are UUIDs/USNs; resolve IP from URLs.
+                    host = _host_from_urls(val)
+                    if host and host in ips:
+                        to_remove.add(key)
             if to_remove:
                 for key in to_remove:
                     del entries[key]

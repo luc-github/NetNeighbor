@@ -62,13 +62,22 @@ class _MDNSListener(ServiceListener):
         self._discovery = discovery
 
     def add_service(self, zc, service_type: str, name: str) -> None:
-        self._discovery._on_service_change(zc, service_type, name, online=True)
+        try:
+            self._discovery._on_service_change(zc, service_type, name, online=True)
+        except Exception:
+            self._discovery._logger.debug("Exception in add_service", exc_info=True)
 
     def update_service(self, zc, service_type: str, name: str) -> None:
-        self._discovery._on_service_change(zc, service_type, name, online=True)
+        try:
+            self._discovery._on_service_change(zc, service_type, name, online=True)
+        except Exception:
+            self._discovery._logger.debug("Exception in update_service", exc_info=True)
 
     def remove_service(self, _zc, service_type: str, name: str) -> None:
-        self._discovery._on_service_remove(service_type, name)
+        try:
+            self._discovery._on_service_remove(service_type, name)
+        except Exception:
+            self._discovery._logger.debug("Exception in remove_service", exc_info=True)
 
 
 class MDNSDiscovery(BaseDiscovery):
@@ -113,6 +122,7 @@ class MDNSDiscovery(BaseDiscovery):
         self._enumeration_timer: threading.Timer | None = None
         self._enumeration_busy = False
         self._pending_remove_timers: dict[tuple[str, str], threading.Timer] = {}
+        self._last_recovery_time = 0.0
 
     def start(self) -> None:
         if self._running:
@@ -355,18 +365,30 @@ class MDNSDiscovery(BaseDiscovery):
         self._cancel_grace_remove((service_type, name))
         try:
             info = zc.get_service_info(service_type, name, timeout=self._service_info_timeout_ms)
+        except OSError as exc:
+            self._logger.warning("mDNS lookup OS error for %s %s: %s", service_type, name, exc)
+            self._schedule_recovery()
+            return
         except Exception:
             self._logger.debug("mDNS lookup failed for %s %s", service_type, name, exc_info=True)
             return
         if info is None:
             self._logger.debug("mDNS service info unavailable for %s %s", service_type, name)
             return
-        payload = self._build_payload(service_type, name, info, online=online)
+        try:
+            payload = self._build_payload(service_type, name, info, online=online)
+        except Exception:
+            self._logger.debug("mDNS payload build failed for %s %s", service_type, name, exc_info=True)
+            return
         key = (service_type, name)
         self._seen_by_service[key] = payload
         host_key = self._host_key_for_payload(payload, service_type, name)
         self._service_host_keys[key] = host_key
-        aggregate = self._aggregate_payload_for_host(host_key, online=True)
+        try:
+            aggregate = self._aggregate_payload_for_host(host_key, online=True)
+        except Exception:
+            self._logger.debug("mDNS aggregate failed for %s %s", service_type, name, exc_info=True)
+            return
         previous_endpoint = self._host_last_endpoint.get(host_key)
         current_endpoint = (str(aggregate.get("ip", "0.0.0.0")), int(aggregate.get("port", 0) or 0))
         if previous_endpoint and previous_endpoint != current_endpoint:
@@ -426,6 +448,25 @@ class MDNSDiscovery(BaseDiscovery):
                 timer.cancel()
             except Exception:
                 pass
+
+    def _schedule_recovery(self) -> None:
+        """Rate-limited zeroconf refresh to recover from internal socket errors."""
+        import time
+        now = time.monotonic()
+        if now - self._last_recovery_time < 30.0:
+            return
+        self._last_recovery_time = now
+
+        def _recover() -> None:
+            if not self._running:
+                return
+            self._logger.info("mDNS recovery: refreshing zeroconf after socket error")
+            try:
+                self.refresh()
+            except Exception:
+                self._logger.debug("mDNS recovery refresh failed", exc_info=True)
+
+        self._schedule_main(_recover)
 
     def _apply_remove(self, key: tuple[str, str]) -> None:
         """Commit a service removal after the optional grace delay has elapsed."""

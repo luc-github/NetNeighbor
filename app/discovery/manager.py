@@ -3148,6 +3148,17 @@ class DiscoveryManager:
                             if isinstance(v, dict) and str(v.get("ip", "") or "").strip() == sip]
         for k in wsd_keys_to_drop:
             self._wsd_device_cache.pop(k, None)
+        # Purge SSDP profile cache (memory + disk) for this IP.
+        if self._ssdp_discovery is not None:
+            try:
+                self._ssdp_discovery.purge_ip_from_profile_cache(sip)
+            except Exception:
+                self._logger.debug("SSDP cache purge failed for %s", sip, exc_info=True)
+        self._ssdp_profile_cache_by_ip.pop(sip, None)
+        self._ssdp_profile_cache_emit_rows = [
+            (row_ip, row) for row_ip, row in self._ssdp_profile_cache_emit_rows
+            if str(row_ip).strip() != sip
+        ]
         if to_remove:
             self._notify()
 

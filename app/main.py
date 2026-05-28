@@ -29,5 +29,18 @@ if __name__ == "__main__":
         os.environ["LANG"] = _lang
         os.environ.setdefault("LC_ALL", _lang)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    # zeroconf uses asyncio internally; on Windows the default ProactorEventLoop is
+    # unstable with UDP sockets and crashes (WinError 59) when interfaces change or
+    # devices disconnect mid-scan. Force the SelectorEventLoop before zeroconf is
+    # imported anywhere in the process.
+    if sys.platform == "win32":
+        import asyncio
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            try:
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            except Exception:
+                pass
     from app_qt import main
     raise SystemExit(main())
