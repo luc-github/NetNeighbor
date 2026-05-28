@@ -649,8 +649,9 @@ class DeviceDetailsDialog(QDialog):
         pix = icon.provided_icon_pixmap
         nat = icon.provided_icon_native_size
         has_source = icon.has_device_icon_source
+        mode = self._current_icon_mode(icon)
 
-        if not has_source:
+        if not has_source or mode != "provided":
             self._provided_icon_preview.hide()
             self._provided_icon_size_lbl.hide()
             return
@@ -712,6 +713,7 @@ class DeviceDetailsDialog(QDialog):
             icon.selected_custom_icon_id = picked
             self._last_icon_mode = "custom"
             self._refresh_icon_detail_line(icon)
+            self._refresh_provided_icon_preview(icon)
             return
         mode = "system" if btn_id == 0 else "provided"
         if mode == "provided" and not icon.has_device_icon_source:
@@ -720,6 +722,7 @@ class DeviceDetailsDialog(QDialog):
         icon.on_apply(mode, None)
         self._last_icon_mode = mode
         self._refresh_icon_detail_line(icon)
+        self._refresh_provided_icon_preview(icon)
 
     def _on_open_custom_icons_folder(self) -> None:
         folder = user_custom_icons_dir()
