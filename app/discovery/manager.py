@@ -274,6 +274,7 @@ class DiscoveryManager:
         # One "online" notification per LAN host until it goes offline (SSDP + mDNS rows share IP).
         self._presence_announced_hosts: set[str] = set()
         self._identity_pending: dict[str, tuple[datetime, Device]] = {}
+        self._ssdp_profile_cache_lock = threading.Lock()
         self._ssdp_profile_cache_by_ip: dict[str, dict]
         self._ssdp_profile_cache_emit_rows: list[tuple[str, dict]]
         self._ssdp_profile_cache_by_ip, self._ssdp_profile_cache_emit_rows = (
@@ -343,7 +344,7 @@ class DiscoveryManager:
                 self._wsd_nmb_retry_timer.cancel()
                 self._wsd_nmb_retry_timer = None
             self._wsd_nmb_pending.clear()
-        self._wsd_nmb_probed.clear()
+            self._wsd_nmb_probed.clear()
         self._logger.info("Stopping discovery protocols")
         for protocol in self._protocols:
             protocol.stop()
@@ -476,6 +477,7 @@ class DiscoveryManager:
         self._apply_hidden_override(device)
 
         prev_online: bool | None = existing.online if existing is not None else None
+        old_key_to_drop: str | None = None
 
         if existing is not None:
             # Preserve user-follow choice across updates.
@@ -496,8 +498,8 @@ class DiscoveryManager:
                 device.icon = existing.icon or device.icon
                 if not device.url and existing.url:
                     device.url = existing.url
-                if existing_key != device.key and existing_key in self._devices:
-                    del self._devices[existing_key]
+                if existing_key != device.key:
+                    old_key_to_drop = existing_key
                 existing_key = device.key
 
         if not isinstance(device.metadata, dict):
@@ -512,7 +514,10 @@ class DiscoveryManager:
             existing_arrival = self._arrival_sequence
         device.metadata["_arrival_index"] = existing_arrival
         self._supplement_missing_user_location(device, existing)
+        # Assign new key before removing old key so the device is never absent from _devices.
         self._devices[existing_key] = device
+        if old_key_to_drop is not None:
+            self._devices.pop(old_key_to_drop, None)
         self._maybe_queue_nmb_probe_for_synthetic_wsd(device)
         self._run_location_reapply_sweep()
         device_log = self._device_event_logger(device.source)
@@ -594,7 +599,7 @@ class DiscoveryManager:
             # Clean up probe state for this device when it goes offline.
             with self._wsd_nmb_retry_lock:
                 self._wsd_nmb_pending.pop(dev_key, None)
-            probed_v4 = self._wsd_nmb_probed.pop(dev_key, None)
+                probed_v4 = self._wsd_nmb_probed.pop(dev_key, None)
             if probed_v4:
                 nmb.remove_directed_ip(probed_v4)
             return
@@ -636,7 +641,8 @@ class DiscoveryManager:
         else:
             return
         nmb.suggest_directed_ip(target_v4)
-        self._wsd_nmb_probed[dev_key] = target_v4
+        with self._wsd_nmb_retry_lock:
+            self._wsd_nmb_probed[dev_key] = target_v4
 
     def _schedule_wsd_nmb_retry_locked(self) -> None:
         """Schedule the next retry tick (must be called with ``_wsd_nmb_retry_lock`` held)."""
@@ -968,27 +974,29 @@ class DiscoveryManager:
         probe_start = datetime.now(timezone.utc)
 
         def _on_result(ip: str, port: int, reachable: bool) -> None:
-            changed = False
-            now = datetime.now(timezone.utc)
-            for d in list(self._devices.values()):
-                sip = str(d.ip).strip()
-                dport = int(d.port or 0)
-                if sip != ip or dport != port:
-                    continue
-                if reachable:
-                    if d.online:
-                        d.last_seen = now
+            def apply() -> None:
+                changed = False
+                now = datetime.now(timezone.utc)
+                for d in list(self._devices.values()):
+                    sip = str(d.ip).strip()
+                    dport = int(d.port or 0)
+                    if sip != ip or dport != port:
+                        continue
+                    if reachable:
+                        if d.online:
+                            d.last_seen = now
+                            changed = True
+                    elif d.online and not (d.last_seen and d.last_seen > probe_start):
+                        # Only mark offline if no protocol has confirmed online since probe start.
+                        d.online = False
                         changed = True
-                elif d.online and not (d.last_seen and d.last_seen > probe_start):
-                    # Only mark offline if no protocol has confirmed online since probe start.
-                    d.online = False
-                    changed = True
-            if changed:
-                if reachable:
-                    self._logger.debug("TCP probe: %s:%s reachable", ip, port)
-                else:
-                    self._logger.info("TCP probe: %s:%s unreachable → offline", ip, port)
-                self._notify()
+                if changed:
+                    if reachable:
+                        self._logger.debug("TCP probe: %s:%s reachable", ip, port)
+                    else:
+                        self._logger.info("TCP probe: %s:%s unreachable → offline", ip, port)
+                    self._notify()
+            self._schedule_on_main_thread(apply)
 
         probe_devices_background(targets, _on_result, timeout_s=1.5, max_workers=8)
 
@@ -1267,9 +1275,10 @@ class DiscoveryManager:
         2. ``mdns_txt``: only when (1) has no usable ``ssdp_location`` — TXT may advertise the descriptor
            before SSDP has run / populated cache.
         """
-        self._ssdp_profile_cache_by_ip, self._ssdp_profile_cache_emit_rows = (
-            self._load_ssdp_profile_cache_by_ip()
-        )
+        with self._ssdp_profile_cache_lock:
+            self._ssdp_profile_cache_by_ip, self._ssdp_profile_cache_emit_rows = (
+                self._load_ssdp_profile_cache_by_ip()
+            )
         row = self._ssdp_profile_cache_by_ip.get(sip)
         loc = row.get("ssdp_location") if isinstance(row, dict) else None
         loc_s = loc.strip() if isinstance(loc, str) and loc.strip() else ""
@@ -1289,7 +1298,10 @@ class DiscoveryManager:
 
         Resolution uses :meth:`_resolve_anticipatory_descriptor_for_mdns` (single source-of-truth chain).
         """
-        if device.source != "mdns" or not device.online:
+        if device.source != "mdns":
+            return
+        if not device.online:
+            self._anticipatory_fetch_attempted.discard(device.key)
             return
         ssdp = self._ssdp_discovery
         if ssdp is None:
@@ -3138,11 +3150,12 @@ class DiscoveryManager:
                 self._ssdp_discovery.purge_ip_from_xml_cache(sip)
             except Exception:
                 self._logger.warning("SSDP cache purge failed for %s", sip, exc_info=True)
-        self._ssdp_profile_cache_by_ip.pop(sip, None)
-        self._ssdp_profile_cache_emit_rows = [
-            (row_ip, row) for row_ip, row in self._ssdp_profile_cache_emit_rows
-            if str(row_ip).strip() != sip
-        ]
+        with self._ssdp_profile_cache_lock:
+            self._ssdp_profile_cache_by_ip.pop(sip, None)
+            self._ssdp_profile_cache_emit_rows = [
+                (row_ip, row) for row_ip, row in self._ssdp_profile_cache_emit_rows
+                if str(row_ip).strip() != sip
+            ]
         if to_remove:
             self._notify()
 

@@ -33,7 +33,11 @@ _ENUMERATION_REFRESH_INTERVAL_S = 240
 # stale records that truly disappeared will be cleaned up on the next user-
 # initiated reload even if this timer hasn't fired.  Set long enough to survive
 # the worst-case zeroconf re-query window (~4 × re-query intervals ≈ 2-3 min).
-_SERVICE_REMOVE_GRACE_S = 180
+_SERVICE_REMOVE_GRACE_S = 120
+# After a forced refresh the Zeroconf cache is cleared and fresh PTR queries go
+# out.  Devices that are still online re-announce quickly; those that don't
+# re-announce within this window are considered offline.
+_REFRESH_REMOVE_GRACE_S = 15
 
 
 _TYPE_MAP_PATH = Path(__file__).resolve().parent.parent / "config" / "device_types.json"
@@ -176,9 +180,12 @@ class MDNSDiscovery(BaseDiscovery):
     def refresh(self) -> None:
         if not self._running or self._zeroconf is None:
             return
-        # Cancel pending grace-remove timers before dropping the cache.
+        # Reschedule pending grace-removes with short timeout instead of cancelling.
+        # Devices that re-announce during the refresh will cancel their timer; devices
+        # that don't re-announce within _REFRESH_REMOVE_GRACE_S are considered offline.
         for key in list(self._pending_remove_timers):
-            self._cancel_grace_remove(key)
+            host_key = self._service_host_keys.get(key, "")
+            self._schedule_grace_remove(key, host_key, delay=float(_REFRESH_REMOVE_GRACE_S))
         # Cancel running browsers.
         for browser in self._browsers:
             try:
@@ -421,7 +428,8 @@ class MDNSDiscovery(BaseDiscovery):
         self._cancel_grace_remove(key)
         self._apply_remove(key)
 
-    def _schedule_grace_remove(self, key: tuple[str, str], _host_key: str) -> None:
+    def _schedule_grace_remove(self, key: tuple[str, str], _host_key: str, delay: float | None = None) -> None:
+        grace_s = delay if delay is not None else float(_SERVICE_REMOVE_GRACE_S)
         self._cancel_grace_remove(key)
 
         def apply_remove() -> None:
@@ -433,13 +441,13 @@ class MDNSDiscovery(BaseDiscovery):
         def _fire() -> None:
             self._schedule_main(apply_remove)
 
-        timer = threading.Timer(float(_SERVICE_REMOVE_GRACE_S), _fire)
+        timer = threading.Timer(grace_s, _fire)
         timer.daemon = True
         self._pending_remove_timers[key] = timer
         timer.start()
         self._logger.debug(
-            "mDNS grace remove scheduled for %s %s (host still alive, %ds delay)",
-            key[0], key[1], _SERVICE_REMOVE_GRACE_S,
+            "mDNS grace remove scheduled for %s %s (host still alive, %.0fs delay)",
+            key[0], key[1], grace_s,
         )
 
     def _cancel_grace_remove(self, key: tuple[str, str]) -> None:
