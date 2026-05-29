@@ -809,7 +809,7 @@ msgid "Home appliance"
 msgstr ""
 
 #: utils/details_payload.py:119
-msgid "ESP3D / firmware"
+msgid "ESP3D Device"
 msgstr ""
 
 #: utils/details_payload.py:120

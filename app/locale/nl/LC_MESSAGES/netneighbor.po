@@ -826,8 +826,8 @@ msgid "Home appliance"
 msgstr "Huishoudelijk apparaat"
 
 #: utils/details_payload.py:119
-msgid "ESP3D / firmware"
-msgstr "ESP3D / firmware"
+msgid "ESP3D Device"
+msgstr "ESP3D Apparaat"
 
 #: utils/details_payload.py:120
 msgid "Scanner"

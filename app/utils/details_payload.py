@@ -120,7 +120,7 @@ def format_device_type_for_details(device: Device) -> str:
         "3dprinter": _("3D printer"),
         "nas": _("NAS"),
         "computer": _("Computer"),
-        "esp32": _("ESP3D / firmware"),
+        "esp32": _("ESP3D Device"),
         "scanner": _("Scanner"),
     }
     if t in known:
