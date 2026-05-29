@@ -13,6 +13,7 @@ import socket
 import threading
 
 from discovery.base import BaseDiscovery
+from utils.discovery_config import category_for_device_type
 from utils.mdns_rules import cached_mdns_rules, evaluate_type_rules
 from utils.scheduling import ScheduleMainFn
 from utils.user_config_overlay import USER_DEVICE_TYPES_JSON, merge_device_types_trees, optional_user_json
@@ -501,7 +502,7 @@ class MDNSDiscovery(BaseDiscovery):
         display_name = self._infer_display_name(name, txt, self._to_text(server))
         type_name = str(mapping.get("type", "unknown")).strip().lower() or "unknown"
         type_name = self._infer_type_from_context(type_name, service_key, display_name, txt)
-        category = self._category_for_type(
+        category = category_for_device_type(
             type_name,
             str(mapping.get("category", _("Unknown Devices"))) or _("Unknown Devices"),
         )
@@ -548,7 +549,7 @@ class MDNSDiscovery(BaseDiscovery):
         mapping = self._type_map.get(service_key, {})
         type_name = str(mapping.get("type", "unknown")).strip().lower() or "unknown"
         type_name = self._infer_type_from_context(type_name, service_key, self._infer_display_name(name, {}), {})
-        category = self._category_for_type(
+        category = category_for_device_type(
             type_name,
             str(mapping.get("category", _("Unknown Devices"))) or _("Unknown Devices"),
         )
@@ -932,7 +933,7 @@ class MDNSDiscovery(BaseDiscovery):
             icon_out = self._icon_for_type(agg_type)
         elif self._aggregate_type_rank(agg_type) > self._aggregate_type_rank(seed_type):
             icon_out = self._icon_for_type(agg_type)
-        category = self._category_for_type(agg_type, representative.get("category", _("Unknown Devices")))
+        category = category_for_device_type(agg_type, representative.get("category", _("Unknown Devices")))
 
         rep_svc = str(rep_metadata.get("service", ""))
         self._logger.debug(
@@ -971,28 +972,6 @@ class MDNSDiscovery(BaseDiscovery):
             return info_url.format(ip=ip, port=port)
         except Exception:
             return None
-
-    def _category_for_type(self, device_type: str, fallback: str) -> str:
-        return {
-            "router": _("Routers & Gateways"),
-            "mediaserver": _("Media Servers"),
-            "scanner": _("Printers"),
-            "printer": _("Printers"),
-            "networkprinter": _("Printers"),
-            "multifunction_printer": _("Printers"),
-            "smartspeaker": _("Smart Speakers"),
-            "smarttv": _("Smart TVs"),
-            "smartdevice": _("Smart Devices"),
-            "camera": _("Cameras"),
-            "homeappliance": _("Home Appliances"),
-            "cnc": _("CNC Machines"),
-            "3dprinter": _("3D Printers"),
-            "nas": _("NAS / File Servers"),
-            "computer": _("Computers"),
-            "esp32": _("ESP3D Devices"),
-            "http": _("Unknown Devices"),
-            "unknown": _("Unknown Devices"),
-        }.get(device_type, fallback or _("Unknown Devices"))
 
     def _icon_for_type(self, device_type: str) -> str | None:
         return {

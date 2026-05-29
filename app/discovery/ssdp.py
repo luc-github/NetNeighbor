@@ -27,6 +27,7 @@ from collections.abc import Callable
 
 from discovery.base import BaseDiscovery
 from utils.discovery_cache import load_discovery_cache, save_discovery_cache
+from utils.discovery_config import category_for_device_type
 from utils.user_config_overlay import merge_ssdp_rules_overlays
 
 _SSDP_ADDR = ("239.255.255.250", 1900)
@@ -623,7 +624,7 @@ class SSDPDiscovery(BaseDiscovery):
                 enriched.get("port"),
             )
         except Exception:
-            self._logger.debug("SSDP XML enrichment failed for %s", src_ip, exc_info=True)
+            self._logger.warning("SSDP XML enrichment failed for %s", src_ip, exc_info=True)
 
     def _refresh_loop(self) -> None:
         while self._running:
@@ -764,7 +765,7 @@ class SSDPDiscovery(BaseDiscovery):
             "ip": ip,
             "port": port,
             "type": device_type,
-            "category": self._infer_category(device_type),
+            "category": category_for_device_type(device_type),
             "source": "ssdp",
             # Only use a real presentation URL from SSDP XML.
             "url": presentation_url if isinstance(presentation_url, str) and presentation_url.strip() else None,
@@ -836,7 +837,7 @@ class SSDPDiscovery(BaseDiscovery):
             "ip": ip,
             "port": port,
             "type": device_type,
-            "category": self._infer_category(device_type),
+            "category": category_for_device_type(device_type),
             "source": "ssdp",
             "url": None,
             "metadata": {
@@ -937,25 +938,6 @@ class SSDPDiscovery(BaseDiscovery):
         if "basic" in combined or "computer" in combined:
             return "computer"
         return "unknown"
-
-    def _infer_category(self, device_type: str) -> str:
-        return {
-            "router": _("Routers & Gateways"),
-            "mediaserver": _("Media Servers"),
-            "printer": _("Printers"),
-            "networkprinter": _("Printers"),
-            "multifunction_printer": _("Printers"),
-            "smartspeaker": _("Smart Speakers"),
-            "smarttv": _("Smart TVs"),
-            "smartdevice": _("Smart Devices"),
-            "camera": _("Cameras"),
-            "homeappliance": _("Home Appliances"),
-            "cnc": _("CNC Machines"),
-            "3dprinter": _("3D Printers"),
-            "nas": _("NAS / File Servers"),
-            "computer": _("Computers"),
-            "unknown": _("Unknown Devices"),
-        }.get(device_type, _("Unknown Devices"))
 
     def _device_key(self, payload: dict) -> str:
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
@@ -1292,6 +1274,25 @@ class SSDPDiscovery(BaseDiscovery):
                 removed += 1
         if removed:
             self._logger.debug("SSDP profile cache purged %d entries for %s", removed, sip)
+            self._flush_persistent_caches_if_due(force=True)
+
+    def purge_ip_from_xml_cache(self, ip: str) -> None:
+        """Remove all XML cache entries (memory + disk) whose descriptor URL resolves to *ip*."""
+        sip = str(ip).strip()
+        if not sip:
+            return
+        removed = 0
+        for cache in (self._xml_cache, self._xml_disk_cache):
+            for location in list(cache.keys()):
+                try:
+                    host = urlparse(location).hostname
+                except ValueError:
+                    continue
+                if host and str(host).strip() == sip:
+                    cache.pop(location, None)
+                    removed += 1
+        if removed:
+            self._logger.debug("SSDP XML cache purged %d entries for %s", removed, sip)
             self._flush_persistent_caches_if_due(force=True)
 
     def _build_persistent_profile_cache_entries(self) -> dict[str, dict]:

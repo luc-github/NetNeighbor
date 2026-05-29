@@ -20,7 +20,7 @@ from discovery.wsdd_client import WsddSocketDiscovery
 from discovery.wsd import WSDiscovery, is_synthetic_wsd_display_name
 from model.device import Device
 from utils.discovery_cache import CACHE_MAX_AGE_HOURS, load_discovery_cache, save_nmb_name_cache, save_wsd_device_cache
-from utils.discovery_config import normalize_information_precedence_list
+from utils.discovery_config import category_for_device_type, normalize_information_precedence_list
 from utils.device_bundles import normalize_mac_for_bundle_merge
 from utils.discovery_identity import (
     normalize_monitored_name,
@@ -799,9 +799,9 @@ class DiscoveryManager:
             device_type = row.get("type") or "unknown"
             if not isinstance(device_type, str):
                 device_type = "unknown"
-            device_category = row.get("category") or self._category_for_type(device_type)
+            device_category = row.get("category") or category_for_device_type(device_type)
             if not isinstance(device_category, str):
-                device_category = self._category_for_type(device_type)
+                device_category = category_for_device_type(device_type)
             # Derive port from ssdp_location URL (e.g. "http://192.168.1.103:8008/…").
             port = 0
             ssdp_loc = row.get("ssdp_location")
@@ -869,7 +869,7 @@ class DiscoveryManager:
                 ip=sip,
                 port=445,
                 type="computer",
-                category=self._category_for_type("computer"),
+                category=category_for_device_type("computer"),
                 source="nmb",
                 url=None,
                 metadata={"from_nmb_cache": True},
@@ -910,7 +910,7 @@ class DiscoveryManager:
                 "wsd_scopes": row.get("wsd_scopes") or [],
             }
             device_type = row.get("type") or "computer"
-            device_category = row.get("category") or self._category_for_type(device_type)
+            device_category = row.get("category") or category_for_device_type(device_type)
             url = row.get("url") or None
             device = Device(
                 name=name,
@@ -1100,7 +1100,7 @@ class DiscoveryManager:
         mt = (xf.get("modelType") or "").strip().lower()
         if mt == "nas":
             device.type = "nas"
-            device.category = self._category_for_type("nas")
+            device.category = category_for_device_type("nas")
             return
         cached = row.get("type")
         if not isinstance(cached, str) or not cached.strip():
@@ -1109,12 +1109,12 @@ class DiscoveryManager:
         cur = str(device.type or "").strip().lower()
         if cur == "unknown":
             device.type = ct
-            device.category = self._category_for_type(ct)
+            device.category = category_for_device_type(ct)
             return
         weak = {"unknown", "http", "https", "computer"}
         if cur in weak and self._cross_protocol_type_rank(ct) > self._cross_protocol_type_rank(cur):
             device.type = ct
-            device.category = self._category_for_type(ct)
+            device.category = category_for_device_type(ct)
 
     def _mdns_web_endpoint(self, md: dict, device: Device) -> tuple[int, bool]:
         """HTTP(S) port from merged mDNS ``_http._tcp`` / ``_https._tcp`` rows."""
@@ -1318,7 +1318,7 @@ class DiscoveryManager:
             try:
                 xml_fields, raw_xml = ssdp.fetch_descriptor_xml(url_new)
             except Exception:
-                self._mdns_logger.debug("Anticipatory descriptor fetch failed for %s", url_new, exc_info=True)
+                self._mdns_logger.warning("Anticipatory descriptor fetch failed for %s", url_new, exc_info=True)
                 return
             if not xml_fields and not raw_xml:
                 return
@@ -1418,7 +1418,10 @@ class DiscoveryManager:
 
     def _should_hold_for_stable_identity(self, device: Device) -> bool:
         """Delay first appearance briefly until UID/MAC shows up, then release."""
-        if device.source not in {"mdns", "ssdp"} or not bool(device.online):
+        if device.source not in {"mdns", "ssdp"}:
+            return False
+        if not bool(device.online):
+            self._identity_pending.pop(self._pending_identity_key(device), None)
             return False
         if self._stable_identity_available(device):
             pending_key = self._pending_identity_key(device)
@@ -1567,7 +1570,7 @@ class DiscoveryManager:
                 normalized[key] = value_norm
         self._location_overrides = normalized
         changed = False
-        for device in self._devices.values():
+        for device in list(self._devices.values()):
             before = ""
             metadata = device.metadata if isinstance(device.metadata, dict) else {}
             value = metadata.get("user_location")
@@ -1604,7 +1607,7 @@ class DiscoveryManager:
                 normalized[key] = per_target
         self._field_mapping_rules = normalized
         changed = False
-        for device in self._devices.values():
+        for device in list(self._devices.values()):
             before_name = device.name
             before_info = ""
             before_loc = ""
@@ -2300,7 +2303,7 @@ class DiscoveryManager:
         old_rank = self._cross_protocol_type_rank(existing.type)
         new_rank = self._cross_protocol_type_rank(incoming.type)
         chosen_type = incoming.type if new_rank > old_rank else existing.type
-        chosen_category = self._category_for_type(chosen_type)
+        chosen_category = category_for_device_type(chosen_type)
         chosen_name = self._choose_cross_protocol_display_name(existing, incoming)
         chosen_icon = existing.icon
         if (not chosen_icon and incoming.icon) or new_rank > old_rank:
@@ -2377,7 +2380,7 @@ class DiscoveryManager:
         if not override_type:
             return
         device.type = override_type
-        device.category = self._category_for_type(override_type)
+        device.category = category_for_device_type(override_type)
 
     def _apply_name_override(self, device: Device) -> None:
         """Rule 0: apply saved name prefs last among the early pipeline (overrides rule 1 and mDNS)."""
@@ -3049,26 +3052,6 @@ class DiscoveryManager:
                 return loc
         return ""
 
-    def _category_for_type(self, device_type: str) -> str:
-        return {
-            "router": _("Routers & Gateways"),
-            "mediaserver": _("Media Servers"),
-            "printer": _("Printers"),
-            "networkprinter": _("Printers"),
-            "multifunction_printer": _("Printers"),
-            "smartspeaker": _("Smart Speakers"),
-            "smarttv": _("Smart TVs"),
-            "smartdevice": _("Smart Devices"),
-            "camera": _("Cameras"),
-            "homeappliance": _("Home Appliances"),
-            "cnc": _("CNC Machines"),
-            "3dprinter": _("3D Printers"),
-            "nas": _("NAS / File Servers"),
-            "computer": _("Computers"),
-            "esp32": _("ESP3D Devices"),
-            "unknown": _("Unknown Devices"),
-        }.get(device_type, _("Unknown Devices"))
-
     def set_bundle_monitored(self, ip: str, port: int, monitored: bool) -> None:
         """Follow/unfollow a UI bundle (persisted by MAC, else UPnP UID, else IP)."""
         anchor = self._anchor_device_for_endpoint(ip, port)
@@ -3148,12 +3131,13 @@ class DiscoveryManager:
                             if isinstance(v, dict) and str(v.get("ip", "") or "").strip() == sip]
         for k in wsd_keys_to_drop:
             self._wsd_device_cache.pop(k, None)
-        # Purge SSDP profile cache (memory + disk) for this IP.
+        # Purge SSDP profile cache and XML descriptor cache (memory + disk) for this IP.
         if self._ssdp_discovery is not None:
             try:
                 self._ssdp_discovery.purge_ip_from_profile_cache(sip)
+                self._ssdp_discovery.purge_ip_from_xml_cache(sip)
             except Exception:
-                self._logger.debug("SSDP cache purge failed for %s", sip, exc_info=True)
+                self._logger.warning("SSDP cache purge failed for %s", sip, exc_info=True)
         self._ssdp_profile_cache_by_ip.pop(sip, None)
         self._ssdp_profile_cache_emit_rows = [
             (row_ip, row) for row_ip, row in self._ssdp_profile_cache_emit_rows

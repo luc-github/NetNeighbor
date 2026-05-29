@@ -92,6 +92,35 @@ _DEFAULT_MERGE = {
 }
 
 
+def category_for_device_type(device_type: str, fallback: str | None = None) -> str:
+    """Return the translated category label for a device type slug.
+
+    Single source of truth shared by all discovery modules (manager, mdns, ssdp, wsd).
+    ``fallback`` is returned when the type is not in the table; defaults to ``"Unknown Devices"``.
+    """
+    return {
+        "router": _("Routers & Gateways"),
+        "mediaserver": _("Media Servers"),
+        "scanner": _("Printers"),
+        "printer": _("Printers"),
+        "networkprinter": _("Printers"),
+        "multifunction_printer": _("Printers"),
+        "smartspeaker": _("Smart Speakers"),
+        "smarttv": _("Smart TVs"),
+        "smartdevice": _("Smart Devices"),
+        "camera": _("Cameras"),
+        "homeappliance": _("Home Appliances"),
+        "cnc": _("CNC Machines"),
+        "3dprinter": _("3D Printers"),
+        "nas": _("NAS / File Servers"),
+        "computer": _("Computers"),
+        "esp32": _("ESP3D Devices"),
+        "http": _("Unknown Devices"),
+        "https": _("Unknown Devices"),
+        "unknown": _("Unknown Devices"),
+    }.get(device_type, fallback if fallback is not None else _("Unknown Devices"))
+
+
 def _ensure_nmb_before_wsd(roles: list[str]) -> list[str]:
     """Prefer NetBIOS / ``nmblookup`` names (neighborhood) over generic WSD labels for the same host."""
     if "nmb_live" not in roles or "wsd_live" not in roles:

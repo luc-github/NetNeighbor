@@ -15,6 +15,7 @@ import time
 from urllib.parse import urlparse
 
 from discovery.base import BaseDiscovery
+from utils.discovery_config import category_for_device_type
 
 QName = None  # type: ignore[misc, assignment]
 _ThreadedWSDiscovery = None
@@ -95,27 +96,6 @@ def is_synthetic_wsd_display_name(name: str) -> bool:
     if _WSD_SYNTHETIC_DISPLAY_RE.match(n):
         return True
     return False
-
-
-def _category_for_wsd_type(device_type: str) -> str:
-    return {
-        "router": _("Routers & Gateways"),
-        "mediaserver": _("Media Servers"),
-        "printer": _("Printers"),
-        "networkprinter": _("Printers"),
-        "multifunction_printer": _("Printers"),
-        "smartspeaker": _("Smart Speakers"),
-        "smarttv": _("Smart TVs"),
-        "smartdevice": _("Smart Devices"),
-        "camera": _("Cameras"),
-        "homeappliance": _("Home Appliances"),
-        "cnc": _("CNC Machines"),
-        "3dprinter": _("3D Printers"),
-        "nas": _("NAS / File Servers"),
-        "computer": _("Computers"),
-        "esp32": _("ESP3D Devices"),
-        "unknown": _("Unknown Devices"),
-    }.get(device_type, _("Unknown Devices"))
 
 
 def _qname_suggests_computer(t) -> bool:
@@ -567,7 +547,7 @@ class WSDiscovery(BaseDiscovery):
             except Exception:
                 services = []
         except Exception:
-            self._logger.debug("WSD probe sequence failed", exc_info=True)
+            self._logger.warning("WSD probe sequence failed", exc_info=True)
             return
         self._prune_sticky_epr_map()
         if not services:
@@ -726,7 +706,7 @@ class WSDiscovery(BaseDiscovery):
             "ip": ip_s,
             "port": int(port),
             "type": dev_type,
-            "category": _category_for_wsd_type(dev_type),
+            "category": category_for_device_type(dev_type),
             "source": self.source,
             "url": url,
             "metadata": metadata,
