@@ -9,6 +9,8 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import socket
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
 
@@ -27,6 +29,66 @@ def probe_tcp(ip: str, port: int, timeout_s: float = _DEFAULT_TIMEOUT_S) -> bool
             return True
     except OSError:
         return False
+
+
+def ping_host(ip: str, timeout_s: float = 2.0) -> bool:
+    """Return True if host responds to ICMP ping (no root required on Linux/Windows)."""
+    timeout_ms = str(int(timeout_s * 1000))
+    timeout_s_int = str(max(1, int(timeout_s)))
+    if sys.platform == "win32":
+        cmd = ["ping", "-n", "1", "-w", timeout_ms, ip]
+    else:
+        cmd = ["ping", "-c", "1", "-W", timeout_s_int, ip]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 2)
+    except Exception:
+        return False
+    if result.returncode != 0:
+        return False
+    # Windows ``ping`` exits 0 even when a router/other host answers with
+    # "Destination host unreachable" (ICMP type 3) for an offline LAN target —
+    # it counts as Received=1, Lost=0. A genuine reply from the target itself
+    # always contains "TTL=", which the unreachable/timeout messages do not.
+    if sys.platform == "win32":
+        return "TTL=" in (result.stdout or "").upper()
+    return True
+
+
+def ping_ips_background(
+    ips: list[str],
+    on_result: Callable[[str, bool], None],
+    *,
+    timeout_s: float = 2.0,
+    max_workers: int = 16,
+) -> None:
+    """Ping all IPs concurrently; call on_result(ip, reachable) for each.
+
+    Runs entirely in background daemon threads — never blocks the caller.
+    """
+    if not ips:
+        return
+
+    def _worker() -> None:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(max_workers, len(ips)),
+            thread_name_prefix="ping-probe",
+        ) as pool:
+            futures: dict[concurrent.futures.Future[bool], str] = {
+                pool.submit(ping_host, ip, timeout_s): ip
+                for ip in ips
+            }
+            for fut in concurrent.futures.as_completed(futures):
+                ip = futures[fut]
+                try:
+                    reachable = fut.result()
+                except Exception:
+                    reachable = False
+                try:
+                    on_result(ip, reachable)
+                except Exception:
+                    _logger.debug("ping-probe on_result error for %s", ip, exc_info=True)
+
+    threading.Thread(target=_worker, name="ping-probe-pool", daemon=True).start()
 
 
 def probe_devices_background(

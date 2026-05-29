@@ -103,6 +103,40 @@ Optional hooks registered via `register_presence_transition_hook`: called on
 `"online"` / `"offline"` transitions. Callbacks run on the discovery thread —
 use `GLib.idle_add` before touching GTK.
 
+### Reachability probe & offline removal
+
+Passive discovery alone cannot tell a brutally disconnected host (power loss,
+cable pull) from a quiet one — mDNS/SSDP records only expire after their TTL,
+which can be tens of minutes. Two active probes close that gap:
+
+- **Startup TCP probe** (`_start_tcp_probes_for_cached_devices`): on `start()`,
+  every cached online endpoint with a usable port is TCP-probed (1.5 s timeout).
+  Gives the UI a clean picture within ~5 s without waiting for live discovery.
+- **Periodic ICMP probe** (`_start_ping_probes_for_live_devices`): every
+  `_PERIODIC_PROBE_INTERVAL_S` (180 s) each online device's IP is pinged
+  (`utils/tcp_probe.ping_host`, no admin rights needed). Works regardless of
+  port. On Windows, exit code `0` is insufficient — a router answering
+  *"Destination host unreachable"* for an offline LAN target also exits `0`, so
+  the probe additionally requires `TTL=` in the output (only present in a
+  genuine reply from the target).
+
+Both probes only flip a device offline if no protocol confirmed it online since
+the probe started (`last_seen > probe_start` guard), avoiding races with live
+discovery. All mutations are marshalled to the main thread via
+`schedule_on_main_thread`.
+
+**Offline removal policy** — when a device that was online transitions to
+offline (via a probe, or an mDNS byebye/SSDP byebye through
+`add_or_update_device` with `prev_online is True`):
+
+- **Monitored** (followed) devices stay in the list, greyed out.
+- **Non-monitored** devices are dropped from `_devices` immediately — a device
+  returning from sleep is re-discovered automatically by mDNS/SSDP or on the
+  next user refresh, so no deferred grace timer is needed.
+
+Devices restored from the disk cache as offline at startup (`prev_online is
+None`) are kept, so the startup probe / live discovery can confirm them.
+
 ---
 
 ## Protocol modules
@@ -120,7 +154,7 @@ use `GLib.idle_add` before touching GTK.
 - Uses `zeroconf` library (passive browsing + DNS-SD enumeration)
 - Aggregates per-service payloads into per-host entries
 - URL only set when `_http._tcp` is actually advertised
-- **Grace period on removal**: `remove_service` callbacks are delayed 180 s when the host is still alive, absorbing mDNS TTL jitter that would otherwise cause false offline flaps
+- **Grace period on removal**: `remove_service` callbacks are delayed 120 s when the host is still alive, absorbing mDNS TTL jitter that would otherwise cause false offline flaps. After a user `refresh()` the pending grace-removes are rescheduled to a short 15 s window so a stale device disappears quickly if it does not re-announce
 - **Refresh = full Zeroconf restart**: `refresh()` closes and reopens the `Zeroconf` instance to clear its DNS cache, then recreates all `ServiceBrowser` objects. This ensures PTR queries go out without *known-answer suppression* headers (RFC 6762 §7.1), so devices that stopped announcing (TTL expired) will respond and repopulate the device list
 - See [`MDNS.md`](MDNS.md) for full details
 

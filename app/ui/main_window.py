@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 from gettext import gettext as _
 from PySide6.QtCore import QDateTime, QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QPainter, QPalette, QResizeEvent, QShowEvent
+from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPainter, QPalette, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -1506,7 +1506,7 @@ class NetNeighborMainWindow(QMainWindow):
                     _safe_str(b.primary.ip),
                     (b.primary.type or "").lower(),
                     bundle_location_label(b, no_location_label=self._no_location_label()),
-                    bool(b.primary.online),
+                    bool(b.online),
                 )
                 for b in ordered
             ),
@@ -1888,6 +1888,34 @@ class NetNeighborMainWindow(QMainWindow):
         self._refresh_device_widgets()
 
     def _icon_for_bundle(self, bundle: DeviceBundle) -> QIcon:
+        icon = self._base_icon_for_bundle(bundle)
+        if not bundle.online:
+            icon = self._dimmed_icon(icon)
+        return icon
+
+    @staticmethod
+    def _dimmed_icon(icon: QIcon) -> QIcon:
+        """Render an offline device's icon faded + desaturated (greyed-out tile)."""
+        if icon.isNull():
+            return icon
+        src = icon.pixmap(DEVICE_ICON_REFERENCE_PX, DEVICE_ICON_REFERENCE_PX)
+        if src.isNull():
+            return icon
+        faded = QPixmap(src.size())
+        faded.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(faded)
+        # Global fade.
+        painter.setOpacity(0.3)
+        painter.drawPixmap(0, 0, src)
+        # Grey tint, applied only on the icon's own pixels (SourceAtop keeps the
+        # alpha shape) so the device reads clearly as "offline".
+        painter.setOpacity(0.55)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
+        painter.fillRect(faded.rect(), QColor(120, 120, 120))
+        painter.end()
+        return QIcon(faded)
+
+    def _base_icon_for_bundle(self, bundle: DeviceBundle) -> QIcon:
         ep = (bundle.ip, bundle.port)
         mode = self._normalized_icon_mode(bundle)
         px = ICON_SIZE_PRESET_PIXELS.get(

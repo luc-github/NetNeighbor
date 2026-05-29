@@ -290,7 +290,9 @@ Corrections:
 
 **Device appears/disappears:**
 - SSDP `byebye` causes immediate offline; timeout-based offline if announcements stop
-- Devices that sleep will disappear when their TTL expires
+- A device that is unplugged or powered off is detected within ~3 minutes by a background reachability check (ICMP ping), even if it sent no goodbye message
+- Once offline, a **monitored** device stays visible greyed out; a non-monitored device is removed from the list. A device that returns (e.g. wakes from sleep) reappears automatically on the next discovery scan or after **View → Reload discovery**
+- After **Reload discovery**, devices that no longer respond are dropped within ~15 seconds instead of waiting for the full timeout
 
 **Open is disabled:**
 - No connection target was found; check the device's IP/services in Details

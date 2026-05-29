@@ -38,6 +38,7 @@ AnticipatoryDescriptorSource = Literal["ssdp_profile_cache", "mdns_txt"]
 PresenceTransitionKind = Literal["online", "offline"]
 PresenceTransitionHook = Callable[[Device, PresenceTransitionKind], None]
 _IDENTITY_HOLD_SECONDS = 3.0
+_PERIODIC_PROBE_INTERVAL_S = 180.0
 # Coalesce burst ``_notify()`` calls (mDNS / merge can fire many times per 100 ms window).
 _NOTIFY_DEBOUNCE_SECONDS = 0.08
 # Retry WSD NMB probes when ARP cache is cold at device arrival time.
@@ -255,6 +256,8 @@ class DiscoveryManager:
         self._listeners: list[Callable[[list[Device]], None]] = []
         self._notify_debounce_lock = threading.Lock()
         self._notify_debounce_timer: threading.Timer | None = None
+        self._periodic_probe_lock = threading.Lock()
+        self._periodic_probe_timer: threading.Timer | None = None
         self._stopped: bool = False
         self._wsd_nmb_retry_lock = threading.Lock()
         self._wsd_nmb_retry_timer: threading.Timer | None = None
@@ -332,6 +335,7 @@ class DiscoveryManager:
             return
         for protocol in self._protocols:
             protocol.start()
+        self._schedule_periodic_probe()
 
     def stop(self) -> None:
         self._stopped = True
@@ -339,6 +343,10 @@ class DiscoveryManager:
             if self._notify_debounce_timer is not None:
                 self._notify_debounce_timer.cancel()
                 self._notify_debounce_timer = None
+        with self._periodic_probe_lock:
+            if self._periodic_probe_timer is not None:
+                self._periodic_probe_timer.cancel()
+                self._periodic_probe_timer = None
         with self._wsd_nmb_retry_lock:
             if self._wsd_nmb_retry_timer is not None:
                 self._wsd_nmb_retry_timer.cancel()
@@ -355,6 +363,22 @@ class DiscoveryManager:
         self._logger.debug("Manual refresh requested")
         for protocol in self._protocols:
             protocol.refresh()
+
+    def _schedule_periodic_probe(self) -> None:
+        def _tick() -> None:
+            if self._stopped:
+                return
+            self._logger.debug("Periodic ping probe tick")
+            self._start_ping_probes_for_live_devices()
+            self._schedule_periodic_probe()
+
+        timer = threading.Timer(_PERIODIC_PROBE_INTERVAL_S, _tick)
+        timer.daemon = True
+        with self._periodic_probe_lock:
+            if self._stopped:
+                return
+            self._periodic_probe_timer = timer
+        timer.start()
 
     def _ssdp_probe_ips_from_mdns_without_ssdp(self) -> list[str]:
         """IPv4 addresses with live mDNS rows but no SSDP row (unicast M-SEARCH fills NOTIFY gaps)."""
@@ -552,6 +576,12 @@ class DiscoveryManager:
             uloc,
         )
         self._emit_presence_hooks_if_transition(device, prev_online, device.online)
+        # A live device that just went offline drops from the list unless it is
+        # followed (monitored stays greyed out). Only true online→offline
+        # transitions trigger this — devices restored from cache as offline
+        # (prev_online is None) are kept so live discovery can confirm them.
+        if prev_online is True and not device.online and not device.monitored:
+            self._devices.pop(existing_key, None)
         if device.source == "nmb" and device.online:
             name = (device.name or "").strip()
             if name:
@@ -990,6 +1020,9 @@ class DiscoveryManager:
                         # Only mark offline if no protocol has confirmed online since probe start.
                         d.online = False
                         changed = True
+                        # Followed devices stay (greyed out); others drop from the list.
+                        if not d.monitored:
+                            self._devices.pop(d.key, None)
                 if changed:
                     if reachable:
                         self._logger.debug("TCP probe: %s:%s reachable", ip, port)
@@ -999,6 +1032,56 @@ class DiscoveryManager:
             self._schedule_on_main_thread(apply)
 
         probe_devices_background(targets, _on_result, timeout_s=1.5, max_workers=8)
+
+    def _start_ping_probes_for_live_devices(self) -> None:
+        """Periodic ICMP ping probe — detects offline devices regardless of port."""
+        from utils.tcp_probe import ping_ips_background
+
+        ip_set: set[str] = set()
+        for d in list(self._devices.values()):
+            if not d.online:
+                continue
+            ip = str(d.ip).strip().split("%", 1)[0]
+            if not ip or ip in {"0.0.0.0", "::"}:
+                continue
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            ip_set.add(ip)
+
+        if not ip_set:
+            return
+
+        self._logger.info("Periodic ping probe: checking %d IP(s)", len(ip_set))
+        probe_start = datetime.now(timezone.utc)
+
+        def _on_result(ip: str, reachable: bool) -> None:
+            def apply() -> None:
+                changed = False
+                now = datetime.now(timezone.utc)
+                for d in list(self._devices.values()):
+                    if str(d.ip).strip().split("%", 1)[0] != ip:
+                        continue
+                    if reachable:
+                        if d.online:
+                            d.last_seen = now
+                            changed = True
+                    elif d.online and not (d.last_seen and d.last_seen > probe_start):
+                        d.online = False
+                        changed = True
+                        # Followed devices stay (greyed out); others drop from the list.
+                        if not d.monitored:
+                            self._devices.pop(d.key, None)
+                if changed:
+                    if reachable:
+                        self._logger.debug("Ping probe: %s reachable", ip)
+                    else:
+                        self._logger.info("Ping probe: %s unreachable → offline", ip)
+                    self._notify()
+            self._schedule_on_main_thread(apply)
+
+        ping_ips_background(list(ip_set), _on_result, timeout_s=2.0)
 
     def _ssdp_profile_display_name(self, row: dict) -> str:
         """Best-effort human label from persisted SSDP profile (disk cache)."""

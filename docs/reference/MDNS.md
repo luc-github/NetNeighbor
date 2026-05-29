@@ -62,6 +62,10 @@ Type starts from `device_types.json`, refined by heuristics (`fluidnc→cnc`, `s
 
 A host stays online while at least one tracked service remains. Removing one service updates the aggregated payload; offline is emitted only when all services are gone — avoids flapping for multi-service hosts.
 
+When the last service disappears while the host is still otherwise alive, the removal is delayed by a **120 s grace period** to absorb mDNS TTL jitter. A user-initiated `refresh()` reschedules any pending grace-removes to a short **15 s window**, so a device that truly left the network disappears quickly instead of lingering for the full grace period.
+
+Brutal disconnections (power loss, cable pull) emit no byebye and would otherwise persist until the mDNS TTL expires. The manager's periodic ICMP probe (see [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md#reachability-probe--offline-removal)) flips such hosts offline within ~180 s and drops non-monitored ones from the list.
+
 ---
 
 ## Rules file (`config/mdns_rules.json`)
