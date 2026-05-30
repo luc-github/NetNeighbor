@@ -35,12 +35,18 @@ def ping_host(ip: str, timeout_s: float = 2.0) -> bool:
     """Return True if host responds to ICMP ping (no root required on Linux/Windows)."""
     timeout_ms = str(int(timeout_s * 1000))
     timeout_s_int = str(max(1, int(timeout_s)))
+    # On Windows, CREATE_NO_WINDOW prevents a console window from flashing on
+    # screen for every ping (the subprocess would otherwise pop a brief cmd box).
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
     if sys.platform == "win32":
         cmd = ["ping", "-n", "1", "-w", timeout_ms, ip]
     else:
         cmd = ["ping", "-c", "1", "-W", timeout_s_int, ip]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 2)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout_s + 2,
+            creationflags=creationflags,
+        )
     except Exception:
         return False
     if result.returncode != 0:
