@@ -2,8 +2,6 @@
 
 ## Release 2.0.1
 
-*2026-05-28 to 2026-05-29*
-
 This release improves network device discovery stability and offline handling with better cache management, unified device type classification, and enhanced error logging for easier troubleshooting.
 
 ## 📋 Table of Contents

@@ -319,7 +319,14 @@ class DiscoveryManager:
 
     @property
     def devices(self) -> list[Device]:
-        return sorted(self._devices_snapshot(), key=lambda device: (device.category, device.name.lower()))
+        # Invariant: only *followed* devices stay visible (greyed out) when offline.
+        # A non-monitored device that is offline must never reach the UI — it should
+        # have been dropped at probe time, but pops keyed on a mutated ``d.key`` can
+        # miss and, once a row is offline, the ``elif d.online`` guards never retry
+        # removal. Filtering here is the single source of truth and self-heals those
+        # stuck rows.
+        rows = [d for d in self._devices_snapshot() if d.online or d.monitored]
+        return sorted(rows, key=lambda device: (device.category, device.name.lower()))
 
     def _devices_snapshot(self) -> list[Device]:
         """Copy of live rows — safe while discovery threads mutate ``_devices``."""
@@ -1007,7 +1014,7 @@ class DiscoveryManager:
             def apply() -> None:
                 changed = False
                 now = datetime.now(timezone.utc)
-                for d in list(self._devices.values()):
+                for store_key, d in list(self._devices.items()):
                     sip = str(d.ip).strip()
                     dport = int(d.port or 0)
                     if sip != ip or dport != port:
@@ -1021,8 +1028,10 @@ class DiscoveryManager:
                         d.online = False
                         changed = True
                         # Followed devices stay (greyed out); others drop from the list.
+                        # Pop by the storage key, not d.key: a merged/re-keyed row may
+                        # compute a different key and silently survive a pop(d.key).
                         if not d.monitored:
-                            self._devices.pop(d.key, None)
+                            self._devices.pop(store_key, None)
                 if changed:
                     if reachable:
                         self._logger.debug("TCP probe: %s:%s reachable", ip, port)
@@ -1060,7 +1069,7 @@ class DiscoveryManager:
             def apply() -> None:
                 changed = False
                 now = datetime.now(timezone.utc)
-                for d in list(self._devices.values()):
+                for store_key, d in list(self._devices.items()):
                     if str(d.ip).strip().split("%", 1)[0] != ip:
                         continue
                     if reachable:
@@ -1071,8 +1080,10 @@ class DiscoveryManager:
                         d.online = False
                         changed = True
                         # Followed devices stay (greyed out); others drop from the list.
+                        # Pop by the storage key, not d.key: a merged/re-keyed row may
+                        # compute a different key and silently survive a pop(d.key).
                         if not d.monitored:
-                            self._devices.pop(d.key, None)
+                            self._devices.pop(store_key, None)
                 if changed:
                     if reachable:
                         self._logger.debug("Ping probe: %s reachable", ip)
@@ -3218,8 +3229,12 @@ class DiscoveryManager:
         for store in override_stores:
             for key in all_override_keys:
                 store.pop(key, None)
-        for device in to_remove:
-            self._devices.pop(device.key, None)
+        remove_ids = {id(d) for d in to_remove}
+        for store_key, d in list(self._devices.items()):
+            # Pop by storage key (not d.key): a merged/re-keyed row can compute a
+            # different key and silently survive a pop(d.key), leaving a ghost.
+            if id(d) in remove_ids:
+                self._devices.pop(store_key, None)
         # Clear in-memory protocol caches for this IP.
         self._nmb_name_cache.pop(sip, None)
         wsd_keys_to_drop = [k for k, v in self._wsd_device_cache.items()
