@@ -3275,12 +3275,6 @@ class DiscoveryManager:
     def _notify(self) -> None:
         if not self._listeners:
             return
-        self._logger.debug(
-            "Publishing %d devices to %d listeners (debounce %.0fms)",
-            len(self._devices),
-            len(self._listeners),
-            _NOTIFY_DEBOUNCE_SECONDS * 1000.0,
-        )
         with self._notify_debounce_lock:
             if self._notify_debounce_timer is not None:
                 self._notify_debounce_timer.cancel()
