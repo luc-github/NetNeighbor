@@ -53,7 +53,11 @@
     {
       "contains_any": [
         "cnc",
-        "laser cutter"
+        "grbl",
+        "fluidnc",
+        "laser",
+        "milling",
+        "cutter"
       ],
       "type": "cnc"
     },
@@ -61,12 +65,23 @@
       "contains_any": [
         "3d printer",
         "3dprinter",
-        "esp3d",
+        "repetier",
+        "marlin",
+        "smoothieware",
+        "klipper",
+        "octoprint",
         "ultimaker",
         "prusa",
         "bambu"
       ],
       "type": "3dprinter"
+    },
+    {
+      "_comment": "ESP3D fallback: an ESP3D controller (friendlyName 'esp3d' or modelNumber 'ESP3D x.x') with no machine-specific keyword above stays an ESP3D Device rather than 'unknown'. Placed after cnc/3dprinter so a configured target wins.",
+      "contains_any": [
+        "esp3d"
+      ],
+      "type": "esp32"
     },
     {
       "contains_any": [
@@ -103,6 +118,69 @@
         "nas"
       ],
       "type": "nas"
+    }
+  ],
+  "_base_type_rules_doc": "Coarse fallbacks, evaluated by _infer_type against a NARROW haystack (ST/USN/SERVER/modelName/manufacturer only — NOT friendly/room names) so loose tokens like 'wan' don't match free-form device names. These fire only when no curated type_rules above matched. modelType==nas is exact and first so a DLNA-capable NAS stays 'nas'.",
+  "base_type_rules": [
+    {
+      "equals_field": {
+        "modelType": [
+          "nas"
+        ]
+      },
+      "type": "nas"
+    },
+    {
+      "contains_any": [
+        "sonos"
+      ],
+      "type": "mediaserver"
+    },
+    {
+      "contains_any": [
+        "mediaserver",
+        "contentdirectory",
+        "mediarenderer",
+        "dial-multiscreen",
+        "urn:dial-multiscreen-org:service:dial",
+        "googletv",
+        "android tv",
+        "chromecast"
+      ],
+      "type": "mediaserver"
+    },
+    {
+      "contains_any": [
+        "wan",
+        "internetgatewaydevice",
+        "router",
+        "gateway",
+        "wifialliance",
+        "wfadevice",
+        "wfawlanconfig"
+      ],
+      "type": "router"
+    },
+    {
+      "contains_any": [
+        "synology",
+        "qnap",
+        "nas"
+      ],
+      "type": "nas"
+    },
+    {
+      "contains_any": [
+        "printer"
+      ],
+      "type": "printer"
+    },
+    {
+      "contains_any": [
+        "basic",
+        "computer"
+      ],
+      "type": "computer"
     }
   ]
 }

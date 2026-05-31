@@ -899,45 +899,23 @@ class SSDPDiscovery(BaseDiscovery):
         manufacturer: str | None = None,
         model_type: str | None = None,
     ) -> str:
-        if (model_type or "").strip().lower() == "nas":
-            return "nas"
-        st_l = st.lower()
-        usn_l = usn.lower()
-        server_l = server.lower()
-        model_l = (model_name or "").lower()
-        manufacturer_l = (manufacturer or "").lower()
-        combined = " ".join([st_l, usn_l, server_l, model_l, manufacturer_l])
-
-        if "sonos" in combined:
-            return "mediaserver"
-        if (
-            "mediaserver" in combined
-            or "contentdirectory" in combined
-            or "mediarenderer" in combined
-            or "dial-multiscreen" in combined
-            or "urn:dial-multiscreen-org:service:dial" in combined
-            or "googletv" in combined
-            or "android tv" in combined
-            or "chromecast" in combined
-        ):
-            return "mediaserver"
-        if (
-            "wan" in combined
-            or "internetgatewaydevice" in combined
-            or "router" in combined
-            or "gateway" in combined
-            or "wifialliance" in combined
-            or "wfadevice" in combined
-            or "wfawlanconfig" in combined
-        ):
-            return "router"
-        if "nas" in combined or "synology" in combined or "qnap" in combined:
-            return "nas"
-        if "printer" in combined:
-            return "printer"
-        if "basic" in combined or "computer" in combined:
-            return "computer"
-        return "unknown"
+        # Base classification from config/ssdp_rules.json "base_type_rules" (coarse fallbacks
+        # formerly hardcoded in this method). Evaluated against a NARROW haystack on purpose:
+        # free-form names are excluded so loose tokens like "wan" don't false-positive on a
+        # device named e.g. "Rowan's iPhone". Curated "type_rules" refine this in _apply_type_rules.
+        combined = " ".join(
+            [
+                st.lower(),
+                usn.lower(),
+                server.lower(),
+                (model_name or "").lower(),
+                (manufacturer or "").lower(),
+            ]
+        )
+        matched = self._match_type_rules(
+            self._rules.get("base_type_rules"), combined, {"modelType": model_type or ""}
+        )
+        return matched or "unknown"
 
     def _device_key(self, payload: dict) -> str:
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
@@ -1291,6 +1269,13 @@ class SSDPDiscovery(BaseDiscovery):
                 if host and str(host).strip() == sip:
                     cache.pop(location, None)
                     removed += 1
+        # Reset the descriptor-fetch throttle for this host. Otherwise, after the cached XML is
+        # purged (e.g. user "Clear device"), a rediscovery within the min-interval window would be
+        # HTTP-skipped with no cache to fall back on, leaving the device stuck as a generic
+        # "SSDP Device" (no XML, no icon) until the throttle naturally expires or the app restarts.
+        for host_key in list(self._last_descriptor_http_mono.keys()):
+            if host_key == sip or host_key.startswith(f"{sip}:"):
+                self._last_descriptor_http_mono.pop(host_key, None)
         if removed:
             self._logger.debug("SSDP XML cache purged %d entries for %s", removed, sip)
             self._flush_persistent_caches_if_due(force=True)
@@ -1461,35 +1446,28 @@ class SSDPDiscovery(BaseDiscovery):
         return ""
 
     def _load_rules(self) -> dict:
-        default_rules = {
-            "name_rules": {
-                "fallback_fields": ["friendlyName", "displayName"],
-                "prefer_display_name_when_no_friendly_name": True,
-            },
-            "information_rules": {
-                "concat_fields": ["roomName", "displayName"],
-                "separator": " / ",
-            },
-            "type_rules": [
-                {"contains_any": ["smartspeaker-audio", "sonos"], "type": "mediaserver"},
-                {"contains_any": ["dial-multiscreen", "chromecast", "googletv", "android tv"], "type": "mediaserver"},
-                {"contains_any": ["wifialliance", "wfadevice", "wfawlanconfig"], "type": "router"},
-                {"contains_any": ["synology", "qnap", "nas"], "type": "nas"},
-            ],
+        # The bundled config/ssdp_rules.json is the single source of truth. This empty skeleton is
+        # only a graceful degraded fallback if that file is missing/corrupt — startup runs
+        # utils.config_integrity, which shows a "corrupted installation" dialog in that case.
+        empty_rules: dict = {
+            "name_rules": {},
+            "information_rules": {},
+            "type_rules": [],
+            "base_type_rules": [],
         }
         try:
-            if not _RULES_PATH.exists():
-                return merge_ssdp_rules_overlays(default_rules)
             parsed = json.loads(_RULES_PATH.read_text(encoding="utf-8"))
             if not isinstance(parsed, dict):
-                return merge_ssdp_rules_overlays(default_rules)
-            merged = dict(default_rules)
-            merged.update(parsed)
+                self._logger.warning("SSDP rules %s is not a JSON object — degraded (no rules)", _RULES_PATH)
+                return merge_ssdp_rules_overlays(empty_rules)
             self._logger.info("Loaded SSDP rules from %s", _RULES_PATH)
-            return merge_ssdp_rules_overlays(merged)
+            return merge_ssdp_rules_overlays(parsed)
+        except FileNotFoundError:
+            self._logger.warning("SSDP rules file missing at %s — degraded (no rules)", _RULES_PATH)
+            return merge_ssdp_rules_overlays(empty_rules)
         except (OSError, json.JSONDecodeError):
-            self._logger.exception("Failed to load SSDP rules, using defaults")
-            return merge_ssdp_rules_overlays(default_rules)
+            self._logger.warning("Invalid SSDP rules file %s — degraded (no rules)", _RULES_PATH, exc_info=True)
+            return merge_ssdp_rules_overlays(empty_rules)
 
     def _apply_name_rules(self, xml_fields: dict[str, str]) -> str:
         rules = self._rules.get("name_rules", {})
@@ -1527,10 +1505,44 @@ class SSDPDiscovery(BaseDiscovery):
                     values.append(value_norm)
         return separator.join(values)
 
-    def _apply_type_rules(self, headers: dict[str, str], xml_fields: dict[str, str]) -> str:
-        rule_list = self._rules.get("type_rules", [])
+    def _match_type_rules(self, rule_list: object, haystack: str, fields: dict[str, str]) -> str:
+        """Evaluate a rule list (first match wins) against a lowercased haystack.
+
+        Each rule may declare ``contains_any`` (substring search in ``haystack``) and/or
+        ``equals_field`` (``{fieldName: [values]}``, exact case-insensitive match against
+        ``fields``). A rule matches if either condition holds. Returns the matched type
+        (lowercased) or ``""``.
+        """
         if not isinstance(rule_list, list):
             return ""
+        norm_fields = {
+            str(k).strip().lower(): str(v).strip().lower()
+            for k, v in fields.items()
+            if isinstance(v, str)
+        }
+        for rule in rule_list:
+            if not isinstance(rule, dict):
+                continue
+            target_type = rule.get("type")
+            if not isinstance(target_type, str) or not target_type.strip():
+                continue
+            equals_field = rule.get("equals_field")
+            if isinstance(equals_field, dict):
+                for fname, allowed in equals_field.items():
+                    if not isinstance(allowed, list):
+                        continue
+                    fval = norm_fields.get(str(fname).strip().lower(), "")
+                    if fval and any(fval == str(a).strip().lower() for a in allowed):
+                        return target_type.strip().lower()
+            contains_any = rule.get("contains_any", [])
+            if isinstance(contains_any, list):
+                for token in contains_any:
+                    token_norm = str(token).strip().lower()
+                    if token_norm and token_norm in haystack:
+                        return target_type.strip().lower()
+        return ""
+
+    def _apply_type_rules(self, headers: dict[str, str], xml_fields: dict[str, str]) -> str:
         searchable_parts = [
             str(headers.get("ST", "")),
             str(headers.get("NT", "")),
@@ -1540,20 +1552,12 @@ class SSDPDiscovery(BaseDiscovery):
             str(xml_fields.get("manufacturer", "")),
             str(xml_fields.get("modelName", "")),
             str(xml_fields.get("modelType", "")),
+            str(xml_fields.get("modelNumber", "")),
             str(xml_fields.get("friendlyName", "")),
             str(xml_fields.get("displayName", "")),
             str(xml_fields.get("roomName", "")),
         ]
         haystack = " ".join(searchable_parts).lower()
-        for rule in rule_list:
-            if not isinstance(rule, dict):
-                continue
-            target_type = rule.get("type")
-            contains_any = rule.get("contains_any", [])
-            if not isinstance(target_type, str) or not isinstance(contains_any, list):
-                continue
-            for token in contains_any:
-                token_norm = str(token).strip().lower()
-                if token_norm and token_norm in haystack:
-                    return target_type.strip().lower()
-        return ""
+        return self._match_type_rules(
+            self._rules.get("type_rules"), haystack, {"modelType": xml_fields.get("modelType", "")}
+        )

@@ -278,6 +278,31 @@ def choose_bundle_primary(bundle: DeviceBundle, information_precedence: Sequence
     return ordered[0]
 
 
+def _descriptor_richness(dev: Device | None) -> tuple[int, int, int]:
+    """Rank a device by how much descriptor data it carries (raw XML, xml_fields, iconURL)."""
+    if dev is None:
+        return (0, 0, 0)
+    md = dev.metadata if isinstance(dev.metadata, dict) else {}
+    xf = md.get("xml_fields") if isinstance(md.get("xml_fields"), dict) else {}
+    has_xml = 1 if isinstance(md.get("xml"), str) and md.get("xml").strip() else 0
+    icon = xf.get("iconURL")
+    has_icon = 1 if isinstance(icon, str) and icon.strip() else 0
+    return (has_xml, len(xf), has_icon)
+
+
+def _richer_descriptor_device(existing: Device | None, candidate: Device) -> Device:
+    """Pick the richer of two same-source devices that map to one bundle.
+
+    A host can expose several SSDP responses for the same identity — e.g. Sonos returns an
+    enriched root descriptor AND a bare "SSDP Device" (XML pending). Whichever is processed last
+    must not blank out the descriptor: keep the one carrying real XML / xml_fields / iconURL so the
+    SSDP detail tab and device icon survive. Ties favour the newer (candidate) for freshness.
+    """
+    if existing is None:
+        return candidate
+    return candidate if _descriptor_richness(candidate) >= _descriptor_richness(existing) else existing
+
+
 def build_device_bundles(
     devices: list[Device],
     information_precedence: Sequence[str],
@@ -300,9 +325,9 @@ def build_device_bundles(
             order.append(bundle_id)
 
         if device.source == "mdns":
-            bundle.mdns_device = device
+            bundle.mdns_device = _richer_descriptor_device(bundle.mdns_device, device)
         elif device.source == "ssdp":
-            bundle.ssdp_device = device
+            bundle.ssdp_device = _richer_descriptor_device(bundle.ssdp_device, device)
         elif device.source == "wsd":
             bundle.wsd_device = device
         elif device.source == "wsdd":
@@ -329,6 +354,23 @@ def build_device_bundles(
     return ordered
 
 
+def bundle_remote_icon_hint(dev: Device | None) -> str:
+    """Token that changes when a device's remote-icon source appears.
+
+    Captures both attachment (None vs present) and descriptor enrichment: a row first attached
+    generic (e.g. SSDP fast-emit, XML pending) gains ``iconURL`` only once its descriptor is
+    parsed. If the fingerprint tracked only ``device is not None``, that late enrichment would not
+    flip it — so the bundle would not re-render and the remote icon would never be fetched (it
+    stays the generic type icon). Including the icon URL here closes that gap.
+    """
+    if dev is None:
+        return ""
+    md = dev.metadata if isinstance(dev.metadata, dict) else {}
+    xf = md.get("xml_fields") if isinstance(md.get("xml_fields"), dict) else {}
+    icon = xf.get("iconURL") or md.get("iconURL") or ""
+    return f"{1 if xf else 0}:{str(icon).strip()}"
+
+
 def bundle_snapshot_ui_fingerprint(bundles: Sequence[DeviceBundle]) -> tuple:
     """Fingerprint of merged bundles (protocol attachment + primary row) for Qt UI refresh."""
     rows: list[tuple] = []
@@ -343,11 +385,11 @@ def bundle_snapshot_ui_fingerprint(bundles: Sequence[DeviceBundle]) -> tuple:
                 (p.name or "").strip(),
                 (p.type or "unknown").strip().lower(),
                 bool(p.online),
-                b.ssdp_device is not None,
-                b.mdns_device is not None,
-                b.wsd_device is not None,
-                b.wsdd_device is not None,
-                b.nmb_device is not None,
+                bundle_remote_icon_hint(b.ssdp_device),
+                bundle_remote_icon_hint(b.mdns_device),
+                bundle_remote_icon_hint(b.wsd_device),
+                bundle_remote_icon_hint(b.wsdd_device),
+                bundle_remote_icon_hint(b.nmb_device),
             )
         )
     return tuple(rows)

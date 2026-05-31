@@ -18,7 +18,7 @@ from typing import Any
 _LOG = logging.getLogger("ui.device_details")
 
 from PySide6.QtCore import QPoint, QUrl, Qt
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QPixmap
+from PySide6.QtGui import QDesktopServices, QFontDatabase, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -393,6 +393,8 @@ class DeviceDetailsDialog(QDialog):
         copy_btn.clicked.connect(lambda: QGuiApplication.clipboard().setText(raw))
         layout.addWidget(copy_btn)
         browser = QTextBrowser()
+        # Monospace so the pretty-printed XML indentation lines up.
+        browser.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         browser.setPlainText(raw)
         browser.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
         layout.addWidget(browser, stretch=1)

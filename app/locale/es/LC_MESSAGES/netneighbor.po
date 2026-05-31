@@ -949,97 +949,8 @@ msgstr "Dispositivos ESP3D"
 msgid "Unknown Devices"
 msgstr "Dispositivos desconocidos"
 
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-#, python-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
 #: ui/
+#, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format
 msgid "About NetNeighbor"
 msgstr "Acerca de NetNeighbor"
 
@@ -1069,11 +980,11 @@ msgstr "Comando"
 
 #: ui/
 msgid ""
-"Command templates for opening device connections. Leave empty to use t"
-"he system default."
+"Command templates for opening device connections. Leave empty to use the "
+"system default."
 msgstr ""
-"Plantillas de comandos para abrir conexiones de dispositivos. Dejar va"
-"cío para usar el valor predeterminado del sistema."
+"Plantillas de comandos para abrir conexiones de dispositivos. Dejar vacío "
+"para usar el valor predeterminado del sistema."
 
 #: ui/
 msgid "Commands"
@@ -1145,8 +1056,14 @@ msgstr "Borrar dispositivo"
 
 #: ui/main_window.py
 #, python-brace-format
-msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
-msgstr "¿Eliminar {name} ({ip}) del caché y todas las preferencias?\n\nEsta acción no se puede deshacer. El dispositivo volverá a aparecer si se redescubre en la red."
+msgid ""
+"Remove {name} ({ip}) from the cache and all preferences?\n"
+"\n"
+"This cannot be undone. The device will reappear if rediscovered on the network."
+msgstr ""
+"¿Eliminar {name} ({ip}) del caché y todas las preferencias?\n"
+"\n"
+"Esta acción no se puede deshacer. El dispositivo volverá a aparecer si se redescubre en la red."
 
 #: ui/
 msgid "Hide sidebar"
@@ -1195,8 +1112,7 @@ msgstr "Ubicaciones"
 #: ui/
 msgid "Manage location presets shown in the right-click menu."
 msgstr ""
-"Administrar los preajustes de ubicación mostrados en el menú contextua"
-"l."
+"Administrar los preajustes de ubicación mostrados en el menú contextual."
 
 #: ui/
 msgid "Medium"
@@ -1222,17 +1138,15 @@ msgstr "Aún no hay dispositivos"
 msgid "No hidden devices"
 msgstr "No hay dispositivos ocultos"
 
-
 #: ui/
 msgid ""
-"Notification delivery depends on the OS and session. Tray-backed behav"
-"iour (close to tray, minimized start) will align once the system tray "
-"is implemented."
+"Notification delivery depends on the OS and session. Tray-backed behaviour "
+"(close to tray, minimized start) will align once the system tray is "
+"implemented."
 msgstr ""
-"La entrega de notificaciones depende del sistema operativo y la sesión"
-". El comportamiento respaldado por la bandeja (cerrar en la bandeja, i"
-"nicio minimizado) se alineará una vez que se implemente la bandeja del"
-" sistema."
+"La entrega de notificaciones depende del sistema operativo y la sesión. El "
+"comportamiento respaldado por la bandeja (cerrar en la bandeja, inicio "
+"minimizado) se alineará una vez que se implemente la bandeja del sistema."
 
 #: ui/
 msgid "Notifications"
@@ -1248,15 +1162,13 @@ msgstr "En línea"
 
 #: ui/
 msgid ""
-"Override or add connection endpoints per protocol. For 'custom' scheme"
-", enter the command template in IP/Host ({ip}, {port}, {name"
-"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
-" schemes."
+"Override or add connection endpoints per protocol. For 'custom' scheme, "
+"enter the command template in IP/Host ({ip}, {port}, {name}, {type}, "
+"{category}, {url}). IP/Host and Port are optional for other schemes."
 msgstr ""
-"Anular o agregar puntos de conexión por protocolo. Para el esquema 'cu"
-"stom', ingrese la plantilla de comando en IP/Host ({ip}, {po"
-"rt}, {name}, {type}, {category}, {url}). IP/Host y Puerto son opcional"
-"es para otros esquemas."
+"Anular o agregar puntos de conexión por protocolo. Para el esquema 'custom',"
+" ingrese la plantilla de comando en IP/Host ({ip}, {port}, {name}, {type}, "
+"{category}, {url}). IP/Host y Puerto son opcionales para otros esquemas."
 
 #: ui/
 msgid "Preferences…"
@@ -1280,7 +1192,8 @@ msgstr "Consulte la"
 
 #: ui/
 msgid "Select an icon, then OK. IDs are stored in your preferences."
-msgstr "Seleccione un icono, luego OK. Los IDs se guardan en sus preferencias."
+msgstr ""
+"Seleccione un icono, luego OK. Los IDs se guardan en sus preferencias."
 
 #: ui/
 msgid "Service type"
@@ -1362,8 +1275,6 @@ msgstr "aún no descargado"
 msgid "{} devices"
 msgstr "{} dispositivos"
 
-
-
 #: ui/preferences_dialog.py
 msgid "Maintenance"
 msgstr "Mantenimiento"
@@ -1378,16 +1289,14 @@ msgstr "¿Restablecer todos los datos de la aplicación?"
 
 #: ui/preferences_dialog.py
 msgid ""
-"All preferences, cached icons, discovery data and logs will be permanently "
-"deleted:\n"
+"All preferences, cached icons, discovery data and logs will be permanently deleted:\n"
 "• ~/.config/netneighbor\n"
 "• ~/.cache/netneighbor\n"
 "\n"
 "NetNeighbor will use default settings on next start.\n"
 "This action cannot be undone."
 msgstr ""
-"Todas las preferencias, iconos en caché, datos de descubrimiento y registros "
-"se eliminarán permanentemente:\n"
+"Todas las preferencias, iconos en caché, datos de descubrimiento y registros se eliminarán permanentemente:\n"
 "• ~/.config/netneighbor\n"
 "• ~/.cache/netneighbor\n"
 "\n"
@@ -1397,6 +1306,7 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "Restablecimiento completado — reinicie la aplicación"
+
 #: ui/
 msgid "App icon pack"
 msgstr ""
@@ -1419,11 +1329,11 @@ msgstr "NetNeighbor (integrado)"
 
 #: ui/
 msgid ""
-"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
-"etneighbor/custom_icons/."
+"No icons found. Add PNGs under assets/icons/netneighbor or "
+"~/.config/netneighbor/custom_icons/."
 msgstr ""
-"No se encontraron iconos. Agregue PNGs en assets/icons/netneighbor o ~"
-"/.config/netneighbor/custom_icons/."
+"No se encontraron iconos. Agregue PNGs en assets/icons/netneighbor o "
+"~/.config/netneighbor/custom_icons/."
 
 #: ui/
 msgid "Open folder…"
@@ -1432,3 +1342,21 @@ msgstr "Abrir carpeta…"
 #: ui/
 msgid "NetNeighbor"
 msgstr ""
+
+#. app_qt.py:136
+msgid "Corrupted installation"
+msgstr "Instalación dañada"
+
+#. app_qt.py:138
+msgid ""
+"NetNeighbor cannot start because required files are missing or corrupted:\n"
+"\n"
+"{details}\n"
+"\n"
+"Please reinstall the program."
+msgstr ""
+"NetNeighbor no puede iniciarse porque faltan archivos necesarios o están dañados:\n"
+"\n"
+"{details}\n"
+"\n"
+"Vuelva a instalar el programa."

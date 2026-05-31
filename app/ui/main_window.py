@@ -68,6 +68,7 @@ from utils.device_bundles import (
     apply_bundle_category_filter,
     build_device_bundles,
     bundle_location_label,
+    bundle_remote_icon_hint,
     bundle_snapshot_ui_fingerprint,
 )
 from utils.connect_launcher import normalize_connect_templates
@@ -1507,6 +1508,15 @@ class NetNeighborMainWindow(QMainWindow):
                     (b.primary.type or "").lower(),
                     bundle_location_label(b, no_location_label=self._no_location_label()),
                     bool(b.online),
+                    # Remote-icon source per attached protocol device. A late SSDP descriptor
+                    # enrichment (iconURL appearing after a generic fast-emit, when the primary is
+                    # a different protocol) must rebuild the tile so the icon is fetched — otherwise
+                    # the bundle keeps the generic type icon (see bundle_remote_icon_hint).
+                    bundle_remote_icon_hint(b.ssdp_device),
+                    bundle_remote_icon_hint(b.mdns_device),
+                    bundle_remote_icon_hint(b.wsd_device),
+                    bundle_remote_icon_hint(b.wsdd_device),
+                    bundle_remote_icon_hint(b.nmb_device),
                 )
                 for b in ordered
             ),
@@ -1709,9 +1719,28 @@ class NetNeighborMainWindow(QMainWindow):
         self._last_device_view_sig = None
         self._refresh_device_widgets()
 
+    def _current_bundle_for(self, bundle: DeviceBundle) -> DeviceBundle:
+        """Return the freshest bundle for this host from the live snapshot.
+
+        Row callbacks capture the bundle in a lambda at render time. After a "Clear device" the
+        host is rediscovered generic first, then re-enriched (SSDP descriptor / iconURL); if the
+        tile was not rebuilt in between, the captured bundle is stale and Details/Options would
+        show no XML and no device icon. Re-resolving by host here keeps them in sync.
+        """
+        want_key = bundle.primary.key
+        want_ep = (str(bundle.ip).strip(), int(bundle.port or 0))
+        best_by_ep: DeviceBundle | None = None
+        for b in self._bundles:
+            if b.primary.key == want_key:
+                return b
+            if (str(b.ip).strip(), int(b.port or 0)) == want_ep and best_by_ep is None:
+                best_by_ep = b
+        return best_by_ep or bundle
+
     def _open_device_details(
         self, bundle: DeviceBundle, *, initial_tab: str | None = None
     ) -> None:
+        bundle = self._current_bundle_for(bundle)
         model = build_device_details_view_model(
             bundle, no_location_label=self._no_location_label()
         )

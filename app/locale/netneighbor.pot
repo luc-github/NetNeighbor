@@ -133,8 +133,8 @@ msgstr ""
 #: ui/main_window.py:308
 msgid ""
 "You can keep NetNeighbor in the system tray when you close the window. "
-"Starting it with your session keeps LAN discovery running in the background. "
-"You can change this anytime under View → Preferences."
+"Starting it with your session keeps LAN discovery running in the background."
+" You can change this anytime under View → Preferences."
 msgstr ""
 
 #: ui/main_window.py:317
@@ -719,8 +719,8 @@ msgstr ""
 msgid "Open custom icons folder"
 msgstr ""
 
-#: ui/device_details.py:674 ui/device_details.py:1027 ui/device_details.py:1028
-#: ui/device_details.py:1161
+#: ui/device_details.py:674 ui/device_details.py:1027
+#: ui/device_details.py:1028 ui/device_details.py:1161
 msgid "unavailable"
 msgstr ""
 
@@ -954,7 +954,10 @@ msgstr ""
 
 #: ui/main_window.py
 #, python-brace-format
-msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
+msgid ""
+"Remove {name} ({ip}) from the cache and all preferences?\n"
+"\n"
+"This cannot be undone. The device will reappear if rediscovered on the network."
 msgstr ""
 
 #: ui/
@@ -967,8 +970,8 @@ msgstr ""
 
 #: ui/
 msgid ""
-"Command templates for opening device connections. Leave empty to use t"
-"he system default."
+"Command templates for opening device connections. Leave empty to use the "
+"system default."
 msgstr ""
 
 #: ui/
@@ -1107,12 +1110,11 @@ msgstr ""
 msgid "No hidden devices"
 msgstr ""
 
-
 #: ui/
 msgid ""
-"Notification delivery depends on the OS and session. Tray-backed behav"
-"iour (close to tray, minimized start) will align once the system tray "
-"is implemented."
+"Notification delivery depends on the OS and session. Tray-backed behaviour "
+"(close to tray, minimized start) will align once the system tray is "
+"implemented."
 msgstr ""
 
 #: ui/
@@ -1129,10 +1131,9 @@ msgstr ""
 
 #: ui/
 msgid ""
-"Override or add connection endpoints per protocol. For 'custom' scheme"
-", enter the command template in IP/Host ({ip}, {port}, {name"
-"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
-" schemes."
+"Override or add connection endpoints per protocol. For 'custom' scheme, "
+"enter the command template in IP/Host ({ip}, {port}, {name}, {type}, "
+"{category}, {url}). IP/Host and Port are optional for other schemes."
 msgstr ""
 
 #: ui/
@@ -1241,10 +1242,12 @@ msgstr ""
 
 #: ui/
 msgid ""
-"All preferences, cached icons, discovery data and logs will be permane"
-"ntly deleted:\n• ~/.config/netneighbor\n• ~/.cache/netneighbor\n\nNetN"
-"eighbor will use default settings on next start.\nThis action cannot b"
-"e undone."
+"All preferences, cached icons, discovery data and logs will be permanently deleted:\n"
+"• ~/.config/netneighbor\n"
+"• ~/.cache/netneighbor\n"
+"\n"
+"NetNeighbor will use default settings on next start.\n"
+"This action cannot be undone."
 msgstr ""
 
 #: ui/
@@ -1273,8 +1276,8 @@ msgstr ""
 
 #: ui/
 msgid ""
-"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
-"etneighbor/custom_icons/."
+"No icons found. Add PNGs under assets/icons/netneighbor or "
+"~/.config/netneighbor/custom_icons/."
 msgstr ""
 
 #: ui/
@@ -1295,4 +1298,17 @@ msgstr ""
 
 #: ui/
 msgid "NetNeighbor"
+msgstr ""
+
+#. app_qt.py:136
+msgid "Corrupted installation"
+msgstr ""
+
+#. app_qt.py:138
+msgid ""
+"NetNeighbor cannot start because required files are missing or corrupted:\n"
+"\n"
+"{details}\n"
+"\n"
+"Please reinstall the program."
 msgstr ""

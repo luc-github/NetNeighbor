@@ -17,42 +17,42 @@ _LOG = logging.getLogger(__name__)
 _RULES_PATH = Path(__file__).resolve().parent.parent / "config" / "mdns_rules.json"
 
 
-_DEFAULT_RULES: dict = {
-    "summary_from_txt": [
-        {"label": "Manufacturer", "keys": ["mfg", "manufacturer", "make"]},
-        {"label": "Model", "keys": ["mdl", "model", "product"]},
-    ],
-    "type_rules": [],
-}
+# The bundled config/mdns_rules.json is the single source of truth for the rules. This empty
+# skeleton is only a graceful degraded fallback if that file is missing/corrupt — startup runs
+# utils.config_integrity, which shows a "corrupted installation" dialog in that case, so the
+# fallback below should never be reached in a healthy install.
+_EMPTY_RULES: dict = {"summary_from_txt": [], "type_rules": []}
 
 
 def _normalized_rule_dict(raw: object) -> dict:
-    """Return a merged rules dict from file payload or defaults."""
+    """Coerce a payload into a well-formed rules dict (missing keys filled with empty lists)."""
     if isinstance(raw, dict):
-        merged = dict(_DEFAULT_RULES)
+        merged = dict(_EMPTY_RULES)
         merged.update(raw)
-        if merged.get("summary_from_txt") is None:
-            merged["summary_from_txt"] = list(_DEFAULT_RULES["summary_from_txt"])
-        if merged.get("type_rules") is None:
+        if not isinstance(merged.get("summary_from_txt"), list):
+            merged["summary_from_txt"] = []
+        if not isinstance(merged.get("type_rules"), list):
             merged["type_rules"] = []
         return merged
-    return dict(_DEFAULT_RULES)
+    return dict(_EMPTY_RULES)
 
 
 def load_mdns_rules() -> dict:
-    """Return rules dict; bundled file missing / invalid ⇒ defaults; user overlay merged from ~/.config."""
+    """Return rules from config/mdns_rules.json (single source); user overlay merged from ~/.config.
+
+    A missing/corrupt bundled file degrades to empty rules — startup integrity check surfaces the
+    "corrupted installation" message to the user (see utils.config_integrity).
+    """
     try:
         data = json.loads(_RULES_PATH.read_text(encoding="utf-8"))
-        merged = merge_mdns_rules_overlays(_normalized_rule_dict(data))
-        return _normalized_rule_dict(merged)
     except FileNotFoundError:
-        _LOG.debug("mDNS rules file missing at %s, using defaults", _RULES_PATH)
-        merged = merge_mdns_rules_overlays(dict(_DEFAULT_RULES))
-        return _normalized_rule_dict(merged)
+        _LOG.warning("mDNS rules file missing at %s — degraded (no rules)", _RULES_PATH)
+        data = dict(_EMPTY_RULES)
     except (json.JSONDecodeError, OSError) as exc:
-        _LOG.warning("Invalid mDNS rules file %s: %s — using defaults", _RULES_PATH, exc)
-        merged = merge_mdns_rules_overlays(dict(_DEFAULT_RULES))
-        return _normalized_rule_dict(merged)
+        _LOG.warning("Invalid mDNS rules file %s: %s — degraded (no rules)", _RULES_PATH, exc)
+        data = dict(_EMPTY_RULES)
+    merged = merge_mdns_rules_overlays(_normalized_rule_dict(data))
+    return _normalized_rule_dict(merged)
 
 
 @lru_cache(maxsize=1)

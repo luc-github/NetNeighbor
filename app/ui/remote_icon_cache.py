@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from urllib.parse import urlparse
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QPainter, QPixmap
@@ -186,12 +187,29 @@ class QtRemoteIconCache(QObject):
         self._failed.clear()
 
     def evict_for_ip(self, ip: str) -> None:
-        """Remove in-memory cached icon data for a specific device IP."""
+        """Drop ALL in-memory icon state for a device IP so a rebuild re-fetches cleanly.
+
+        Must mirror the disk purge (purge_remote_icon_for_ip). Previously only ``_bytes_by_host``
+        was cleared (and ``_failed.discard(sip)`` was a no-op, since ``_failed`` holds URLs, not
+        IPs): ``_bytes_by_key`` kept the URL→bytes entry, so ``fetch_status_for_device`` still
+        returned "ready" and the icon was never re-fetched after a "Clear device" — leaving the
+        device stuck on the generic type icon (host map + disk payload gone, key map stale).
+        """
         sip = str(ip).strip()
         if not sip:
             return
         self._bytes_by_host.pop(sip, None)
-        self._failed.discard(sip)
+
+        def _host_matches(url_key: str) -> bool:
+            try:
+                return (urlparse(url_key).hostname or "").strip() == sip
+            except ValueError:
+                return False
+
+        for key in [k for k in self._bytes_by_key if _host_matches(k)]:
+            self._bytes_by_key.pop(key, None)
+        for key in [k for k in self._failed if _host_matches(k)]:
+            self._failed.discard(key)
 
     def prefetch_from_index(self) -> None:
         """Pre-warm in-memory cache from the on-disk icon index.

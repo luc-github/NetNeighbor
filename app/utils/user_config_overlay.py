@@ -18,6 +18,7 @@ USER_DEVICE_TYPES_JSON = USER_CONFIG_DIR / "device_types.json"
 USER_ICONS_JSON = USER_CONFIG_DIR / "icons.json"
 USER_SSDP_RULES_JSON = USER_CONFIG_DIR / "ssdp_rules.json"
 USER_MDNS_RULES_JSON = USER_CONFIG_DIR / "mdns_rules.json"
+USER_WSD_RULES_JSON = USER_CONFIG_DIR / "wsd_rules.json"
 
 
 def optional_user_json(filepath: Path) -> dict[str, Any] | None:
@@ -103,6 +104,32 @@ def merge_ssdp_rules_overlays(bundled: dict[str, Any]) -> dict[str, Any]:
         out["type_rules"] = [r for r in tu if isinstance(r, dict)] + base_tr
 
     _LOG.debug("Merged SSDP rules with user overlay %s", USER_SSDP_RULES_JSON)
+    return out
+
+
+def merge_wsd_rules_overlays(bundled: dict[str, Any]) -> dict[str, Any]:
+    """User ~/.config/netneighbor/wsd_rules.json: prepend qname_rules; override precedence/default if given."""
+
+    overlay = optional_user_json(USER_WSD_RULES_JSON)
+    if overlay is None or overlay == {}:
+        return bundled
+
+    out = _deep_copy_json(bundled)
+
+    qr_u = overlay.get("qname_rules")
+    if isinstance(qr_u, list):
+        base_qr = list(out.get("qname_rules") or [])
+        out["qname_rules"] = [r for r in qr_u if isinstance(r, dict)] + base_qr
+
+    prec_u = overlay.get("precedence")
+    if isinstance(prec_u, list):
+        out["precedence"] = [t for t in prec_u if isinstance(t, str)]
+
+    default_u = overlay.get("default")
+    if isinstance(default_u, str) and default_u.strip():
+        out["default"] = default_u.strip()
+
+    _LOG.debug("Merged WSD rules with user overlay %s", USER_WSD_RULES_JSON)
     return out
 
 

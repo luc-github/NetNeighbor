@@ -37,6 +37,7 @@ unknown keys as opaque unless you grep the codebase for `save_ui_preferences` / 
 | `icons.json` | `config/icons.json` | Shallow-merge the top-level ``types`` object: each slug maps to an ordered list of **basename** strings for `assets/icons/netneighbor/{N}x{N}/<basename>.png` (replaces the shipped list for that slug when you supply it). |
 | `ssdp_rules.json` | `config/ssdp_rules.json` | Shallow merge `name_rules` and `information_rules` (user keys win). **`type_rules`:** user list is **prepended** (first match wins over shipped rules). |
 | `mdns_rules.json` | `config/mdns_rules.json` | **`summary_from_txt`:** same label merges `keys` lists (user aliases first, then bundled). **`type_rules`:** user list **prepended**. |
+| `wsd_rules.json` | `config/wsd_rules.json` | **`qname_rules`:** user list **prepended** (first match wins). **`precedence`** / **`default`:** replaced when supplied. Rules match on QName attributes (`local_eq` / `local_endswith` / `local_contains_any` / `ns_contains`), not substrings. |
 
 ## Partial files
 

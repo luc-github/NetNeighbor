@@ -123,6 +123,24 @@ def main(argv: list[str] | None = None) -> int:
                 forced = None
         setup_fusion_theme(app, forced_scheme=forced)
 
+    # Bundled config files are the single source of truth for device classification (no Python
+    # fallback duplicates them). If one is missing/corrupt the install is broken — tell the user
+    # to reinstall instead of silently running with no rules.
+    from utils.config_integrity import check_bundled_config_integrity
+    _config_problems = check_bundled_config_integrity()
+    if _config_problems:
+        from PySide6.QtWidgets import QMessageBox
+        _log.error("Corrupted installation — %s", _config_problems)
+        QMessageBox.critical(
+            None,
+            _("Corrupted installation"),
+            _(
+                "NetNeighbor cannot start because required files are missing or corrupted:\n\n"
+                "{details}\n\nPlease reinstall the program."
+            ).format(details="\n".join(_config_problems)),
+        )
+        return 1
+
     for icon_path in resolve_app_icon_paths_in_order():
         app_icon = QIcon(str(icon_path))
         if not app_icon.isNull():

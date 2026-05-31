@@ -930,97 +930,8 @@ msgstr "ESP3D 设备"
 msgid "Unknown Devices"
 msgstr "未知设备"
 
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-#, python-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
 #: ui/
+#, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format
 msgid "About NetNeighbor"
 msgstr "关于 NetNeighbor"
 
@@ -1050,8 +961,8 @@ msgstr "命令"
 
 #: ui/
 msgid ""
-"Command templates for opening device connections. Leave empty to use t"
-"he system default."
+"Command templates for opening device connections. Leave empty to use the "
+"system default."
 msgstr "打开设备连接的命令模板。留空则使用系统默认值。"
 
 #: ui/
@@ -1124,8 +1035,14 @@ msgstr "清除设备"
 
 #: ui/main_window.py
 #, python-brace-format
-msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
-msgstr "将 {name}（{ip}）从缓存和所有首选项中删除？\n\n此操作无法撤销。如果在网络上重新发现该设备，它将再次出现。"
+msgid ""
+"Remove {name} ({ip}) from the cache and all preferences?\n"
+"\n"
+"This cannot be undone. The device will reappear if rediscovered on the network."
+msgstr ""
+"将 {name}（{ip}）从缓存和所有首选项中删除？\n"
+"\n"
+"此操作无法撤销。如果在网络上重新发现该设备，它将再次出现。"
 
 #: ui/
 msgid "Hide sidebar"
@@ -1199,12 +1116,11 @@ msgstr "暂无设备"
 msgid "No hidden devices"
 msgstr "没有隐藏的设备"
 
-
 #: ui/
 msgid ""
-"Notification delivery depends on the OS and session. Tray-backed behav"
-"iour (close to tray, minimized start) will align once the system tray "
-"is implemented."
+"Notification delivery depends on the OS and session. Tray-backed behaviour "
+"(close to tray, minimized start) will align once the system tray is "
+"implemented."
 msgstr "通知的发送取决于操作系统和会话。基于托盘的行为（关闭到托盘、最小化启动）将在系统托盘实现后对齐。"
 
 #: ui/
@@ -1221,13 +1137,12 @@ msgstr "在线"
 
 #: ui/
 msgid ""
-"Override or add connection endpoints per protocol. For 'custom' scheme"
-", enter the command template in IP/Host ({ip}, {port}, {name"
-"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
-" schemes."
+"Override or add connection endpoints per protocol. For 'custom' scheme, "
+"enter the command template in IP/Host ({ip}, {port}, {name}, {type}, "
+"{category}, {url}). IP/Host and Port are optional for other schemes."
 msgstr ""
-"按协议覆盖或添加连接端点。对于 'custom' 方案，请在 IP/主机 ({ip}, {port}, {name}, "
-"{type}, {category}, {url}) 中输入命令模板。对于其他方案，IP/主机和端口是可选的。"
+"按协议覆盖或添加连接端点。对于 'custom' 方案，请在 IP/主机 ({ip}, {port}, {name}, {type}, "
+"{category}, {url}) 中输入命令模板。对于其他方案，IP/主机和端口是可选的。"
 
 #: ui/
 msgid "Preferences…"
@@ -1333,8 +1248,6 @@ msgstr "尚未下载"
 msgid "{} devices"
 msgstr "{} 个设备"
 
-
-
 #: ui/preferences_dialog.py
 msgid "Maintenance"
 msgstr "维护"
@@ -1349,8 +1262,7 @@ msgstr "重置所有应用数据？"
 
 #: ui/preferences_dialog.py
 msgid ""
-"All preferences, cached icons, discovery data and logs will be permanently "
-"deleted:\n"
+"All preferences, cached icons, discovery data and logs will be permanently deleted:\n"
 "• ~/.config/netneighbor\n"
 "• ~/.cache/netneighbor\n"
 "\n"
@@ -1367,6 +1279,7 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "重置完成 — 请重启应用"
+
 #: ui/
 msgid "App icon pack"
 msgstr ""
@@ -1389,11 +1302,11 @@ msgstr "NetNeighbor（内置）"
 
 #: ui/
 msgid ""
-"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
-"etneighbor/custom_icons/."
+"No icons found. Add PNGs under assets/icons/netneighbor or "
+"~/.config/netneighbor/custom_icons/."
 msgstr ""
-"未找到图标。请在 assets/icons/netneighbor 或 ~/.config/netneighbor/custom_icons"
-"/ 中添加 PNG。"
+"未找到图标。请在 assets/icons/netneighbor 或 ~/.config/netneighbor/custom_icons/ 中添加 "
+"PNG。"
 
 #: ui/
 msgid "Open folder…"
@@ -1402,3 +1315,21 @@ msgstr "打开文件夹…"
 #: ui/
 msgid "NetNeighbor"
 msgstr ""
+
+#. app_qt.py:136
+msgid "Corrupted installation"
+msgstr "安装已损坏"
+
+#. app_qt.py:138
+msgid ""
+"NetNeighbor cannot start because required files are missing or corrupted:\n"
+"\n"
+"{details}\n"
+"\n"
+"Please reinstall the program."
+msgstr ""
+"由于缺少必需的文件或文件已损坏，NetNeighbor 无法启动：\n"
+"\n"
+"{details}\n"
+"\n"
+"请重新安装该程序。"

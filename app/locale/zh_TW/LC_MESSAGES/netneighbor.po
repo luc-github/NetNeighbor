@@ -930,97 +930,8 @@ msgstr "ESP3D 裝置"
 msgid "Unknown Devices"
 msgstr "未知裝置"
 
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-#, python-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
 #: ui/
+#, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format
 msgid "About NetNeighbor"
 msgstr "關於 NetNeighbor"
 
@@ -1050,8 +961,8 @@ msgstr "命令"
 
 #: ui/
 msgid ""
-"Command templates for opening device connections. Leave empty to use t"
-"he system default."
+"Command templates for opening device connections. Leave empty to use the "
+"system default."
 msgstr "開啟裝置連線的命令範本。留空則使用系統預設值。"
 
 #: ui/
@@ -1124,8 +1035,14 @@ msgstr "清除裝置"
 
 #: ui/main_window.py
 #, python-brace-format
-msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
-msgstr "將 {name}（{ip}）從快取和所有偏好設定中移除？\n\n此操作無法復原。如果在網路上重新發現該裝置，它將再次出現。"
+msgid ""
+"Remove {name} ({ip}) from the cache and all preferences?\n"
+"\n"
+"This cannot be undone. The device will reappear if rediscovered on the network."
+msgstr ""
+"將 {name}（{ip}）從快取和所有偏好設定中移除？\n"
+"\n"
+"此操作無法復原。如果在網路上重新發現該裝置，它將再次出現。"
 
 #: ui/
 msgid "Hide sidebar"
@@ -1199,12 +1116,11 @@ msgstr "尚無裝置"
 msgid "No hidden devices"
 msgstr "沒有隱藏的裝置"
 
-
 #: ui/
 msgid ""
-"Notification delivery depends on the OS and session. Tray-backed behav"
-"iour (close to tray, minimized start) will align once the system tray "
-"is implemented."
+"Notification delivery depends on the OS and session. Tray-backed behaviour "
+"(close to tray, minimized start) will align once the system tray is "
+"implemented."
 msgstr "通知的發送取決於作業系統和工作階段。基於托盤的行為（關閉至托盤、最小化啟動）將在系統托盤實作後對齊。"
 
 #: ui/
@@ -1221,13 +1137,12 @@ msgstr "線上"
 
 #: ui/
 msgid ""
-"Override or add connection endpoints per protocol. For 'custom' scheme"
-", enter the command template in IP/Host ({ip}, {port}, {name"
-"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
-" schemes."
+"Override or add connection endpoints per protocol. For 'custom' scheme, "
+"enter the command template in IP/Host ({ip}, {port}, {name}, {type}, "
+"{category}, {url}). IP/Host and Port are optional for other schemes."
 msgstr ""
-"依協議覆蓋或新增連線端點。對於 'custom' 方案，請在 IP/主機 ({ip}, {port}, {name}, "
-"{type}, {category}, {url}) 中輸入命令範本。對於其他方案，IP/主機和連接埠是選擇性的。"
+"依協議覆蓋或新增連線端點。對於 'custom' 方案，請在 IP/主機 ({ip}, {port}, {name}, {type}, "
+"{category}, {url}) 中輸入命令範本。對於其他方案，IP/主機和連接埠是選擇性的。"
 
 #: ui/
 msgid "Preferences…"
@@ -1333,8 +1248,6 @@ msgstr "尚未下載"
 msgid "{} devices"
 msgstr "{} 個裝置"
 
-
-
 #: ui/preferences_dialog.py
 msgid "Maintenance"
 msgstr "維護"
@@ -1349,8 +1262,7 @@ msgstr "重設所有應用程式資料？"
 
 #: ui/preferences_dialog.py
 msgid ""
-"All preferences, cached icons, discovery data and logs will be permanently "
-"deleted:\n"
+"All preferences, cached icons, discovery data and logs will be permanently deleted:\n"
 "• ~/.config/netneighbor\n"
 "• ~/.cache/netneighbor\n"
 "\n"
@@ -1367,6 +1279,7 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "重設完成 — 請重新啟動應用程式"
+
 #: ui/
 msgid "App icon pack"
 msgstr ""
@@ -1389,11 +1302,11 @@ msgstr "NetNeighbor（內建）"
 
 #: ui/
 msgid ""
-"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
-"etneighbor/custom_icons/."
+"No icons found. Add PNGs under assets/icons/netneighbor or "
+"~/.config/netneighbor/custom_icons/."
 msgstr ""
-"找不到圖示。請在 assets/icons/netneighbor 或 ~/.config/netneighbor/custom_icons"
-"/ 下新增 PNG。"
+"找不到圖示。請在 assets/icons/netneighbor 或 ~/.config/netneighbor/custom_icons/ 下新增 "
+"PNG。"
 
 #: ui/
 msgid "Open folder…"
@@ -1402,3 +1315,21 @@ msgstr "開啟資料夾…"
 #: ui/
 msgid "NetNeighbor"
 msgstr ""
+
+#. app_qt.py:136
+msgid "Corrupted installation"
+msgstr "安裝已損毀"
+
+#. app_qt.py:138
+msgid ""
+"NetNeighbor cannot start because required files are missing or corrupted:\n"
+"\n"
+"{details}\n"
+"\n"
+"Please reinstall the program."
+msgstr ""
+"由於缺少必要檔案或檔案已損毀，NetNeighbor 無法啟動：\n"
+"\n"
+"{details}\n"
+"\n"
+"請重新安裝程式。"

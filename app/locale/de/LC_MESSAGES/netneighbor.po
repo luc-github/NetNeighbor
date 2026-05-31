@@ -946,88 +946,8 @@ msgstr "ESP3D-Geräte"
 msgid "Unknown Devices"
 msgstr "Unbekannte Geräte"
 
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-#, python-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-
-
-
-
-#, python-brace-format
-
 #: ui/
+#, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format
 msgid "About NetNeighbor"
 msgstr "Über NetNeighbor"
 
@@ -1057,11 +977,11 @@ msgstr "Befehl"
 
 #: ui/
 msgid ""
-"Command templates for opening device connections. Leave empty to use t"
-"he system default."
+"Command templates for opening device connections. Leave empty to use the "
+"system default."
 msgstr ""
-"Befehlsvorlagen zum Öffnen von Geräteverbindungen. Leer lassen, um die"
-" Systemstandards zu verwenden."
+"Befehlsvorlagen zum Öffnen von Geräteverbindungen. Leer lassen, um die "
+"Systemstandards zu verwenden."
 
 #: ui/
 msgid "Commands"
@@ -1133,8 +1053,14 @@ msgstr "Gerät löschen"
 
 #: ui/main_window.py
 #, python-brace-format
-msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
-msgstr "{name} ({ip}) aus dem Cache und allen Einstellungen entfernen?\n\nDies kann nicht rückgängig gemacht werden. Das Gerät erscheint erneut, wenn es im Netzwerk wiederentdeckt wird."
+msgid ""
+"Remove {name} ({ip}) from the cache and all preferences?\n"
+"\n"
+"This cannot be undone. The device will reappear if rediscovered on the network."
+msgstr ""
+"{name} ({ip}) aus dem Cache und allen Einstellungen entfernen?\n"
+"\n"
+"Dies kann nicht rückgängig gemacht werden. Das Gerät erscheint erneut, wenn es im Netzwerk wiederentdeckt wird."
 
 #: ui/
 msgid "Hide sidebar"
@@ -1208,16 +1134,15 @@ msgstr "Noch keine Geräte"
 msgid "No hidden devices"
 msgstr "Keine ausgeblendeten Geräte"
 
-
 #: ui/
 msgid ""
-"Notification delivery depends on the OS and session. Tray-backed behav"
-"iour (close to tray, minimized start) will align once the system tray "
-"is implemented."
+"Notification delivery depends on the OS and session. Tray-backed behaviour "
+"(close to tray, minimized start) will align once the system tray is "
+"implemented."
 msgstr ""
-"Die Benachrichtigungsübermittlung hängt vom Betriebssystem und der Sit"
-"zung ab. Das tray-basierte Verhalten (In Tray schließen, minimierter S"
-"tart) wird ausgerichtet, sobald der Systemtray implementiert ist."
+"Die Benachrichtigungsübermittlung hängt vom Betriebssystem und der Sitzung "
+"ab. Das tray-basierte Verhalten (In Tray schließen, minimierter Start) wird "
+"ausgerichtet, sobald der Systemtray implementiert ist."
 
 #: ui/
 msgid "Notifications"
@@ -1233,15 +1158,14 @@ msgstr "Online"
 
 #: ui/
 msgid ""
-"Override or add connection endpoints per protocol. For 'custom' scheme"
-", enter the command template in IP/Host ({ip}, {port}, {name"
-"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
-" schemes."
+"Override or add connection endpoints per protocol. For 'custom' scheme, "
+"enter the command template in IP/Host ({ip}, {port}, {name}, {type}, "
+"{category}, {url}). IP/Host and Port are optional for other schemes."
 msgstr ""
-"Verbindungsendpunkte pro Protokoll überschreiben oder hinzufügen. Für "
-"das Schema 'custom' geben Sie die Befehlsvorlage in IP/Host ({ip}, {ip"
-"_raw}, {port}, {name}, {type}, {category}, {url}) ein. IP/Host und Por"
-"t sind für andere Schemata optional."
+"Verbindungsendpunkte pro Protokoll überschreiben oder hinzufügen. Für das "
+"Schema 'custom' geben Sie die Befehlsvorlage in IP/Host ({ip}, {ip_raw}, "
+"{port}, {name}, {type}, {category}, {url}) ein. IP/Host und Port sind für "
+"andere Schemata optional."
 
 #: ui/
 msgid "Preferences…"
@@ -1266,8 +1190,8 @@ msgstr "Siehe die"
 #: ui/
 msgid "Select an icon, then OK. IDs are stored in your preferences."
 msgstr ""
-"Wählen Sie ein Symbol, dann OK. IDs werden in Ihren Einstellungen gesp"
-"eichert."
+"Wählen Sie ein Symbol, dann OK. IDs werden in Ihren Einstellungen "
+"gespeichert."
 
 #: ui/
 msgid "Service type"
@@ -1349,8 +1273,6 @@ msgstr "noch nicht heruntergeladen"
 msgid "{} devices"
 msgstr "{} Geräte"
 
-
-
 #: ui/preferences_dialog.py
 msgid "Maintenance"
 msgstr "Wartung"
@@ -1365,16 +1287,14 @@ msgstr "Alle Anwendungsdaten zurücksetzen?"
 
 #: ui/preferences_dialog.py
 msgid ""
-"All preferences, cached icons, discovery data and logs will be permanently "
-"deleted:\n"
+"All preferences, cached icons, discovery data and logs will be permanently deleted:\n"
 "• ~/.config/netneighbor\n"
 "• ~/.cache/netneighbor\n"
 "\n"
 "NetNeighbor will use default settings on next start.\n"
 "This action cannot be undone."
 msgstr ""
-"Alle Einstellungen, gecachten Symbole, Erkennungsdaten und Protokolle "
-"werden dauerhaft gelöscht:\n"
+"Alle Einstellungen, gecachten Symbole, Erkennungsdaten und Protokolle werden dauerhaft gelöscht:\n"
 "• ~/.config/netneighbor\n"
 "• ~/.cache/netneighbor\n"
 "\n"
@@ -1384,6 +1304,7 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "Zurückgesetzt — bitte neu starten"
+
 #: ui/
 msgid "App icon pack"
 msgstr ""
@@ -1406,11 +1327,11 @@ msgstr "NetNeighbor (integriert)"
 
 #: ui/
 msgid ""
-"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
-"etneighbor/custom_icons/."
+"No icons found. Add PNGs under assets/icons/netneighbor or "
+"~/.config/netneighbor/custom_icons/."
 msgstr ""
-"Keine Symbole gefunden. Fügen Sie PNGs unter assets/icons/netneighbor "
-"oder ~/.config/netneighbor/custom_icons/ hinzu."
+"Keine Symbole gefunden. Fügen Sie PNGs unter assets/icons/netneighbor oder "
+"~/.config/netneighbor/custom_icons/ hinzu."
 
 #: ui/
 msgid "Open folder…"
@@ -1419,3 +1340,21 @@ msgstr "Ordner öffnen…"
 #: ui/
 msgid "NetNeighbor"
 msgstr ""
+
+#. app_qt.py:136
+msgid "Corrupted installation"
+msgstr "Beschädigte Installation"
+
+#. app_qt.py:138
+msgid ""
+"NetNeighbor cannot start because required files are missing or corrupted:\n"
+"\n"
+"{details}\n"
+"\n"
+"Please reinstall the program."
+msgstr ""
+"NetNeighbor kann nicht starten, da erforderliche Dateien fehlen oder beschädigt sind:\n"
+"\n"
+"{details}\n"
+"\n"
+"Bitte installieren Sie das Programm neu."

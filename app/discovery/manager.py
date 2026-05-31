@@ -516,6 +516,12 @@ class DiscoveryManager:
             device.hidden = existing.hidden
             if device.online is False and existing.last_seen:
                 device.last_seen = existing.last_seen
+            # A known type from another source completes (does not get replaced by) an unknown one.
+            # "unknown" is an absence of classification, not a verdict, so a higher-priority source
+            # that cannot classify the device must not clobber a type a lower-priority source knows
+            # (mirrors _supplement_missing_user_location for location). Conflicts between two *known*
+            # types still follow protocol precedence elsewhere.
+            self._preserve_known_type_across_sources(device, existing)
             if device.source == "ssdp":
                 self._ssdp_logger.debug(
                     "SSDP merge candidate for %s:%s old_name=%s new_name=%s",
@@ -1106,6 +1112,22 @@ class DiscoveryManager:
                 return value.strip()
         return ""
 
+    def _preserve_known_type_across_sources(self, device: Device, existing: Device) -> None:
+        """Keep a previously-known type/category when the incoming update is ``unknown``.
+
+        Classification is cross-source: a higher-priority protocol (e.g. SSDP) that returns
+        ``unknown`` should complete — not overwrite — a type a lower-priority protocol (e.g. mDNS)
+        already determined. Only fills the absence; two known types are resolved elsewhere.
+        """
+        new_t = (device.type or "").strip().lower()
+        if new_t and new_t != "unknown":
+            return
+        old_t = (existing.type or "").strip().lower()
+        if not old_t or old_t == "unknown":
+            return
+        device.type = existing.type
+        device.category = existing.category or category_for_device_type(old_t)
+
     def _hydrate_mdns_from_ssdp_profile_cache(self, device: Device, prior_row: Device | None = None) -> None:
         """Merge SSDP disk-cache hints onto an mDNS row.
 
@@ -1213,7 +1235,9 @@ class DiscoveryManager:
             device.type = ct
             device.category = category_for_device_type(ct)
             return
-        weak = {"unknown", "http", "https", "computer"}
+        # "esp32" is a low-confidence fallback ("ESP3D board, machine unknown"): let a stronger
+        # cached/cross-source type (cnc, 3dprinter, nas, …) replace it, same as the other weak types.
+        weak = {"unknown", "http", "https", "computer", "esp32"}
         if cur in weak and self._cross_protocol_type_rank(ct) > self._cross_protocol_type_rank(cur):
             device.type = ct
             device.category = category_for_device_type(ct)

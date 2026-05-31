@@ -20,6 +20,29 @@ from utils.mdns_rules import cached_mdns_rules, summary_field_labels_norm, summa
 from utils.neighbor_mac import lookup_ipv4_for_mac, lookup_mac_from_neighbor_cache
 
 
+def _pretty_xml(raw: str) -> str:
+    """Re-indent SSDP descriptor XML for display, regardless of how the device sent it.
+
+    Some devices return the whole descriptor on a single line (e.g. ESP3D), others pre-indent it
+    (e.g. Sonos). Inter-element whitespace is collapsed first so minidom produces consistent
+    indentation in both cases; namespaces/prefixes are preserved. Falls back to the trimmed
+    original if the payload is not well-formed XML.
+    """
+    text = raw.strip()
+    try:
+        import xml.dom.minidom as _minidom
+
+        collapsed = re.sub(r">\s+<", "><", text)
+        pretty = _minidom.parseString(collapsed).toprettyxml(indent="  ")
+        lines = [ln for ln in pretty.splitlines() if ln.strip()]
+        # Drop the synthetic <?xml ...?> declaration minidom adds when the source had none.
+        if lines and lines[0].startswith("<?xml") and not text.startswith("<?xml"):
+            lines = lines[1:]
+        return "\n".join(lines) if lines else text
+    except Exception:
+        return text
+
+
 def _parse_listen_port(value) -> int | None:
     try:
         p = int(value)
@@ -283,7 +306,7 @@ def build_ssdp_payload(device: Device) -> tuple[
     ]
     xml_location = metadata.get("location")
     xml_location_norm = xml_location if isinstance(xml_location, str) else None
-    raw_xml = xml_data if isinstance(xml_data, str) and xml_data.strip() else None
+    raw_xml = _pretty_xml(xml_data) if isinstance(xml_data, str) and xml_data.strip() else None
     troubleshooting_fields: list[tuple[str, str]] = [
         (_("Serial number"), _value_or_unavailable(xml_fields.get("serialNumber"))),
         (

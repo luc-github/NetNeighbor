@@ -618,18 +618,19 @@ class MDNSDiscovery(BaseDiscovery):
         haystack_parts.extend([f"{k}={v}" for k, v in txt.items()])
         haystack = " ".join([part.lower() for part in haystack_parts if isinstance(part, str)])
 
-        if "fluidnc" in haystack:
-            return "cnc"
-        if "laserjet" in haystack:
-            return "networkprinter"
-        if "synology" in haystack or "qnap" in haystack or " nas " in f" {haystack} ":
-            return "nas"
+        # All type heuristics live in config/mdns_rules.json (type_rules); see _DEFAULT_RULES
+        # in utils/mdns_rules.py for the bundled baseline. No hardcoded classification here.
         if not self._rules_enabled:
             return base
         return evaluate_type_rules(haystack, base, self._mdns_rules)
 
     def _aggregate_type_rank(self, device_type: str) -> int:
-        """Higher = stronger signal for host-level aggregate type (icon + category)."""
+        """Higher = stronger signal for host-level aggregate type (icon + category).
+
+        Kept in sync with DiscoveryManager._cross_protocol_type_rank. ``esp32`` is a low-confidence
+        fallback ("ESP3D board, machine unknown"): any concrete machine type (cnc, 3dprinter, …)
+        must outrank it so a controller that reveals its machine via TXT is classified accordingly.
+        """
         t = (device_type or "unknown").strip().lower()
         return {
             "unknown": 0,
@@ -637,13 +638,20 @@ class MDNSDiscovery(BaseDiscovery):
             "https": 12,
             "computer": 20,
             "esp32": 22,
-            "nas": 38,
+            "homeappliance": 26,
+            "smartdevice": 28,
+            "camera": 30,
+            "cnc": 30,
+            "3dprinter": 32,
             "mediaserver": 34,
+            "router": 35,
+            "smarttv": 36,
+            "nas": 38,
             "smartspeaker": 40,
-            "networkprinter": 55,
-            "multifunction_printer": 56,
-            "printer": 55,
             "scanner": 52,
+            "networkprinter": 55,
+            "printer": 55,
+            "multifunction_printer": 56,
         }.get(t, 8)
 
     def _best_aggregate_mdns_type(self, seed: str, merged_services: list) -> str:

@@ -56,7 +56,10 @@ A presentation URL is built **only if `_http._tcp` is actually present**. Port n
 
 ## Type heuristics
 
-Type starts from `device_types.json`, refined by heuristics (`fluidnc→cnc`, `synology/qnap→nas`, etc.), then `type_rules` in `mdns_rules.json`.
+Type starts from `device_types.json` (per-service mapping), then refined entirely by the
+`type_rules` in `mdns_rules.json` (first match wins). All classification heuristics
+(`fluidnc→cnc`, `laserjet→networkprinter`, `synology/qnap/nas→nas`, 3D-printer/CNC keywords, …)
+live in that JSON — there are no hardcoded type rules in `mdns.py`.
 
 ## Online / offline lifecycle
 
@@ -71,8 +74,12 @@ Brutal disconnections (power loss, cable pull) emit no byebye and would otherwis
 ## Rules file (`config/mdns_rules.json`)
 
 Lets you **map TXT keys onto summary lines** and **extend type classification** without Python changes.
-User overlay: `~/.config/netneighbor/mdns_rules.json` — merged with bundled defaults.
+User overlay: `~/.config/netneighbor/mdns_rules.json` — merged with the bundled file.
 See [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md).
+
+> **Single source of truth.** This bundled file *is* the rules — there is no Python copy. The
+> startup integrity check (`utils/config_integrity.py`) refuses to launch with a "corrupted
+> installation, please reinstall" dialog if it is missing or not valid JSON.
 
 ### `summary_from_txt`
 

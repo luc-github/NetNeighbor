@@ -1,0 +1,26 @@
+{
+  "_comment": "WSD type classification from DPWS service QNames. Each rule lists predicates in match_any; a predicate matches a QName when ALL of its present operators match (local_eq / local_endswith / local_contains_any compare the lowercased localname; ns_contains searches the lowercased namespace). A rule matches the host if ANY of its QNames satisfies ANY predicate. Final type is chosen by precedence order; default applies when nothing matches or no QNames are advertised. Windows often lists print QNames alongside a DPWS Device QName, so 'computer' wins over 'networkprinter'.",
+  "qname_rules": [
+    {
+      "type": "computer",
+      "match_any": [
+        { "local_eq": ["device"], "ns_contains": ["devprof"] },
+        { "local_eq": ["computer", "computerdevice"] }
+      ]
+    },
+    {
+      "type": "networkprinter",
+      "match_any": [
+        { "local_eq": ["printdevice", "printer"] },
+        { "local_endswith": ["printdevice", "printer"] },
+        { "ns_contains": ["printdevice"] },
+        { "ns_contains": ["/wdp/"], "local_contains_any": ["print", "printer", "printdevice", "fax"] },
+        { "ns_contains": ["microsoft.com/windows"], "local_contains_any": ["printdevice", "printer", "fax"] },
+        { "local_eq": ["scanner", "fax", "faxdevice"] },
+        { "local_endswith": ["scannerdevice"] }
+      ]
+    }
+  ],
+  "precedence": ["computer", "networkprinter"],
+  "default": "computer"
+}

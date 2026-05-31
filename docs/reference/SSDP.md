@@ -50,8 +50,12 @@ NetNeighbor **listens** and **periodically sends M-SEARCH** — it does not scan
 ## Rules file (`config/ssdp_rules.json`)
 
 Lets you **tune naming, information text, and type classification** without Python changes.
-User overlay: `~/.config/netneighbor/ssdp_rules.json` — merged with bundled defaults.
+User overlay: `~/.config/netneighbor/ssdp_rules.json` — merged with the bundled file.
 See [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md).
+
+> **Single source of truth.** This bundled file *is* the rules — there is no Python copy. The
+> startup integrity check (`utils/config_integrity.py`) refuses to launch with a "corrupted
+> installation, please reinstall" dialog if it is missing or not valid JSON.
 
 ### `name_rules`
 
@@ -69,20 +73,38 @@ See [`COMMUNITY_OVERRIDES.md`](COMMUNITY_OVERRIDES.md).
 
 ### `type_rules`
 
-Evaluated in order; first match wins.
+SSDP type classification is **fully data-driven** — there is no hardcoded type chain in
+`ssdp.py` anymore. Two ordered lists (both first-match-wins), evaluated by `_match_type_rules`:
+
+- **`type_rules`** — curated, specific rules. The **override** stage (`_apply_type_rules`),
+  evaluated against a *rich* haystack (SSDP headers **plus** `friendlyName` / `displayName` /
+  `roomName` / `modelName` …). Tokens here must be specific because they see free-form names.
+- **`base_type_rules`** — coarse fallbacks formerly hardcoded in `_infer_type` (`mediaserver`,
+  `router`, `printer`, `computer`, `modelType==nas`, …). The **base** stage (`_infer_type`),
+  evaluated against a *narrow* haystack (ST/USN/SERVER/modelName/manufacturer only — **no**
+  friendly/room names) so loose tokens like `wan` don't false-positive on a device named
+  e.g. *"Rowan's iPhone"*. These fire only when no `type_rules` entry matched.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `contains_any` | list | Lowercase substrings searched in SSDP headers + selected XML fields |
+| `contains_any` | list | Lowercase substrings searched in the stage's haystack |
+| `equals_field` | object | `{fieldName: [values]}` — exact, case-insensitive match against a field (e.g. `{"modelType": ["nas"]}`) |
 | `type` | string | Internal type id (e.g. `router`, `nas`, `smarttv`) |
+
+A rule matches if **either** `contains_any` or `equals_field` is satisfied. Use `equals_field`
+when a substring match would be too loose (a NAS that also advertises DLNA must stay `nas`).
 
 ### How to extend
 
-1. Put specific `contains_any` groups **before** generic ones.
+1. Add device-specific rules to **`type_rules`** (specific tokens only); leave `base_type_rules`
+   for coarse fallbacks. Put more specific `contains_any` groups before generic ones.
 2. Use tokens that appear in your network's actual SSDP/XML (check SSDP details dialog).
 3. Keep `type` values consistent with `config/device_types.json`.
 4. Validate: `python -m json.tool config/ssdp_rules.json`
 5. Restart the app.
+
+> User overlay (`~/.config/netneighbor/ssdp_rules.json`) prepends to **`type_rules`** — the
+> right place for your own classifications. `base_type_rules` stays as shipped.
 
 ## Debugging
 

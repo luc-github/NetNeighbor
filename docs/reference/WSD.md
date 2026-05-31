@@ -62,8 +62,20 @@ WSD QNames (namespaces + local names) are inspected to classify the device:
 | Both PC and printer QNames present | `computer` (PC wins) |
 | No matching QNames | `computer` (default) |
 
-The full logic is in `_infer_type_from_qnames()` and `_qname_suggests_computer()` /
-`_qname_suggests_printer()`.
+These heuristics are **data-driven**, not hardcoded: they live in
+[`config/wsd_rules.json`](../../app/config/wsd_rules.json) and are evaluated by
+`utils/wsd_rules.py` (`infer_type_from_qnames()`). Because WSD classifies on structured
+QName attributes rather than free text, the schema matches on `local_eq` / `local_endswith` /
+`local_contains_any` (localname) and `ns_contains` (namespace); a predicate matches when all of
+its operators match, a rule matches when any QName satisfies any predicate, and the final type
+is chosen by `precedence` order (`default` when nothing matches).
+
+User overlay: `~/.config/netneighbor/wsd_rules.json` — user `qname_rules` are prepended,
+`precedence` / `default` overridden. See [`COMMUNITY_OVERRIDES.md`](../contributing/COMMUNITY_OVERRIDES.md).
+
+> **Single source of truth.** The bundled `config/wsd_rules.json` *is* the rules — there is no
+> Python copy. The startup integrity check (`utils/config_integrity.py`) refuses to launch with a
+> "corrupted installation, please reinstall" dialog if it is missing or not valid JSON.
 
 ## Offline detection
 

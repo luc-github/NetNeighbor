@@ -931,97 +931,8 @@ msgstr "ESP3D デバイス"
 msgid "Unknown Devices"
 msgstr "不明なデバイス"
 
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-#, python-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-#, python-brace-format
-
-
-
-
-
-
-
-
-
-
-
-
-#, python-brace-format
-
-
-
-#, python-brace-format
-
-#, python-brace-format
-
-#, python-brace-format
-
-
 #: ui/
+#, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format
 msgid "About NetNeighbor"
 msgstr "NetNeighbor について"
 
@@ -1051,8 +962,8 @@ msgstr "コマンド"
 
 #: ui/
 msgid ""
-"Command templates for opening device connections. Leave empty to use t"
-"he system default."
+"Command templates for opening device connections. Leave empty to use the "
+"system default."
 msgstr "デバイス接続を開くためのコマンドテンプレート。システムのデフォルトを使用するには空白のままにしてください。"
 
 #: ui/
@@ -1125,8 +1036,14 @@ msgstr "デバイスを削除"
 
 #: ui/main_window.py
 #, python-brace-format
-msgid "Remove {name} ({ip}) from the cache and all preferences?\n\nThis cannot be undone. The device will reappear if rediscovered on the network."
-msgstr "{name}（{ip}）をキャッシュとすべての設定から削除しますか？\n\nこの操作は元に戻せません。ネットワークで再検出された場合、デバイスは再び表示されます。"
+msgid ""
+"Remove {name} ({ip}) from the cache and all preferences?\n"
+"\n"
+"This cannot be undone. The device will reappear if rediscovered on the network."
+msgstr ""
+"{name}（{ip}）をキャッシュとすべての設定から削除しますか？\n"
+"\n"
+"この操作は元に戻せません。ネットワークで再検出された場合、デバイスは再び表示されます。"
 
 #: ui/
 msgid "Hide sidebar"
@@ -1200,12 +1117,11 @@ msgstr "デバイスがありません"
 msgid "No hidden devices"
 msgstr "非表示デバイスなし"
 
-
 #: ui/
 msgid ""
-"Notification delivery depends on the OS and session. Tray-backed behav"
-"iour (close to tray, minimized start) will align once the system tray "
-"is implemented."
+"Notification delivery depends on the OS and session. Tray-backed behaviour "
+"(close to tray, minimized start) will align once the system tray is "
+"implemented."
 msgstr "通知の配信はOSとセッションに依存します。トレイベースの動作（トレイに閉じる、最小化起動）はシステムトレイが実装されると揃います。"
 
 #: ui/
@@ -1222,14 +1138,12 @@ msgstr "オンライン"
 
 #: ui/
 msgid ""
-"Override or add connection endpoints per protocol. For 'custom' scheme"
-", enter the command template in IP/Host ({ip}, {port}, {name"
-"}, {type}, {category}, {url}). IP/Host and Port are optional for other"
-" schemes."
+"Override or add connection endpoints per protocol. For 'custom' scheme, "
+"enter the command template in IP/Host ({ip}, {port}, {name}, {type}, "
+"{category}, {url}). IP/Host and Port are optional for other schemes."
 msgstr ""
-"プロトコルごとに接続エンドポイントを上書きまたは追加します。'custom' スキームの場合、IP/ホスト ({ip},"
-" {port}, {name}, {type}, {category}, {url}) のコマンドテンプレートを入力してください。IP/ホス"
-"トとポートは他のスキームでは省略可能です。"
+"プロトコルごとに接続エンドポイントを上書きまたは追加します。'custom' スキームの場合、IP/ホスト ({ip}, {port}, {name},"
+" {type}, {category}, {url}) のコマンドテンプレートを入力してください。IP/ホストとポートは他のスキームでは省略可能です。"
 
 #: ui/
 msgid "Preferences…"
@@ -1335,8 +1249,6 @@ msgstr "まだダウンロードされていません"
 msgid "{} devices"
 msgstr "{} デバイス"
 
-
-
 #: ui/preferences_dialog.py
 msgid "Maintenance"
 msgstr "メンテナンス"
@@ -1351,8 +1263,7 @@ msgstr "すべてのアプリデータをリセットしますか？"
 
 #: ui/preferences_dialog.py
 msgid ""
-"All preferences, cached icons, discovery data and logs will be permanently "
-"deleted:\n"
+"All preferences, cached icons, discovery data and logs will be permanently deleted:\n"
 "• ~/.config/netneighbor\n"
 "• ~/.cache/netneighbor\n"
 "\n"
@@ -1369,6 +1280,7 @@ msgstr ""
 #: ui/preferences_dialog.py
 msgid "Reset done — please restart"
 msgstr "リセット完了 — 再起動してください"
+
 #: ui/
 msgid "App icon pack"
 msgstr ""
@@ -1391,11 +1303,11 @@ msgstr "NetNeighbor (組み込み)"
 
 #: ui/
 msgid ""
-"No icons found. Add PNGs under assets/icons/netneighbor or ~/.config/n"
-"etneighbor/custom_icons/."
+"No icons found. Add PNGs under assets/icons/netneighbor or "
+"~/.config/netneighbor/custom_icons/."
 msgstr ""
-"アイコンが見つかりません。assets/icons/netneighbor または ~/.config/netneighbor/custom"
-"_icons/ に PNG を追加してください。"
+"アイコンが見つかりません。assets/icons/netneighbor または "
+"~/.config/netneighbor/custom_icons/ に PNG を追加してください。"
 
 #: ui/
 msgid "Open folder…"
@@ -1404,3 +1316,21 @@ msgstr "フォルダを開く…"
 #: ui/
 msgid "NetNeighbor"
 msgstr ""
+
+#. app_qt.py:136
+msgid "Corrupted installation"
+msgstr "インストールが破損しています"
+
+#. app_qt.py:138
+msgid ""
+"NetNeighbor cannot start because required files are missing or corrupted:\n"
+"\n"
+"{details}\n"
+"\n"
+"Please reinstall the program."
+msgstr ""
+"必要なファイルが見つからないか破損しているため、NetNeighbor を起動できません:\n"
+"\n"
+"{details}\n"
+"\n"
+"プログラムを再インストールしてください。"

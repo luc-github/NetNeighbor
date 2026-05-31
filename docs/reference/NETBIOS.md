@@ -26,6 +26,26 @@ NetNeighbor picks the display name preferring `<00>` (workstation), then `<20>` 
 then the first non-noise registration. Workgroup-only registrations (`WORKGROUP<00>`,
 `__MSBROWSE__`) are filtered out.
 
+## No type-rules JSON — a deliberate choice, not an omission
+
+Unlike SSDP, mDNS, and WSD, NetBIOS has **no** `netbios_rules.json` and always assigns the
+type `computer`. This is intentional:
+
+- **Aggregation makes a NetBIOS type redundant.** The discovery manager merges sources by
+  host (`_protocol_merge_order` in `manager.py`); NetBIOS is the lowest-priority source. Any
+  device worth classifying (NAS, printer, media box) almost always answers SSDP and/or mDNS
+  first and is typed there. NetBIOS only becomes the *sole* source for hosts with no SSDP and
+  no mDNS — in practice plain Windows PCs, which are correctly `computer` already.
+- **The signals exist but rarely add value.** NetBIOS *does* expose data that rules could key
+  on — the NetBIOS name (e.g. a Synology answers `DISKSTATION` / `DS***`) and the suffix
+  (`<1b>`/`<1c>` for domain controllers, `<20>` for file sharing). Both are already parsed and
+  preserved in the payload metadata (`nmb_name`, `nmb_suffix`), so nothing is lost.
+
+**When to revisit:** if NetBIOS-only NAS or servers start showing up stuck as `computer`, add a
+`config/netbios_rules.json` with two rule kinds — `name_contains` (→ `nas`) and `suffix_equals`
+(`1b`/`1c` → server). The metadata is already there; the change would be small. Until that case
+is actually observed, the file is deliberately not created.
+
 ## NetNeighbor implementation
 
 | Layer | File | Class |

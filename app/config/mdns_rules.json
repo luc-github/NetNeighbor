@@ -9,5 +9,48 @@
       "keys": ["mdl", "model", "product"]
     }
   ],
-  "type_rules": []
+  "type_rules": [
+    {
+      "contains_any": [
+        "laserjet"
+      ],
+      "type": "networkprinter"
+    },
+    {
+      "contains_any": [
+        "grbl",
+        "fluidnc",
+        "_cnc._tcp",
+        "laser",
+        "milling",
+        "cutter"
+      ],
+      "type": "cnc"
+    },
+    {
+      "contains_any": [
+        "marlin",
+        "repetier",
+        "smoothieware",
+        "klipper",
+        "octoprint",
+        "_octoprint._tcp",
+        "_klipper._tcp",
+        "prusa",
+        "bambu",
+        "ultimaker",
+        "3dprinter",
+        "3d printer"
+      ],
+      "type": "3dprinter"
+    },
+    {
+      "contains_any": [
+        "synology",
+        "qnap",
+        "nas"
+      ],
+      "type": "nas"
+    }
+  ]
 }

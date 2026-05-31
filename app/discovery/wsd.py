@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 from discovery.base import BaseDiscovery
 from utils.discovery_config import category_for_device_type
+from utils.wsd_rules import cached_wsd_rules, infer_type_from_qnames
 
 QName = None  # type: ignore[misc, assignment]
 _ThreadedWSDiscovery = None
@@ -98,69 +99,9 @@ def is_synthetic_wsd_display_name(name: str) -> bool:
     return False
 
 
-def _qname_suggests_computer(t) -> bool:
-    """DPWS ``Device`` / devprof — Windows PCs often include this alongside print stack types."""
-    if _DPWS_DEVICE_TYPE is not None:
-        try:
-            if t == _DPWS_DEVICE_TYPE:
-                return True
-        except Exception:
-            pass
-    try:
-        ns = (t.getNamespace() or "").lower()
-        local = (t.getLocalname() or "").lower()
-    except Exception:
-        return False
-    if local == "device" and "devprof" in ns:
-        return True
-    # Host / workstation hints (avoid treating mixed printer+host ads as printer-only).
-    if local in {"computer", "computerdevice"}:
-        return True
-    return False
-
-
-def _qname_suggests_printer(t) -> bool:
-    """Strong printer/MFP QName signals — same rules as before, but evaluated per-type for aggregation."""
-    try:
-        ns = (t.getNamespace() or "").lower()
-        local = (t.getLocalname() or "").lower()
-    except Exception:
-        return False
-    if local in {"printdevice", "printer"}:
-        return True
-    if local.endswith("printdevice") or local.endswith("printer"):
-        return True
-    if "printdevice" in ns:
-        return True
-    if "/wdp/" in ns and local and any(
-        x in local for x in ("print", "printer", "printdevice", "fax")
-    ):
-        return True
-    if "microsoft.com/windows" in ns and local and any(
-        x in local for x in ("printdevice", "printer", "fax")
-    ):
-        return True
-    if local in {"scanner", "fax", "faxdevice"} or local.endswith("scannerdevice"):
-        return True
-    return False
-
-
-def _infer_type_from_qnames(types) -> str:
-    """Classify service type. Windows often lists print QNames and DPWS ``Device`` together — prefer PC."""
-    if not types:
-        return "computer"
-    any_pc = False
-    any_printer = False
-    for t in types:
-        if _qname_suggests_computer(t):
-            any_pc = True
-        if _qname_suggests_printer(t):
-            any_printer = True
-    if any_pc:
-        return "computer"
-    if any_printer:
-        return "networkprinter"
-    return "computer"
+# Type classification from service QNames lives in config/wsd_rules.json, evaluated by
+# utils.wsd_rules.infer_type_from_qnames (Windows lists print QNames alongside a DPWS
+# Device QName, so "computer" wins over "networkprinter" via the rules' precedence order).
 
 
 def _reverse_dns_short_name(ip_s: str) -> str | None:
@@ -452,6 +393,7 @@ class WSDiscovery(BaseDiscovery):
         self._wsd_known_eprs: dict[str, dict] = {}  # epr/key → last payload
         self._wsd_miss_counts: dict[str, int] = {}  # epr/key → consecutive missed sweeps
         self._wsd_grace_sweeps: int = 2
+        self._wsd_rules = cached_wsd_rules()
 
     def start(self) -> None:
         if self._running:
@@ -667,7 +609,7 @@ class WSDiscovery(BaseDiscovery):
             pass
         if not epr:
             return None
-        dev_type = _infer_type_from_qnames(svc.getTypes())
+        dev_type = infer_type_from_qnames(svc.getTypes(), self._wsd_rules)
         if dev_type != "computer":
             # Windows often advertises only print QNames; still surface the host (category may be Printers).
             self._logger.debug(
