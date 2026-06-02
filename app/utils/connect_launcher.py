@@ -22,6 +22,16 @@ _SCHEME_DEFAULT_PORT = {"ssh": 22, "sftp": 22, "telnet": 23, "ftp": 21, "http": 
 
 _SKIP_JSON_KEYS = frozenset({"version", "comment", "schema"})
 
+# Windows-native pseudo-schemes: resolved to their real scheme and opened via
+# open_url() (ShellExecute/os.startfile) instead of spawning a console process.
+_LOCAL_PSEUDO_SCHEMES: dict[str, str] = {
+    "localsmb": "smb",
+    "localhttps": "https",
+    "localhttp": "http",
+    "localsftp": "sftp",
+    "localftp": "ftp",
+}
+
 _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
     "linux": {
         "http": "xdg-open http://{ip}",
@@ -42,13 +52,16 @@ _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
         "sftp": "open sftp://{ip}",
     },
     "win32": {
-        "http": 'cmd.exe /c start "" http://{ip}',
-        "https": 'cmd.exe /c start "" https://{ip}',
+        # localhttp/localhttps pseudo-schemes open via ShellExecute (no console
+        # flash, unlike `cmd.exe /c start ...`) while keeping {ip}/{port}
+        # overrides. Add :{port} to force a port, e.g. localhttp://{ip}:{port}.
+        "http": "localhttp://{ip}",
+        "https": "localhttps://{ip}",
         "smb": "localsmb://{ip}",
-        "ftp": "explorer ftp://{ip}",
+        "ftp": "localftp://{ip}",
         "ssh": "cmd.exe /k ssh -p {port} {ip}",
         "telnet": "cmd.exe /k telnet {ip} {port}",
-        "sftp": "explorer sftp://{ip}",
+        "sftp": "localsftp://{ip}",
     },
 }
 
@@ -190,17 +203,21 @@ def launch_connect_for_uri(
         open_url(u)
         return None
 
-    # localsmb:// is a Windows-native pseudo-scheme — route to open_url as smb://.
-    if tmpl.lower().startswith("localsmb:"):
-        smb_url = (
-            tmpl
-            .replace("{ip}", str(effective_ip))
-            .replace("{port}", str(effective_port))
-            .replace("localsmb://", "smb://", 1)
-        )
-        _LOG.debug("open: localsmb pseudo-scheme → %s", smb_url)
-        open_url(smb_url)
-        return None
+    # local* pseudo-schemes (localsmb/localhttp/localhttps) route through
+    # open_url() so Windows opens them via ShellExecute/os.startfile — no
+    # console window flash — while still honouring {ip}/{port} overrides.
+    low = tmpl.lower()
+    for pseudo, real in _LOCAL_PSEUDO_SCHEMES.items():
+        if low.startswith(pseudo + ":"):
+            local_url = (
+                tmpl
+                .replace("{ip}", str(effective_ip))
+                .replace("{port}", str(effective_port))
+                .replace(pseudo + "://", real + "://", 1)
+            )
+            _LOG.debug("open: %s pseudo-scheme → %s", pseudo, local_url)
+            open_url(local_url)
+            return None
 
     argv = build_argv_from_template(
         tmpl,

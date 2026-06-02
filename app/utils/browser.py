@@ -72,20 +72,34 @@ def open_url(url: str) -> bool:
     if not url:
         return False
     scheme = urlparse(url).scheme.lower()
-    if scheme in _BROWSER_SCHEMES:
-        return webbrowser.open(url)
 
     if sys.platform == "win32":
+        # On Windows, os.startfile opens the default handler (browser for
+        # http/https) without ever spawning a console window. webbrowser.open
+        # may fall back to a generic controller that runs `cmd /c start`,
+        # which flashes an ephemeral terminal in the frozen app — avoid it.
         if scheme == "smb":
             parsed = urlparse(url)
             path = parsed.path.replace("/", "\\")
             unc = f"\\\\{parsed.netloc}{path}"
             return _win32_open_smb(unc)
+        if scheme in ("ftp", "sftp"):
+            # The default ftp:// handler on modern Windows is the web browser,
+            # which dropped FTP support — force Explorer's FTP client instead.
+            # explorer.exe is a GUI app, so no console window flashes.
+            try:
+                subprocess.Popen(["explorer.exe", url])  # noqa: S603,S607
+                return True
+            except OSError:
+                return webbrowser.open(url)
         try:
             os.startfile(url)  # noqa: S606 — URL validated above
             return True
         except OSError:
             return webbrowser.open(url)
+
+    if scheme in _BROWSER_SCHEMES:
+        return webbrowser.open(url)
 
     if sys.platform == "darwin":
         try:

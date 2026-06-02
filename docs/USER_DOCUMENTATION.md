@@ -242,7 +242,13 @@ Each entry has a **Label** (display name) and a **Type ID** (internal slug used 
 Override the command used to open devices **per scheme** (HTTP, HTTPS, SMB, FTP, SSH, Telnet, SFTP).
 Leave a field empty to use the system default (`xdg-open` for HTTP/HTTPS, file manager for SMB/FTP/SFTP, terminal for SSH/Telnet).
 
-On **Windows**, the SMB default is `localsmb://{ip}` — a special value that uses the native Windows credential dialog (WNetAddConnection2) to authenticate before opening the share in Explorer. Replace it with a custom command if you prefer a different SMB client.
+On **Windows**, the defaults use `local*://` pseudo-schemes — `localhttp://{ip}`, `localhttps://{ip}`, `localftp://{ip}`, `localsftp://{ip}` and `localsmb://{ip}`. These are opened directly through Windows instead of a `cmd.exe` command, so **no ephemeral console window flashes** when you open a device. They still honour the `{ip}`/`{port}` placeholders, so you can override the port, e.g. `localhttp://{ip}:{port}` or `localhttps://{ip}:8443`.
+
+- `localhttp://` / `localhttps://` open the default browser (`ShellExecute`).
+- `localsmb://` uses the native Windows credential dialog (WNetAddConnection2) before opening the share in Explorer.
+- `localftp://` / `localsftp://` open in Windows **Explorer** (browsers no longer support FTP). Explorer's FTP client connects before showing the window, so it can take a few seconds — for faster transfers, replace the template with a dedicated client, e.g. `"C:\Program Files (x86)\WinSCP\WinSCP.exe" ftp://{ip}` or FileZilla.
+
+Replace any of them with a custom command if you prefer a different client.
 
 **Reset** restores the built-in default for that scheme.
 

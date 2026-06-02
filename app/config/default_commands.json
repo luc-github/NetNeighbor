@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "comment": "Per-OS defaults for Tools / External applications (scheme to command). Placeholders: {ip} {port} {name} {type} {category} {url}. localsmb:// is a Windows-native pseudo-scheme (WNetAddConnection2).",
+  "comment": "Per-OS defaults for Tools / External applications (scheme to command). Placeholders: {ip} {port} {name} {type} {category} {url}. localsmb:// (WNetAddConnection2) and localhttp://, localhttps:// are Windows-native pseudo-schemes opened via ShellExecute (no console flash) — append :{port} to override the port.",
   "linux": {
     "http": "xdg-open http://{ip}",
     "https": "xdg-open https://{ip}",
@@ -20,12 +20,12 @@
     "sftp": "open sftp://{ip}"
   },
   "win32": {
-    "http": "cmd.exe /c start \"\" http://{ip}",
-    "https": "cmd.exe /c start \"\" https://{ip}",
+    "http": "localhttp://{ip}",
+    "https": "localhttps://{ip}",
     "smb": "localsmb://{ip}",
-    "ftp": "explorer ftp://{ip}",
+    "ftp": "localftp://{ip}",
     "ssh": "cmd.exe /k ssh -p {port} {ip}",
     "telnet": "cmd.exe /k telnet {ip} {port}",
-    "sftp": "explorer sftp://{ip}"
+    "sftp": "localsftp://{ip}"
   }
 }
