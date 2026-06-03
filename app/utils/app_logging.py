@@ -9,12 +9,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
 _SHIPPED_LOGGING_JSON = _ROOT / "config" / "logging.json"
 
 _LOG_LEVEL_OFF = 100  # above CRITICAL (50): suppress all standard levels
+
+# Cap the log file so a long DEBUG session can't grow it without bound.
+# 25 MB × 5 files ≈ 125 MB worst case, then the oldest is discarded.
+_LOG_MAX_BYTES = 25 * 1024 * 1024
+_LOG_BACKUP_COUNT = 5
 
 # Exact stock ``logging.json`` from older releases (no ``app_qt`` key) — useless log file.
 _LEGACY_SILENT_STOCK_FILE: dict[str, str] = {
@@ -86,8 +92,8 @@ def _shipped_logging_defaults() -> dict[str, str]:
     return merged
 
 
-class _FlushingFileHandler(logging.FileHandler):
-    """Line-oriented log tailing on Windows/Linux without waiting for buffer fill."""
+class _FlushingFileHandler(RotatingFileHandler):
+    """Size-capped, rotating log handler that flushes each line for live tailing."""
 
     def emit(self, record: logging.LogRecord) -> None:
         super().emit(record)
@@ -187,7 +193,12 @@ def setup_logging(*, log_name: str = "app") -> None:
         return
 
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    file_handler = _FlushingFileHandler(log_file, encoding="utf-8")
+    file_handler = _FlushingFileHandler(
+        log_file,
+        maxBytes=_LOG_MAX_BYTES,
+        backupCount=_LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
     file_handler.setFormatter(formatter)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)

@@ -38,6 +38,14 @@ _SERVICE_REMOVE_GRACE_S = 120
 # out.  Devices that are still online re-announce quickly; those that don't
 # re-announce within this window are considered offline.
 _REFRESH_REMOVE_GRACE_S = 15
+# Periodically recreate the ServiceBrowsers so a fresh PTR query goes out for
+# each browsed type.  zeroconf's own ServiceBrowser re-query backs off to
+# ~hourly, so once a record is evicted from its cache without a spontaneous
+# re-announcement (services slowly vanishing overnight) nothing re-queries it
+# until the user reloads.  This is a *lightweight* refresh (no zeroconf reopen,
+# cache kept) so known-answer suppression keeps traffic minimal — only the
+# missing records provoke a response.  Kept infrequent on purpose.
+_BROWSER_REFRESH_INTERVAL_S = 600
 
 
 _TYPE_MAP_PATH = Path(__file__).resolve().parent.parent / "config" / "device_types.json"
@@ -126,6 +134,8 @@ class MDNSDiscovery(BaseDiscovery):
         )
         self._enumeration_timer: threading.Timer | None = None
         self._enumeration_busy = False
+        self._browser_refresh_timer: threading.Timer | None = None
+        self._browser_refresh_interval_s = _BROWSER_REFRESH_INTERVAL_S
         self._pending_remove_timers: dict[tuple[str, str], threading.Timer] = {}
         self._last_recovery_time = 0.0
 
@@ -149,6 +159,7 @@ class MDNSDiscovery(BaseDiscovery):
             self._ensure_browser(service_type)
         self._kick_service_type_enumeration()
         self._schedule_enumeration_timer()
+        self._schedule_browser_refresh_timer()
         if not self._browsers:
             self._logger.warning("No mDNS service browser started")
 
@@ -163,6 +174,12 @@ class MDNSDiscovery(BaseDiscovery):
             except Exception:
                 pass
             self._enumeration_timer = None
+        if self._browser_refresh_timer is not None:
+            try:
+                self._browser_refresh_timer.cancel()
+            except Exception:
+                pass
+            self._browser_refresh_timer = None
         for key in list(self._pending_remove_timers):
             self._cancel_grace_remove(key)
         self._seen_by_service.clear()
@@ -237,19 +254,22 @@ class MDNSDiscovery(BaseDiscovery):
         except Exception:
             self._logger.exception("Failed to start mDNS browser for %s", normalized)
 
-    def _restart_browsers(self) -> None:
+    def _restart_browsers(self, *, cancel_pending_removes: bool = True) -> None:
         """Cancel all running browsers and recreate them to force fresh PTR queries.
 
         A new ServiceBrowser sends an immediate PTR query for its type; devices
         respond and trigger add_service callbacks — recovering any records that
         zeroconf evicted from its cache without re-announcement.
 
-        Pending grace-remove timers are also cancelled: the fresh PTR queries
-        will either confirm the service is gone (no add_service callback) or
-        restore it (add_service fires and refreshes the record).
+        When *cancel_pending_removes* is true the pending grace-remove timers are
+        also cancelled: the fresh PTR queries will either confirm the service is
+        gone (no add_service callback) or restore it (add_service refreshes the
+        record).  The periodic maintenance refresh passes ``False`` so a service
+        that genuinely went away is still removed by its in-flight grace timer.
         """
-        for key in list(self._pending_remove_timers):
-            self._cancel_grace_remove(key)
+        if cancel_pending_removes:
+            for key in list(self._pending_remove_timers):
+                self._cancel_grace_remove(key)
         for browser in self._browsers:
             try:
                 if hasattr(browser, "cancel"):
@@ -334,6 +354,35 @@ class MDNSDiscovery(BaseDiscovery):
         timer = threading.Timer(float(self._enumeration_interval_s), on_timer_fire)
         timer.daemon = True
         self._enumeration_timer = timer
+        timer.start()
+
+    def _schedule_browser_refresh_timer(self) -> None:
+        """Periodically re-query all browsed types to recover silently evicted records."""
+        if self._browser_refresh_timer is not None:
+            return
+
+        def on_timer_fire() -> None:
+            self._browser_refresh_timer = None
+            if not self._running or self._zeroconf is None:
+                return
+
+            def do_refresh() -> None:
+                if not self._running or self._zeroconf is None:
+                    return
+                self._logger.debug(
+                    "mDNS periodic browser refresh: re-querying %d type(s)",
+                    len(self._browsers_started),
+                )
+                # Keep in-flight grace removes so genuinely-gone services still expire.
+                self._restart_browsers(cancel_pending_removes=False)
+
+            self._schedule_main(do_refresh)
+            if self._running:
+                self._schedule_browser_refresh_timer()
+
+        timer = threading.Timer(float(self._browser_refresh_interval_s), on_timer_fire)
+        timer.daemon = True
+        self._browser_refresh_timer = timer
         timer.start()
 
     def _normalize_service_type(self, service: str) -> str:
