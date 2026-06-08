@@ -38,13 +38,16 @@ _SERVICE_REMOVE_GRACE_S = 120
 # out.  Devices that are still online re-announce quickly; those that don't
 # re-announce within this window are considered offline.
 _REFRESH_REMOVE_GRACE_S = 15
-# Periodically recreate the ServiceBrowsers so a fresh PTR query goes out for
-# each browsed type.  zeroconf's own ServiceBrowser re-query backs off to
-# ~hourly, so once a record is evicted from its cache without a spontaneous
-# re-announcement (services slowly vanishing overnight) nothing re-queries it
-# until the user reloads.  This is a *lightweight* refresh (no zeroconf reopen,
-# cache kept) so known-answer suppression keeps traffic minimal — only the
-# missing records provoke a response.  Kept infrequent on purpose.
+# Periodically force a full Zeroconf reopen so fresh PTR queries go out for every
+# browsed type — exactly what a user "reload" does.  A *lightweight* browser
+# restart on the same Zeroconf instance is not enough: while records linger in
+# the cache, recreating a ServiceBrowser only replays them from cache (no real
+# network confirmation), and once they expire (services slowly vanishing
+# overnight) the reused socket no longer recovers them — a sleeping printer that
+# stopped re-announcing, or a degraded mDNS multicast socket, only responds to a
+# query carrying NO known answers, which a fresh Zeroconf instance guarantees.
+# So this periodic maintenance must reopen Zeroconf (clear cache + new sockets),
+# not just restart browsers.  Kept infrequent on purpose.
 _BROWSER_REFRESH_INTERVAL_S = 600
 
 
@@ -254,35 +257,6 @@ class MDNSDiscovery(BaseDiscovery):
         except Exception:
             self._logger.exception("Failed to start mDNS browser for %s", normalized)
 
-    def _restart_browsers(self, *, cancel_pending_removes: bool = True) -> None:
-        """Cancel all running browsers and recreate them to force fresh PTR queries.
-
-        A new ServiceBrowser sends an immediate PTR query for its type; devices
-        respond and trigger add_service callbacks — recovering any records that
-        zeroconf evicted from its cache without re-announcement.
-
-        When *cancel_pending_removes* is true the pending grace-remove timers are
-        also cancelled: the fresh PTR queries will either confirm the service is
-        gone (no add_service callback) or restore it (add_service refreshes the
-        record).  The periodic maintenance refresh passes ``False`` so a service
-        that genuinely went away is still removed by its in-flight grace timer.
-        """
-        if cancel_pending_removes:
-            for key in list(self._pending_remove_timers):
-                self._cancel_grace_remove(key)
-        for browser in self._browsers:
-            try:
-                if hasattr(browser, "cancel"):
-                    browser.cancel()
-            except Exception:
-                pass
-        self._browsers.clear()
-        types_to_rebrowse = list(self._browsers_started)
-        self._browsers_started.clear()
-        for service_type in types_to_rebrowse:
-            self._ensure_browser(service_type)
-        self._logger.debug("mDNS browsers restarted for %d type(s)", len(types_to_rebrowse))
-
     def _enqueue_browsers_for_types(self, service_types: list[str]) -> None:
         """Register browsers on the UI main thread via ``schedule_on_main_thread`` when provided."""
 
@@ -370,11 +344,13 @@ class MDNSDiscovery(BaseDiscovery):
                 if not self._running or self._zeroconf is None:
                     return
                 self._logger.debug(
-                    "mDNS periodic browser refresh: re-querying %d type(s)",
+                    "mDNS periodic browser refresh: reopening zeroconf, re-querying %d type(s)",
                     len(self._browsers_started),
                 )
-                # Keep in-flight grace removes so genuinely-gone services still expire.
-                self._restart_browsers(cancel_pending_removes=False)
+                # Full reopen (same as a user reload): clears the cache and sends
+                # fresh PTR queries with no known-answer suppression, so records
+                # that silently went stale overnight are actually recovered.
+                self.refresh()
 
             self._schedule_main(do_refresh)
             if self._running:

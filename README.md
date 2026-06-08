@@ -1,8 +1,10 @@
 # NetNeighbor
 
 NetNeighbor discovers and monitors devices on your local network — a modern equivalent of the Windows Network Neighborhood experience. Runs on Windows, Linux and macOS.
+![VERSION](https://img.shields.io/badge/dynamic/json?label=NetNeighbor&query=$.version&color=green&style=plastic&url=https://raw.githubusercontent.com/luc-github/NetNeighbor/refs/heads/2.0/info.json)
+![GitHub last commit (branch)](https://img.shields.io/github/last-commit/luc-github/NetNeighbor/2.0?style=plastic)
+[![github-ci](https://github.com/luc-github/ESP3D-TFT/workflows/build-ci/badge.svg)](https://github.com/luc-github/NetNeighbor/actions/workflows/release.yml) 
 
-**Current release: 2.0.0**
 
 ![NetNeighbor main window](docs/images/overview-hero.png)
 
@@ -44,32 +46,32 @@ Available formats: `.exe` · `.dmg` (Apple Silicon & Intel) · `.deb` · `.AppIm
 
 **Windows installer:**
 ```
-NetNeighbor-2.0.0-win64-setup.exe
+NetNeighbor-2.x.y-win64-setup.exe
 ```
 
 > **Note:** the installer is not code-signed. Windows Defender SmartScreen may show a warning — click **More info** → **Run anyway**.
 
 **macOS:**
 
-Open `NetNeighbor-2.0.0-macos-arm64.dmg` (Apple Silicon) or `NetNeighbor-2.0.0-macos-intel.dmg` (Intel), then drag NetNeighbor to Applications.
+Open `NetNeighbor-2.x.y-macos-arm64.dmg` (Apple Silicon) or `NetNeighbor-2.x.y-macos-intel.dmg` (Intel), then drag NetNeighbor to Applications.
 
 > **Note:** the app is not notarized. On first launch Gatekeeper may block it — right-click → **Open** → **Open**, or run `xattr -cr /Applications/NetNeighbor.app` in Terminal.
 
 **`.deb` package (recommended, Linux):**
 ```bash
-sudo dpkg -i netneighbor_2.0.0_amd64.deb
+sudo dpkg -i netneighbor_2.x.y_amd64.deb
 ```
 
 **`.AppImage` (Linux):**
 ```bash
-chmod +x NetNeighbor-2.0.0-x86_64.AppImage
-./NetNeighbor-2.0.0-x86_64.AppImage
+chmod +x NetNeighbor-2.x.y-x86_64.AppImage
+./NetNeighbor-2.x.y-x86_64.AppImage
 ```
 
 **Tarball (Linux):**
 ```bash
-tar -xzf netneighbor-2.0.0.tar.gz
-cd netneighbor-2.0.0
+tar -xzf netneighbor-2.x.y.tar.gz
+cd netneighbor-2.x.y
 bash install-user-desktop.sh   # optional: add menu shortcut
 bash run.sh
 ```
