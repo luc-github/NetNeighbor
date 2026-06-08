@@ -1,6 +1,7 @@
 # NetNeighbor
 
-NetNeighbor discovers and monitors devices on your local network — a modern equivalent of the Windows Network Neighborhood experience. Runs on Windows, Linux and macOS.
+NetNeighbor discovers and monitors devices on your local network — a modern equivalent of the Windows Network Neighborhood experience. Runs on Windows, Linux and macOS.   
+
 ![VERSION](https://img.shields.io/badge/dynamic/json?label=NetNeighbor&query=$.version&color=green&style=plastic&url=https://raw.githubusercontent.com/luc-github/NetNeighbor/refs/heads/2.0/info.json)
 ![GitHub last commit (branch)](https://img.shields.io/github/last-commit/luc-github/NetNeighbor/2.0?style=plastic)
 [![github-ci](https://github.com/luc-github/ESP3D-TFT/workflows/build-ci/badge.svg)](https://github.com/luc-github/NetNeighbor/actions/workflows/release.yml) 
