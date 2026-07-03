@@ -531,7 +531,11 @@ class DiscoveryManager:
                     device.name,
                 )
                 device.metadata = self._merge_ssdp_metadata(existing.metadata, device.metadata, existing.name, device.name)
-                device.name = self._pick_ssdp_name(existing.name, device.name, existing.metadata, device.metadata)
+                if not self._has_effective_name_override(existing):
+                    device.name = self._pick_ssdp_name(existing.name, device.name, existing.metadata, device.metadata)
+                else:
+                    device.name = existing.name
+                    self._ssdp_logger.debug("SSDP name preserved: user override is active")
                 device.icon = existing.icon or device.icon
                 if not device.url and existing.url:
                     device.url = existing.url
@@ -2427,8 +2431,12 @@ class DiscoveryManager:
         merged_meta["protocol_metadata"] = proto_meta
         seen_sources = merged_meta.get("seen_sources") if isinstance(merged_meta.get("seen_sources"), list) else []
         merged_meta["seen_sources"] = sorted({str(x) for x in [*seen_sources, existing.source, incoming.source] if str(x).strip()})
-        if isinstance(new_meta.get("user_location"), str) and new_meta.get("user_location", "").strip():
-            merged_meta["user_location"] = new_meta.get("user_location").strip()
+        old_loc = old_meta.get("user_location")
+        new_loc = new_meta.get("user_location")
+        if isinstance(new_loc, str) and new_loc.strip():
+            # Only overwrite user_location if there is no existing user preference.
+            if not (isinstance(old_loc, str) and old_loc.strip()):
+                merged_meta["user_location"] = new_loc.strip()
 
         old_rank = self._cross_protocol_type_rank(existing.type)
         new_rank = self._cross_protocol_type_rank(incoming.type)
@@ -2598,24 +2606,14 @@ class DiscoveryManager:
         chosen = ""
 
         if c_norm:
-            if d_norm and d_norm != c_norm and is_plausible_room_location(d_norm):
-                self._store_location_preference_for_device(device, d_norm)
-                chosen = d_norm
-                dev_log.debug(
-                    "Location: discovery overrides cache ip=%s port=%s old=%r new=%r",
-                    device.ip,
-                    device.port,
-                    self._clip_loc_log(c_norm),
-                    self._clip_loc_log(d_norm),
-                )
-            else:
-                chosen = c_norm
-                dev_log.debug(
-                    "Location: prefs cache ip=%s port=%s value=%r",
-                    device.ip,
-                    device.port,
-                    self._clip_loc_log(chosen),
-                )
+            # User preference always wins over discovered location.
+            chosen = c_norm
+            dev_log.debug(
+                "Location: prefs cache ip=%s port=%s value=%r",
+                device.ip,
+                device.port,
+                self._clip_loc_log(chosen),
+            )
         elif d_norm and is_plausible_room_location(d_norm):
             self._store_location_preference_for_device(device, d_norm)
             chosen = d_norm
