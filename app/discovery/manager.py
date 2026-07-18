@@ -29,6 +29,7 @@ from utils.discovery_identity import (
     upnp_identity_from_usn,
     uuid_urn_if_present,
 )
+from utils.local_host import is_local_host_ip
 from utils.neighbor_mac import lookup_mac_from_neighbor_cache
 from utils.location_label import is_plausible_room_location
 from utils.scheduling import ScheduleMainFn
@@ -498,6 +499,7 @@ class DiscoveryManager:
         self._hydrate_ssdp_from_profile_cache(device)
         self._schedule_anticipatory_descriptor_fetch(device)
         self._apply_field_mapping_rules(device)
+        self._apply_local_host_identity(device)
         self._apply_type_override(device)
         self._apply_name_override(device)
         self._apply_location_override(device)
@@ -2512,6 +2514,31 @@ class DiscoveryManager:
                 if got:
                     return got
         return ""
+
+    def _apply_local_host_identity(self, device: Device) -> None:
+        """Classify the machine NetNeighbor runs on as a computer when no protocol can.
+
+        Windows never answers WSD probes sent from the host itself and NetBIOS browsing
+        does not return the local machine either, so its only rows come from incidental
+        mDNS adverts (e.g. Spotify's ``_spotify-connect._tcp``) that carry no host
+        identity and would leave it in "Unknown Devices". Runs before
+        ``_apply_type_override`` so an explicit user type preference still wins.
+        """
+        cur = (device.type or "unknown").strip().lower()
+        if cur not in {"", "unknown"}:
+            return
+        if not is_local_host_ip(str(device.ip).strip()):
+            return
+        device.type = "computer"
+        device.category = category_for_device_type("computer")
+        if isinstance(device.metadata, dict):
+            device.metadata["local_host"] = True
+        self._device_event_logger(device.source).debug(
+            "Local-host identity: ip=%s classified as computer (source=%s name=%s)",
+            device.ip,
+            device.source,
+            device.name,
+        )
 
     def _apply_type_override(self, device: Device) -> None:
         override_type = self._find_override_value(self._type_overrides, device)

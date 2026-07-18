@@ -11,9 +11,11 @@ import logging
 from pathlib import Path
 import socket
 import threading
+import time
 
 from discovery.base import BaseDiscovery
 from utils.discovery_config import category_for_device_type
+from utils.local_host import address_preference_rank, choose_best_address
 from utils.mdns_rules import cached_mdns_rules, evaluate_type_rules
 from utils.scheduling import ScheduleMainFn
 from utils.user_config_overlay import USER_DEVICE_TYPES_JSON, merge_device_types_trees, optional_user_json
@@ -49,6 +51,15 @@ _REFRESH_REMOVE_GRACE_S = 15
 # So this periodic maintenance must reopen Zeroconf (clear cache + new sockets),
 # not just restart browsers.  Kept infrequent on purpose.
 _BROWSER_REFRESH_INTERVAL_S = 600
+# Legacy-unicast fallback (RFC 6762 §6.7): retry/negative-cache windows for responders
+# that ignore standard multicast queries (see _legacy_unicast_service_info).
+_LEGACY_RESOLVE_RETRY_S = 60.0
+_LEGACY_UNICAST_TIMEOUT_S = 1.5
+# How long a host's last known routable (rank-0) address outweighs a worse-ranked one.
+# zeroconf resolutions occasionally surface only a subset of a multi-homed host's A records
+# (e.g. just the APIPA 169.254.x entry); without stickiness the aggregate endpoint flaps,
+# each flap emitting an offline for the previous endpoint and churning the device row.
+_STICKY_HOST_IP_TTL_S = 600.0
 
 
 _TYPE_MAP_PATH = Path(__file__).resolve().parent.parent / "config" / "device_types.json"
@@ -131,6 +142,8 @@ class MDNSDiscovery(BaseDiscovery):
         self._seen_by_service: dict[tuple[str, str], dict] = {}
         self._service_host_keys: dict[tuple[str, str], str] = {}
         self._host_last_endpoint: dict[str, tuple[str, int]] = {}
+        self._host_sticky_ip: dict[str, tuple[str, float]] = {}
+        self._legacy_resolve_cache: dict[tuple[str, str], tuple[float, object | None]] = {}
         self._type_map = self._load_mdns_type_map()
         self._schedule_main: ScheduleMainFn = (
             schedule_on_main_thread if schedule_on_main_thread is not None else (lambda fn: fn())
@@ -187,6 +200,8 @@ class MDNSDiscovery(BaseDiscovery):
             self._cancel_grace_remove(key)
         self._seen_by_service.clear()
         self._host_last_endpoint.clear()
+        self._host_sticky_ip.clear()
+        self._legacy_resolve_cache.clear()
         self._browsers.clear()
         self._browsers_started.clear()
         zc = self._zeroconf
@@ -406,6 +421,8 @@ class MDNSDiscovery(BaseDiscovery):
             self._logger.debug("mDNS lookup failed for %s %s", service_type, name, exc_info=True)
             return
         if info is None:
+            info = self._legacy_unicast_service_info(service_type, name)
+        if info is None:
             self._logger.debug("mDNS service info unavailable for %s %s", service_type, name)
             return
         try:
@@ -513,17 +530,127 @@ class MDNSDiscovery(BaseDiscovery):
                 return
             self._host_last_endpoint.pop(host_key, None)
             payload = self._aggregate_payload_for_host(host_key, online=False)
+            self._host_sticky_ip.pop(host_key, None)
             self._emit("device", payload)
             return
         service_type, name = key
         payload = self._build_fallback_remove_payload(service_type, name)
         self._emit("device", payload)
 
+    def _legacy_unicast_service_info(self, service_type: str, name: str):
+        """RFC 6762 §6.7 legacy-unicast fallback for responders that ignore multicast queries.
+
+        Some embedded mDNS responders (case study: LUC-NAS — see docs/reference/MDNS.md)
+        announce PTRs but never answer standard QM/QU multicast queries, so
+        ``get_service_info()`` always returns ``None``. They DO answer one-shot queries
+        sent from an ephemeral port with a unicast reply (recognisable by TTL ≤ 10).
+        Resolve the instance label via the OS resolver (Windows resolves ``.local``
+        natively, Linux via nss-mdns), then query the host directly for SRV/TXT.
+        """
+        key = (service_type, name)
+        cached = self._legacy_resolve_cache.get(key)
+        now = time.monotonic()
+        if cached is not None and now - cached[0] <= _LEGACY_RESOLVE_RETRY_S:
+            return cached[1]
+        info = None
+        try:
+            info = self._legacy_unicast_query(service_type, name)
+        except Exception:
+            self._logger.debug("mDNS legacy-unicast resolve failed for %s", name, exc_info=True)
+        self._legacy_resolve_cache[key] = (now, info)
+        return info
+
+    def _legacy_unicast_query(self, service_type: str, name: str):
+        import re
+        import types
+
+        label = name.split("._", 1)[0].strip()
+        # Only plausible single-label hostnames — instance labels with spaces or
+        # punctuation ("Sonos Play:1", …) would just stall in the OS resolver.
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9\-_]{0,62}", label):
+            return None
+        host = f"{label}.local"
+        try:
+            resolved = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+        except OSError:
+            return None
+        ip = choose_best_address([str(r[4][0]).split("%", 1)[0] for r in resolved])
+        if not ip or ":" in ip:
+            return None
+        import ipaddress
+
+        # DNS-suffix search or ISP NXDOMAIN redirection can hand back a public IP for an
+        # unknown name — a LAN neighbour is private by definition.
+        if not ipaddress.ip_address(ip).is_private:
+            return None
+
+        srv_port = 0
+        srv_server = ""
+        txt_bytes = b""
+        try:
+            from zeroconf import DNSIncoming, DNSOutgoing, DNSQuestion
+            from zeroconf.const import _CLASS_IN, _FLAGS_QR_QUERY, _TYPE_ANY
+
+            out = DNSOutgoing(_FLAGS_QR_QUERY)
+            out.add_question(DNSQuestion(name, _TYPE_ANY, _CLASS_IN))
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                sock.settimeout(_LEGACY_UNICAST_TIMEOUT_S)
+                for packet in out.packets():
+                    sock.sendto(packet, (ip, 5353))
+                deadline = time.monotonic() + _LEGACY_UNICAST_TIMEOUT_S
+                while time.monotonic() < deadline and not srv_port:
+                    data, addr = sock.recvfrom(65535)
+                    if addr[0] != ip:
+                        continue
+                    for record in DNSIncoming(data).answers():
+                        if getattr(record, "name", "").lower() != name.lower():
+                            continue
+                        port = getattr(record, "port", None)
+                        if port:
+                            srv_port = int(port)
+                            srv_server = str(getattr(record, "server", "") or "")
+                        text = getattr(record, "text", None)
+                        if isinstance(text, (bytes, bytearray)):
+                            txt_bytes = bytes(text)
+            finally:
+                sock.close()
+        except OSError:
+            pass
+        except Exception:
+            self._logger.debug("mDNS legacy-unicast query failed for %s", name, exc_info=True)
+
+        if not srv_port:
+            mapping = self._type_map.get(self._service_key(service_type), {})
+            srv_port = int(mapping.get("default_port", 0) or 0)
+        self._logger.info(
+            "mDNS legacy-unicast resolved %s via %s (ip=%s port=%s)",
+            name,
+            host,
+            ip,
+            srv_port,
+        )
+        return types.SimpleNamespace(
+            parsed_addresses=lambda: [ip],
+            addresses=None,
+            port=srv_port,
+            name=name,
+            server=srv_server or f"{host}.",
+            priority=0,
+            weight=0,
+            host_ttl=120,
+            other_ttl=120,
+            text=txt_bytes,
+            properties=None,
+        )
+
     def _build_payload(self, service_type: str, name: str, info, online: bool) -> dict:
         service_key = self._service_key(service_type)
         mapping = self._type_map.get(service_key, {})
         addresses = self._extract_addresses(info)
-        ip = addresses[0] if addresses else "0.0.0.0"
+        # Multi-homed hosts advertise every interface (LAN + virtual switches + APIPA) and
+        # zeroconf's ordering is unstable — rank instead of trusting addresses[0].
+        ip = choose_best_address(addresses) or "0.0.0.0"
         port = int(getattr(info, "port", 0) or 0)
         hostname = getattr(info, "name", "") or name
         server = getattr(info, "server", "")
@@ -852,15 +979,46 @@ class MDNSDiscovery(BaseDiscovery):
             return value.decode("utf-8", errors="replace")
         return str(value)
 
+    def _sticky_host_ip(self, host_key: str, ip: str) -> str:
+        """Never downgrade a host to a worse-ranked address while a recent routable one is known.
+
+        A resolution that momentarily surfaces only the APIPA/virtual-switch A record of a
+        multi-homed host must not move the aggregate endpoint: the flap would retire the
+        LAN endpoint (offline) and churn the device row. A genuinely new routable address
+        (e.g. DHCP renewal) still replaces the remembered one immediately.
+        """
+        now = time.monotonic()
+        rank = address_preference_rank(ip)
+        if rank == 0:
+            self._host_sticky_ip[host_key] = (ip, now)
+            return ip
+        remembered = self._host_sticky_ip.get(host_key)
+        if remembered is not None:
+            sticky_ip, seen_at = remembered
+            if now - seen_at <= _STICKY_HOST_IP_TTL_S and address_preference_rank(sticky_ip) < rank:
+                self._logger.debug(
+                    "mDNS sticky ip: host=%s keeping %s over %s", host_key, sticky_ip, ip
+                )
+                return sticky_ip
+            self._host_sticky_ip.pop(host_key, None)
+        return ip
+
     def _host_key_for_payload(self, payload: dict, service_type: str, name: str) -> str:
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        # The SRV target ("server", e.g. "DESKTOP-LUCTW.local.") is unique per machine — key
+        # hosts by it so a multi-homed host stays ONE aggregate even when successive
+        # resolutions surface different interface addresses. Keying by IP (previous
+        # behaviour) split such a host into one row per interface, and the stale-endpoint
+        # retirement in _on_service_change never fired.
+        server = metadata.get("server")
+        if isinstance(server, str) and server.strip():
+            return server.strip().lower().rstrip(".")
         ip = str(payload.get("ip", "")).strip()
         if ip and ip != "0.0.0.0":
             return ip
-        for key in ("hostname", "server"):
-            value = metadata.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip().lower()
+        value = metadata.get("hostname")
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
         return f"{self._normalize_service_type(service_type)}::{name.strip().lower()}"
 
     def _aggregate_payload_for_host(self, host_key: str, online: bool) -> dict:
@@ -945,7 +1103,13 @@ class MDNSDiscovery(BaseDiscovery):
                     http_port = candidate
                     break
 
-        ip = str(representative.get("ip", "0.0.0.0"))
+        # Services of one host may have resolved to different interfaces (multi-homed
+        # hosts, or payloads cached before an address change) — rank across all rows so
+        # the aggregate endpoint stays on the routable LAN address.
+        ip = choose_best_address([str(e.get("ip", "")) for e in entries]) or str(
+            representative.get("ip", "0.0.0.0")
+        )
+        ip = self._sticky_host_ip(host_key, ip)
         url = None
         if http_port and ip and ip != "0.0.0.0":
             url = f"http://{ip}:{http_port}/"

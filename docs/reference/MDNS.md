@@ -38,11 +38,69 @@ Typical service types discovered:
 mDNS announces per-service. NetNeighbor aggregates services to one logical host entry:
 
 1. Track per-service payloads `(service_type, instance_name)`
-2. Map each service to a host key (prefer IP, fallback hostname)
+2. Map each service to a host key — the **SRV target** (`ServiceInfo.server`, e.g.
+   `DESKTOP-LUCTW.local.`), unique per machine; fallback to IP, then instance hostname
 3. Emit an aggregated payload with all services under `metadata["services"]`
 
 A device like ESP3D exposing both `_esp3d._tcp` and `_telnet._tcp` appears as one entry
 with both services visible in the Details dialog.
+
+## Multi-homed hosts and the local machine
+
+An important real-world case (hit on the PC hosting NetNeighbor itself — see
+`utils/local_host.py`): a Windows host with several network interfaces advertises **all**
+its addresses in one mDNS record — real LAN NIC (DHCP), VirtualBox/Hyper-V host-only
+switches (`192.168.56.1`, `192.168.53.1`, …), and APIPA `169.254.x.x` fallbacks on
+disconnected adapters. Two consequences the pipeline must absorb:
+
+- **Unstable address ordering.** zeroconf returns A/AAAA records in no guaranteed order,
+  so trusting `addresses[0]` makes the same host flap between its interfaces across
+  resolutions. Each flap used to materialise as a *distinct* device row (device keys are
+  endpoint-based), so one PC showed up 3–4 times — and since hide/monitor prefs match by
+  `host:name:` when no MAC/UID is available, hiding one row hid them all.
+  Fix: `choose_best_address()` ranks candidates (routable LAN IPv4 → virtual-switch IPv4 →
+  routable IPv6 → link-local) with a deterministic tie-break, both when building a
+  per-service payload and across rows when aggregating a host.
+- **Partial record sets.** Ranking alone is not enough: a zeroconf resolution can
+  momentarily surface *only* the APIPA A record, so the "best" of that set is still
+  link-local. Each such flap retired the LAN endpoint (offline) — and since offline
+  non-monitored rows are dropped, the host vanished from the UI between flips. Fix:
+  `_sticky_host_ip()` remembers the last rank-0 (routable) address per host for
+  `_STICKY_HOST_IP_TTL_S` (10 min) and refuses to downgrade the aggregate endpoint while
+  that memory is fresh; a *new* routable address (DHCP renewal) still replaces it
+  immediately, and a host that genuinely lost its LAN falls back after the TTL.
+- **Host key must not be the IP.** Keying hosts by IP split a multi-homed machine into one
+  aggregate per interface and the stale-endpoint retirement in `_on_service_change` never
+  fired. Keying by the SRV target keeps one aggregate; when the chosen endpoint changes
+  (e.g. DHCP renewal), the previous endpoint is emitted offline and replaced.
+
+The **local machine** is a further special case: Windows never answers WSD probes sent
+from the host itself (verified with `fdrespub` running and a Private network profile —
+remote hosts answer, the local stack does not), and NetBIOS browsing does not return the
+local host either. Its only discovery rows are incidental mDNS adverts from user apps
+(e.g. Spotify's `_spotify-connect._tcp`, which carries no host identity and would leave
+the PC in "Unknown Devices" with a speaker icon). The manager therefore classifies any
+still-unknown device whose IP belongs to a local interface as `computer`
+(`_apply_local_host_identity` in `discovery/manager.py`, flag `metadata["local_host"]`);
+explicit user type overrides still win.
+
+## Legacy-unicast resolution fallback
+
+Another real-world case (hit on "LUC-NAS", a Samba host with an embedded mDNS responder):
+some responders announce PTRs — or their PTRs keep echoing through other clients'
+known-answer sections — but **never answer standard multicast queries**, neither QM nor QU.
+`zc.get_service_info()` then always returns `None` and the host silently never appears,
+even though "discovery messages" for it are visible in the logs. Such responders do answer
+**one-shot legacy queries** (RFC 6762 §6.7): a query sent from an ephemeral port gets a
+unicast reply, recognisable by its TTL ≤ 10.
+
+`_legacy_unicast_service_info()` handles this: when `get_service_info()` fails, the
+instance label (must look like a hostname — no spaces/punctuation) is resolved as
+`<label>.local` through the **OS resolver** (Windows resolves `.local` natively via
+mDNS/LLMNR; Linux via nss-mdns), then the host is queried directly on `<ip>:5353` for
+SRV/TXT. Guard rails: results (including failures) are cached for 60 s per service,
+public IPs from DNS-suffix/ISP-redirect artifacts are rejected (`is_private` required),
+and the SRV port falls back to the type map's `default_port`.
 
 ## URL policy
 

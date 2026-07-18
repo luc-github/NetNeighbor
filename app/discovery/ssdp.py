@@ -28,6 +28,7 @@ from collections.abc import Callable
 from discovery.base import BaseDiscovery
 from utils.discovery_cache import load_discovery_cache, save_discovery_cache
 from utils.discovery_config import category_for_device_type
+from utils.local_host import VIRTUAL_HOST_SUBNETS
 from utils.user_config_overlay import merge_ssdp_rules_overlays
 
 _SSDP_ADDR = ("239.255.255.250", 1900)
@@ -81,12 +82,7 @@ def _resolve_ssdp_device_ip(parsed_hostname: str | None, packet_source_ip: str) 
 
 # Exclude host-only / hypervisor switches from SSDP multicast join & send — they are not the LAN
 # where UPnP devices live, and on Windows they can starve or mis-order stack behavior vs. real NICs.
-_SSDP_MULTICAST_SKIP_SUBNETS: tuple[ipaddress.IPv4Network, ...] = (
-    ipaddress.ip_network("192.168.56.0/24"),  # VirtualBox host-only
-    ipaddress.ip_network("192.168.53.0/24"),  # common Hyper-V / third-party virtual NIC
-    ipaddress.ip_network("192.168.122.0/24"),  # libvirt virbr0
-    ipaddress.ip_network("192.168.137.0/24"),  # Windows ICS / hotspot host
-)
+_SSDP_MULTICAST_SKIP_SUBNETS = VIRTUAL_HOST_SUBNETS
 
 
 def _local_ipv4_multicast_ifaces() -> list[str]:

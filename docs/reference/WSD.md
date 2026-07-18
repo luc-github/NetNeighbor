@@ -89,6 +89,19 @@ Transient probe failures return early without penalising known devices.
 
 `WsddSocketDiscovery` applies the same TTL logic via `_wsdd_known` / `_wsdd_miss_counts`.
 
+## The local machine never answers its own probes
+
+Windows does **not** respond to WSD probes originating from the same host: with
+`fdrespub`/`FDPHOST` running and the network profile set to Private, a raw Probe sent from
+the machine's own LAN interface (multicast loopback enabled) gets ProbeMatches from every
+remote responder but never from the local stack (verified empirically, 2026-07). NetBIOS
+browsing does not return the local host either. So WSD can never classify the PC running
+NetNeighbor as a computer — that machine is instead recognised by IP
+(`utils/local_host.py: is_local_host_ip`) and classified `computer` by
+`_apply_local_host_identity` in `discovery/manager.py`. See also
+[`MDNS.md`](MDNS.md#multi-homed-hosts-and-the-local-machine) for the multi-interface
+address handling of the same host.
+
 ## Configuration (`discovery.json`)
 
 ```json
