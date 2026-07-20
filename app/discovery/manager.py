@@ -289,6 +289,10 @@ class DiscoveryManager:
         self._demo_mode = demo_mode
         self._location_prefs_need_reapply = False
         self._location_prefs_dirty_callback: Callable[[], None] | None = None
+        # Discovered-location policy: casefolded label -> configured spelling.
+        # Permissive until the UI pushes the configured list via set_location_policy.
+        self._allowed_locations: dict[str, str] = {}
+        self._auto_add_discovered_locations = True
 
         for protocol in self._protocols:
             protocol.set_callback(self._on_protocol_event)
@@ -1726,6 +1730,18 @@ class DiscoveryManager:
     def get_location_overrides(self) -> dict[str, str]:
         return dict(self._location_overrides)
 
+    def set_location_policy(self, allowed_locations: list[str], auto_add_discovered: bool) -> None:
+        """Discovered locations are applied only when listed here or when auto-add is on;
+        otherwise the device stays without location. User overrides are unaffected."""
+        mapping: dict[str, str] = {}
+        for raw in allowed_locations or []:
+            if isinstance(raw, str) and raw.strip():
+                mapping.setdefault(raw.strip().casefold(), raw.strip())
+        self._allowed_locations = mapping
+        self._auto_add_discovered_locations = bool(auto_add_discovered)
+        # Re-evaluate every cached device against the new policy.
+        self.set_location_overrides(self.get_location_overrides())
+
     def set_field_mapping_rules(self, rules: dict[str, dict[str, list[str]]]) -> None:
         normalized: dict[str, dict[str, list[str]]] = {}
         for key, value in rules.items():
@@ -2642,14 +2658,25 @@ class DiscoveryManager:
                 self._clip_loc_log(chosen),
             )
         elif d_norm and is_plausible_room_location(d_norm):
-            self._store_location_preference_for_device(device, d_norm)
-            chosen = d_norm
-            dev_log.debug(
-                "Location: auto from discovery (persisted) ip=%s port=%s value=%r",
-                device.ip,
-                device.port,
-                self._clip_loc_log(chosen),
-            )
+            canonical = self._allowed_locations.get(d_norm.casefold())
+            if canonical is not None:
+                d_norm = canonical
+            if canonical is not None or self._auto_add_discovered_locations:
+                self._store_location_preference_for_device(device, d_norm)
+                chosen = d_norm
+                dev_log.debug(
+                    "Location: auto from discovery (persisted) ip=%s port=%s value=%r",
+                    device.ip,
+                    device.port,
+                    self._clip_loc_log(chosen),
+                )
+            else:
+                dev_log.debug(
+                    "Location: discovered %r ignored (not in configured list, auto-add off) ip=%s port=%s",
+                    self._clip_loc_log(d_norm),
+                    device.ip,
+                    device.port,
+                )
         else:
             dev_log.debug(
                 "Location: empty ip=%s port=%s (no RoomName/xml_fields or TXT keys matched)",

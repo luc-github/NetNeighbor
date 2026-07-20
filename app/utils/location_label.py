@@ -21,32 +21,35 @@ def is_plausible_room_location(value: str | None) -> bool:
     return True
 
 
-_LOCATION_CANONICAL_EQUIV = {
-    "office": "bureau",
-    "room": "chambre",
-    "living room": "salon",
-    "kitchen": "cuisine",
-    "workshop": "atelier",
-    "bathroom": "salle de bain",
-    "master bedroom": "chambre principale",
-}
-
-
 def normalize_location_options(options: list[str]) -> list[str]:
-    """Drop empty/invalid entries and collapse obvious FR/EN duplicates.
+    """Drop empty/invalid entries and case-insensitive duplicates.
 
-    Keeps insertion order while preferring the latest value for equivalent labels.
+    Keeps insertion order while preferring the earliest value, so
+    user-configured options are never replaced by later (discovered) ones.
+    Translations are deliberately NOT handled: "office" and "bureau" are two
+    distinct locations and both stay in the list.
     """
     normalized: list[str] = []
-    by_key: dict[str, int] = {}
+    seen: set[str] = set()
     for raw in options:
         value = str(raw).strip() if isinstance(raw, str) else ""
         if not value or not is_plausible_room_location(value):
             continue
-        key = _LOCATION_CANONICAL_EQUIV.get(value.casefold(), value.casefold())
-        if key in by_key:
-            normalized[by_key[key]] = value
-        else:
-            by_key[key] = len(normalized)
-            normalized.append(value)
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(value)
     return normalized
+
+
+def location_options_with_current(options: list[str], current: str | None) -> list[str]:
+    """Return *options* plus the device's current location label."""
+    result = list(options)
+    value = current.strip() if isinstance(current, str) else ""
+    if not value or not is_plausible_room_location(value):
+        return result
+    if any(value.casefold() == opt.casefold() for opt in result):
+        return result
+    result.append(value)
+    return result

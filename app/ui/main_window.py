@@ -81,7 +81,7 @@ from utils.device_remote_icon import (
 from utils.discovery_cache import purge_device_from_discovery_cache
 from utils.discovery_config import normalize_information_precedence_list
 from utils.double_click_open import resolve_all_connect_targets, resolve_connect_target
-from utils.location_label import normalize_location_options
+from utils.location_label import location_options_with_current, normalize_location_options
 from utils.icon_view_prefs import (
     DEVICE_ICON_REFERENCE_PX,
     ICON_SIZE_PRESET_PIXELS,
@@ -296,6 +296,7 @@ class NetNeighborMainWindow(QMainWindow):
     """Table (list) and icon-mode list; view options stored in ``ui_prefs.json``."""
 
     _notification_received = Signal(str, str, str)  # datetime_str, device_name, status
+    _location_prefs_dirty = Signal()  # emitted from discovery threads → persist on main thread
 
     _FILTER_ROLE = Qt.ItemDataRole.UserRole
     _BUNDLE_KEY_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -375,6 +376,9 @@ class NetNeighborMainWindow(QMainWindow):
             self._location_options = normalize_location_options(
                 [str(v).strip() for v in raw_locs if isinstance(v, str) and str(v).strip()]
             )
+        if not self._location_options:
+            from ui.preset_editors import _default_location_presets
+            self._location_options = _default_location_presets()
         self._type_options: list[tuple[str, str]] = []
         raw_types = prefs.get("type_options")
         if isinstance(raw_types, list):
@@ -406,6 +410,19 @@ class NetNeighborMainWindow(QMainWindow):
             raw_hidden = prefs.get("hidden_overrides")
             if isinstance(raw_hidden, dict):
                 discovery_manager.set_hidden_overrides(raw_hidden)
+            raw_type_o = prefs.get("type_overrides")
+            if isinstance(raw_type_o, dict):
+                discovery_manager.set_type_overrides(raw_type_o)
+            raw_name_o = prefs.get("name_overrides")
+            if isinstance(raw_name_o, dict):
+                discovery_manager.set_name_overrides(raw_name_o)
+            raw_loc_o = prefs.get("location_overrides")
+            if isinstance(raw_loc_o, dict):
+                discovery_manager.set_location_overrides(raw_loc_o)
+            discovery_manager.set_location_policy(
+                self._location_options,
+                bool(prefs.get("auto_add_discovered_locations", False)),
+            )
 
         raw_hidden_meta = prefs.get("hidden_device_meta")
         self._hidden_device_meta: dict[str, dict[str, object]] = {}
@@ -416,9 +433,13 @@ class NetNeighborMainWindow(QMainWindow):
 
         self._notification_log: list[tuple[str, str, str]] = []
         self._notification_received.connect(self._append_notification)
+        self._location_prefs_dirty.connect(self._schedule_persist_ui_prefs)
         if discovery_manager is not None:
             discovery_manager.register_presence_transition_hook(
                 self._on_presence_transition
+            )
+            discovery_manager.set_location_prefs_dirty_callback(
+                self._location_prefs_dirty.emit
             )
 
         self._last_devices: list[Device] = []
@@ -1038,6 +1059,9 @@ class NetNeighborMainWindow(QMainWindow):
             prefs["field_mapping_rules"] = self._discovery_manager.get_field_mapping_rules()
             prefs["monitored_overrides"] = self._discovery_manager.get_monitored_overrides()
             prefs["hidden_overrides"] = self._discovery_manager.get_hidden_overrides()
+            prefs["type_overrides"] = self._discovery_manager.get_type_overrides()
+            prefs["name_overrides"] = self._discovery_manager.get_name_overrides()
+            prefs["location_overrides"] = self._discovery_manager.get_location_overrides()
             self._prune_hidden_device_meta()
             prefs["hidden_device_meta"] = dict(self._hidden_device_meta)
         save_ui_preferences(prefs)
@@ -1110,8 +1134,10 @@ class NetNeighborMainWindow(QMainWindow):
         )
         dlg.exec()
 
-    def _apply_location_presets(self, options: list[str], _auto_add: bool) -> None:
+    def _apply_location_presets(self, options: list[str], auto_add: bool) -> None:
         self._location_options = options
+        if self._discovery_manager is not None:
+            self._discovery_manager.set_location_policy(options, auto_add)
 
     def _apply_type_presets(self, options: list[tuple[str, str]]) -> None:
         self._type_options = options
@@ -1470,6 +1496,8 @@ class NetNeighborMainWindow(QMainWindow):
         self._location_options = merged
         prefs["location_options"] = merged
         save_ui_preferences(prefs)
+        if self._discovery_manager is not None:
+            self._discovery_manager.set_location_policy(merged, True)
 
     def _filtered_bundles(self) -> list[DeviceBundle]:
         bundles = apply_bundle_category_filter(
@@ -1646,10 +1674,7 @@ class NetNeighborMainWindow(QMainWindow):
             bundle_custom_command(bundle) or (self._custom_command_template or "").strip()
         )
         current_loc = bundle_location_label(bundle, no_location_label="")
-        if current_loc and current_loc not in self._location_options:
-            loc_opts = normalize_location_options(self._location_options + [current_loc])
-        else:
-            loc_opts = self._location_options
+        loc_opts = location_options_with_current(self._location_options, current_loc)
         show_device_context_menu(
             self,
             global_pos,
