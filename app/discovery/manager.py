@@ -47,6 +47,13 @@ _WSD_NMB_RETRY_INTERVAL_S = 30.0
 _WSD_NMB_MAX_RETRIES = 6
 
 
+# Device.metadata key: MAC seen in the neighbour (ARP/ND) cache for the row's IP when a
+# protocol last confirmed it live. Lets probes detect that DHCP handed the IP to another
+# host, whose answers would otherwise keep a stale row (e.g. an old NetBIOS name) online.
+_PINNED_MAC_KEY = "_pinned_mac"
+_FROM_CACHE_FLAGS = ("from_ssdp_cache", "from_nmb_cache", "from_wsd_cache")
+
+
 def _descriptor_url_with_ip(descriptor_template: str, ip_s: str) -> str | None:
     """Rebuild SSDP LOCATION-style URL with ``ip_s`` as host (same path/port/query as template)."""
     t = (descriptor_template or "").strip()
@@ -561,6 +568,7 @@ class DiscoveryManager:
             existing_arrival = self._arrival_sequence
         device.metadata["_arrival_index"] = existing_arrival
         self._supplement_missing_user_location(device, existing)
+        self._pin_identity_mac(device, existing)
         # Assign new key before removing old key so the device is never absent from _devices.
         self._devices[existing_key] = device
         if old_key_to_drop is not None:
@@ -610,7 +618,7 @@ class DiscoveryManager:
             if name:
                 sip = str(device.ip).strip()
                 from utils.neighbor_mac import lookup_mac_from_neighbor_cache
-                mac = lookup_mac_from_neighbor_cache(sip)
+                mac = lookup_mac_from_neighbor_cache(sip) or device.metadata.get(_PINNED_MAC_KEY) or None
                 save_nmb_name_cache(sip, name, mac)
                 self._nmb_name_cache[sip] = {"name": name}
         if device.source == "wsd" and device.online:
@@ -630,6 +638,8 @@ class DiscoveryManager:
                     "wsd_types": md.get("wsd_types") or [],
                     "wsd_scopes": md.get("wsd_scopes") or [],
                 }
+                if md.get(_PINNED_MAC_KEY):
+                    row["mac"] = md[_PINNED_MAC_KEY]
                 save_wsd_device_cache(dev_key, row)
                 self._wsd_device_cache[dev_key] = row
         self._notify()
@@ -923,6 +933,11 @@ class DiscoveryManager:
             name = row.get("name")
             if not isinstance(name, str) or not name.strip():
                 continue
+            nmb_meta: dict = {"from_nmb_cache": True}
+            cached_mac = row.get("mac")
+            cached_mac = normalize_mac_for_bundle_merge(cached_mac) if isinstance(cached_mac, str) else ""
+            if cached_mac:
+                nmb_meta[_PINNED_MAC_KEY] = cached_mac
             device = Device(
                 name=name,
                 ip=sip,
@@ -931,7 +946,7 @@ class DiscoveryManager:
                 category=category_for_device_type("computer"),
                 source="nmb",
                 url=None,
-                metadata={"from_nmb_cache": True},
+                metadata=nmb_meta,
                 online=True,
             )
             self.add_or_update_device(device)
@@ -968,6 +983,10 @@ class DiscoveryManager:
                 "wsd_types": row.get("wsd_types") or [],
                 "wsd_scopes": row.get("wsd_scopes") or [],
             }
+            cached_mac = row.get("mac")
+            cached_mac = normalize_mac_for_bundle_merge(cached_mac) if isinstance(cached_mac, str) else ""
+            if cached_mac:
+                metadata[_PINNED_MAC_KEY] = cached_mac
             device_type = row.get("type") or "computer"
             device_category = row.get("category") or category_for_device_type(device_type)
             url = row.get("url") or None
@@ -986,6 +1005,66 @@ class DiscoveryManager:
             wsd_emitted += 1
         if wsd_emitted:
             self._logger.info("_emit_cached_devices: pre-populated %d WSD device(s)", wsd_emitted)
+
+    def _pin_identity_mac(self, device: Device, existing: Device | None) -> None:
+        """Record which MAC answered for ``device.ip`` when the row was confirmed live.
+
+        Rows replayed from the disk cache keep the MAC stored with them (they prove nothing
+        about who holds the IP now); offline events and ARP misses inherit the prior pin
+        as long as the IP is unchanged.
+        """
+        md = device.metadata
+        if not isinstance(md, dict):
+            return
+        sip = str(device.ip).strip()
+        prior = ""
+        if isinstance(existing, Device) and str(existing.ip).strip() == sip:
+            prior_md = existing.metadata if isinstance(existing.metadata, dict) else {}
+            prior = str(prior_md.get(_PINNED_MAC_KEY) or "")
+        from_cache = any(md.get(flag) for flag in _FROM_CACHE_FLAGS)
+        live_mac = ""
+        if device.online and not from_cache:
+            hit = lookup_mac_from_neighbor_cache(sip)
+            live_mac = normalize_mac_for_bundle_merge(hit) if hit else ""
+        pinned = live_mac or str(md.get(_PINNED_MAC_KEY) or "") or prior
+        if pinned:
+            md[_PINNED_MAC_KEY] = pinned
+
+    def _drop_rows_with_changed_identity(self, ip: str) -> bool:
+        """Retire rows at *ip* whose pinned MAC no longer matches who answers there.
+
+        Called right after a probe got an answer from *ip* (so the neighbour cache is
+        fresh). A mismatch means the address now belongs to another host: the reply
+        proves nothing about the stale row, which must not stay online, nor merge into
+        the new occupant's bundle (whose MAC it would otherwise borrow). Followed rows
+        are kept greyed out; others are dropped. Returns True when something changed.
+        """
+        hit = lookup_mac_from_neighbor_cache(ip)
+        current = normalize_mac_for_bundle_merge(hit) if hit else ""
+        if not current:
+            return False
+        changed = False
+        for store_key, d in list(self._devices.items()):
+            if str(d.ip).strip().split("%", 1)[0] != ip:
+                continue
+            md = d.metadata if isinstance(d.metadata, dict) else {}
+            pinned = str(md.get(_PINNED_MAC_KEY) or "")
+            if not pinned or pinned == current:
+                continue
+            self._logger.info(
+                "Identity changed at %s: row %s (%s) pinned MAC %s, now answered by %s → retired",
+                ip,
+                store_key,
+                d.name,
+                pinned,
+                current,
+            )
+            changed = True
+            if d.monitored:
+                d.online = False
+            else:
+                self._devices.pop(store_key, None)
+        return changed
 
     def _start_tcp_probes_for_cached_devices(self) -> None:
         """Background TCP probe to quickly validate cached devices at startup.
@@ -1030,6 +1109,8 @@ class DiscoveryManager:
             def apply() -> None:
                 changed = False
                 now = datetime.now(timezone.utc)
+                if reachable and self._drop_rows_with_changed_identity(ip):
+                    changed = True
                 for store_key, d in list(self._devices.items()):
                     sip = str(d.ip).strip()
                     dport = int(d.port or 0)
@@ -1085,6 +1166,8 @@ class DiscoveryManager:
             def apply() -> None:
                 changed = False
                 now = datetime.now(timezone.utc)
+                if reachable and self._drop_rows_with_changed_identity(ip):
+                    changed = True
                 for store_key, d in list(self._devices.items()):
                     if str(d.ip).strip().split("%", 1)[0] != ip:
                         continue

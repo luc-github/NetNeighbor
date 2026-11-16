@@ -61,19 +61,6 @@ def _load_index() -> dict[str, dict[str, str]]:
     return out
 
 
-def cached_remote_icon_url_for_host(ip: str) -> str | None:
-    sip = str(ip).strip()
-    if not sip or sip in {"0.0.0.0", "::"}:
-        return None
-    row = _load_index().get(sip)
-    if not row:
-        return None
-    payload_path = _REMOTE_ICON_DISK_DIR / row["payload_sha256"]
-    if not payload_path.is_file():
-        return None
-    return row["canonical_url"]
-
-
 def _normalize_icon_url(ref: str, ip: str, port: int) -> str:
     ref = ref.strip()
     if ref.startswith(("http://", "https://")):
@@ -342,12 +329,9 @@ def iter_remote_icon_disk_keys(device: Device) -> list[str]:
                 seen.add(alias)
                 keys.append(alias)
 
-    row = _load_index().get(sip)
-    if row:
-        remembered = row.get("canonical_url")
-        if isinstance(remembered, str) and remembered.strip():
-            push_logical_url(remembered)
-
+    # Keys derive only from the icon URL the device announces *now*. The per-IP index
+    # is not consulted: DHCP reuses addresses, so an IP-only lookup would hand a
+    # previous occupant's icon (e.g. a Sonos) to whatever host now holds that IP.
     raw = remote_icon_url_for_device(device)
     if raw:
         push_logical_url(rewrite_remote_icon_url_to_device_ip(raw, sip))
@@ -392,9 +376,14 @@ def clear_all_app_data() -> None:
 
 
 def load_remote_icon_payload_for_device(device: Device) -> bytes | None:
+    keys = iter_remote_icon_disk_keys(device)
+    if not keys:
+        # The device announces no icon URL: never borrow one through its IP.
+        return None
     sip = str(device.ip).strip()
     row = _load_index().get(sip)
-    if row:
+    # Only trust the per-IP index row when it records the URL this device announces.
+    if row and row.get("canonical_url") in keys:
         sha = row.get("payload_sha256")
         if isinstance(sha, str) and len(sha) == 64:
             sl = sha.lower()
@@ -405,7 +394,7 @@ def load_remote_icon_payload_for_device(device: Device) -> bytes | None:
                         return path.read_bytes()
                     except OSError:
                         pass
-    for key in iter_remote_icon_disk_keys(device):
+    for key in keys:
         data = load_remote_icon_payload_bytes(key)
         if data:
             return data
@@ -545,8 +534,6 @@ def bundle_has_device_icon_source(bundle: DeviceBundle) -> bool:
             continue
         if remote_icon_url_for_device(dev):
             return True
-        if cached_remote_icon_url_for_host(dev.ip):
-            return True
     return False
 
 
@@ -563,7 +550,4 @@ def bundle_provided_icon_display(bundle: DeviceBundle) -> str | None:
         url = remote_icon_url_for_device(dev)
         if url:
             return url
-        cached = cached_remote_icon_url_for_host(dev.ip)
-        if cached:
-            return cached
     return None
