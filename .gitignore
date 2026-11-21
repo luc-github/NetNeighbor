@@ -9,7 +9,7 @@ venv/
 env/
 env.bak/
 venv.bak/
-
+.venv-i18n-test/
 
 # Build / distribution
 build/
