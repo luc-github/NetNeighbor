@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMenu,
     QPushButton,
@@ -145,7 +146,11 @@ class DeviceDetailsDialog(QDialog):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
         inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        inner.setStyleSheet("background-color: palette(base);")
+        # Scoped by objectName: an unscoped rule cascades into every child,
+        # including QComboBox popups, whose selected item then renders
+        # white-on-white (base background + highlighted-text colour).
+        inner.setObjectName("nnDetailsPageInner")
+        inner.setStyleSheet("#nnDetailsPageInner { background-color: palette(base); }")
         grid = QGridLayout(inner)
         grid.setColumnStretch(1, 1)
         grid.setHorizontalSpacing(16)
@@ -251,7 +256,11 @@ class DeviceDetailsDialog(QDialog):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
         inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        inner.setStyleSheet("background-color: palette(base);")
+        # Scoped by objectName: an unscoped rule cascades into every child,
+        # including QComboBox popups, whose selected item then renders
+        # white-on-white (base background + highlighted-text colour).
+        inner.setObjectName("nnDetailsPageInner")
+        inner.setStyleSheet("#nnDetailsPageInner { background-color: palette(base); }")
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
@@ -289,14 +298,18 @@ class DeviceDetailsDialog(QDialog):
         table = QTableWidget(len(self._field_rules_rows), 2)
         self._field_rules_table = table
         table.setHorizontalHeaderLabels([_("Target"), _("Field")])
-        table.horizontalHeader().setStretchLastSection(True)
+        # Per-column resize modes instead of resizeColumnsToContents(): calling
+        # that on an already-visible table (rule added live) shrank the
+        # stretched last column to its content width until the next resize.
+        rules_hdr = table.horizontalHeader()
+        rules_hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        rules_hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         table.verticalHeader().setVisible(False)
         self._populate_field_rules_table()
-        row_h = table.horizontalHeader().height() + len(self._field_rules_rows) * 26 + 8
-        table.setFixedHeight(max(60, row_h))
+        self._fit_field_rules_table_height()
         box_layout.addWidget(table)
 
         btn_row = QHBoxLayout()
@@ -323,8 +336,7 @@ class DeviceDetailsDialog(QDialog):
             if not bucket:
                 self._field_rules.pop(tk, None)
             table.removeRow(r)
-            new_h = table.horizontalHeader().height() + len(self._field_rules_rows) * 26 + 8
-            table.setFixedHeight(max(60, new_h))
+            self._fit_field_rules_table_height()
             del_btn.setEnabled(table.rowCount() > 0 and table.currentRow() >= 0)
             on_delete(tk, fp)
 
@@ -351,7 +363,14 @@ class DeviceDetailsDialog(QDialog):
             fp_item.setFlags(flags)
             table.setItem(r, 0, tgt_item)
             table.setItem(r, 1, fp_item)
-        table.resizeColumnsToContents()
+
+    def _fit_field_rules_table_height(self) -> None:
+        """Fix the rules table height to its row count (header + rows)."""
+        table = self._field_rules_table
+        if table is None:
+            return
+        h = table.horizontalHeader().height() + len(self._field_rules_rows) * 26 + 8
+        table.setFixedHeight(max(60, h))
 
     def _refresh_field_rules_table(self) -> None:
         """Rebuild rules rows from self._field_rules and repopulate the table."""
@@ -364,8 +383,7 @@ class DeviceDetailsDialog(QDialog):
         table = self._field_rules_table
         table.setRowCount(len(self._field_rules_rows))
         self._populate_field_rules_table()
-        new_h = table.horizontalHeader().height() + len(self._field_rules_rows) * 26 + 8
-        table.setFixedHeight(max(60, new_h))
+        self._fit_field_rules_table_height()
         if self._field_rules_del_btn is not None:
             self._field_rules_del_btn.setEnabled(False)
 
@@ -415,7 +433,11 @@ class DeviceDetailsDialog(QDialog):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget()
         inner.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        inner.setStyleSheet("background-color: palette(base);")
+        # Scoped by objectName: an unscoped rule cascades into every child,
+        # including QComboBox popups, whose selected item then renders
+        # white-on-white (base background + highlighted-text colour).
+        inner.setObjectName("nnDetailsPageInner")
+        inner.setStyleSheet("#nnDetailsPageInner { background-color: palette(base); }")
         layout = QVBoxLayout(inner)
 
         if icon is not None:
