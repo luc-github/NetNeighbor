@@ -1282,15 +1282,15 @@ msgstr "重設完成 — 請重新啟動應用程式"
 
 #: ui/
 msgid "App icon pack"
-msgstr ""
+msgstr "應用程式圖示包"
 
 #: ui/
 msgid "Download failed"
-msgstr ""
+msgstr "下載失敗"
 
 #: ui/
 msgid "Downloading…"
-msgstr ""
+msgstr "下載中…"
 
 #: ui/
 msgid "Icon pack"
@@ -1314,7 +1314,7 @@ msgstr "開啟資料夾…"
 
 #: ui/
 msgid "NetNeighbor"
-msgstr ""
+msgstr "NetNeighbor"
 
 #. app_qt.py:136
 msgid "Corrupted installation"
@@ -1333,3 +1333,45 @@ msgstr ""
 "{details}\n"
 "\n"
 "請重新安裝程式。"
+
+#: ui/
+msgid "All-in-one computer"
+msgstr "一體化電腦"
+
+#: ui/
+msgid "Desktop computer"
+msgstr "桌上型電腦"
+
+#: ui/
+msgid "Laptop"
+msgstr "筆記型電腦"
+
+#: ui/
+msgid "Mini PC"
+msgstr "迷你電腦"
+
+#: ui/
+msgid "Rack server"
+msgstr "機架伺服器"
+
+#: ui/
+msgid "Server"
+msgstr "伺服器"
+
+#: ui/
+msgid "Servers"
+msgstr "伺服器"
+
+#: ui/
+msgid "Phones & Tablets"
+msgstr "手機與平板電腦"
+
+#: ui/
+msgid "Smartphone"
+msgstr "智慧型手機"
+
+#: ui/
+msgid ""
+"Mode 'disabled' hides the auto-detected entry of that protocol (for "
+"'custom', the global custom command); its other fields are ignored."
+msgstr "「disabled」模式會隱藏該協定的自動偵測項目（對於「custom」，則隱藏全域自訂命令）；其他欄位將被忽略。"

@@ -12,6 +12,78 @@
   "type_rules": [
     {
       "contains_any": [
+        "model=rackmac",
+        "type=rackserver"
+      ],
+      "type": "rackserver"
+    },
+    {
+      "contains_any": [
+        "model=server",
+        "model=xserve",
+        "type=server"
+      ],
+      "type": "server"
+    },
+    {
+      "contains_any": [
+        "model=nas",
+        "type=nas"
+      ],
+      "type": "nas"
+    },
+    {
+      "contains_any": [
+        "model=macpro",
+        "type=desktop"
+      ],
+      "type": "desktop"
+    },
+    {
+      "contains_any": [
+        "model=macmini",
+        "type=minipc"
+      ],
+      "type": "minipc"
+    },
+    {
+      "contains_any": [
+        "model=imac",
+        "type=allinone"
+      ],
+      "type": "allinone"
+    },
+    {
+      "contains_any": [
+        "model=macbook",
+        "type=laptop"
+      ],
+      "type": "laptop"
+    },
+    {
+      "contains_any": [
+        "_nearbypresence._tcp",
+        "target=android_",
+        "model=iphone",
+        "rpmd=iphone",
+        "type=smartphone"
+      ],
+      "type": "smartphone"
+    },
+    {
+      "_doc": "Google Cast TXT md= (model): TVs and TV dongles (e.g. md=Aquos-TVT23C, md=BRAVIA 4K, md=Chromecast) but not Chromecast Audio / Nest speakers.",
+      "contains_any": [
+        "type=smarttv"
+      ],
+      "matches_any": [
+        "\\bmd=[^=]*tv",
+        "\\bmd=[^=]*bravia",
+        "\\bmd=chromecast(?! audio)"
+      ],
+      "type": "smarttv"
+    },
+    {
+      "contains_any": [
         "laserjet"
       ],
       "type": "networkprinter"

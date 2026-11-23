@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -150,8 +151,21 @@ def summary_rows_from_rules(metadata: dict, rules: dict | None = None) -> list[t
     return rows
 
 
+@lru_cache(maxsize=256)
+def _compiled_rule_pattern(pattern: str) -> re.Pattern[str] | None:
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        _LOG.warning("Invalid mDNS rule regex %r: %s — ignored", pattern, exc)
+        return None
+
+
 def evaluate_type_rules(haystack_lower: str, current_type: str, rules: dict | None = None) -> str:
-    """Evaluate type_rules contains_any lists in order (first match wins); haystack already lowercased."""
+    """Evaluate type_rules in order (first match wins); haystack already lowercased.
+
+    A rule matches when any ``contains_any`` substring or any ``matches_any`` regular
+    expression (``re.search``, written in lowercase) is found in the haystack.
+    """
     r = rules if isinstance(rules, dict) else cached_mdns_rules()
     seq = r.get("type_rules") or []
     if not isinstance(seq, list):
@@ -159,15 +173,20 @@ def evaluate_type_rules(haystack_lower: str, current_type: str, rules: dict | No
     for entry in seq:
         if not isinstance(entry, dict):
             continue
-        needles = entry.get("contains_any")
         target = entry.get("type")
         if not isinstance(target, str) or not target.strip():
             continue
-        if not isinstance(needles, list):
-            continue
-        lowered_needles = [str(n).lower() for n in needles if isinstance(n, str) and str(n).strip()]
-        if not lowered_needles:
-            continue
-        if any(n in haystack_lower for n in lowered_needles):
-            return target.strip().lower()
+        needles = entry.get("contains_any")
+        if isinstance(needles, list):
+            lowered_needles = [str(n).lower() for n in needles if isinstance(n, str) and str(n).strip()]
+            if any(n in haystack_lower for n in lowered_needles):
+                return target.strip().lower()
+        patterns = entry.get("matches_any")
+        if isinstance(patterns, list):
+            for p in patterns:
+                if not isinstance(p, str) or not p.strip():
+                    continue
+                rx = _compiled_rule_pattern(p)
+                if rx is not None and rx.search(haystack_lower):
+                    return target.strip().lower()
     return current_type

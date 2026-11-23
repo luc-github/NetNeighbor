@@ -53,6 +53,7 @@ from ui.icon_grid_layout import (
 )
 from ui.device_actions import (
     bundle_custom_command,
+    effective_global_custom_command,
     launch_open_uri,
     prompt_rename_device,
     run_custom_command_for_bundle,
@@ -1671,7 +1672,8 @@ class NetNeighborMainWindow(QMainWindow):
 
     def _show_device_context_menu(self, global_pos: QPoint, bundle: DeviceBundle) -> None:
         has_cmd = bool(
-            bundle_custom_command(bundle) or (self._custom_command_template or "").strip()
+            bundle_custom_command(bundle)
+            or effective_global_custom_command(bundle, self._custom_command_template or "")
         )
         current_loc = bundle_location_label(bundle, no_location_label="")
         loc_opts = location_options_with_current(self._location_options, current_loc)

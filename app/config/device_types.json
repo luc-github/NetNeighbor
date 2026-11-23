@@ -30,6 +30,13 @@
       "default_port": 445,
       "info_url": null
     },
+    "_device-info._tcp": {
+      "label": "Device info",
+      "category": "Unknown Devices",
+      "icon": "unknown.png",
+      "default_port": 0,
+      "info_url": null
+    },
     "_airplay._tcp": {
       "label": "AirPlay Speaker",
       "category": "Smart Speakers",

@@ -16,6 +16,7 @@ import time
 from discovery.base import BaseDiscovery
 from utils.discovery_config import category_for_device_type
 from utils.local_host import address_preference_rank, choose_best_address
+from utils.double_click_open import mdns_http_path
 from utils.mdns_rules import cached_mdns_rules, evaluate_type_rules
 from utils.scheduling import ScheduleMainFn
 from utils.user_config_overlay import USER_DEVICE_TYPES_JSON, merge_device_types_trees, optional_user_json
@@ -661,7 +662,9 @@ class MDNSDiscovery(BaseDiscovery):
 
         display_name = self._infer_display_name(name, txt, self._to_text(server))
         type_name = str(mapping.get("type", "unknown")).strip().lower() or "unknown"
-        type_name = self._infer_type_from_context(type_name, service_key, display_name, txt)
+        type_name = self._infer_type_from_context(
+            type_name, service_key, display_name, txt, srv_target=self._to_text(server)
+        )
         category = category_for_device_type(
             type_name,
             str(mapping.get("category", _("Unknown Devices"))) or _("Unknown Devices"),
@@ -760,6 +763,7 @@ class MDNSDiscovery(BaseDiscovery):
         display_name: str,
         txt: dict[str, str],
         merged_services_line: str = "",
+        srv_target: str = "",
     ) -> str:
         base = mapped_type if mapped_type and mapped_type != "unknown" else self._infer_type_from_service(service_key)
         # Collapse printer variants into one device type class.
@@ -767,6 +771,11 @@ class MDNSDiscovery(BaseDiscovery):
             base = "networkprinter"
 
         haystack_parts = [service_key, display_name, merged_services_line]
+        # SRV target as "target=<host>" so rules can match the host name precisely
+        # (e.g. "target=android_" for Android phones) without loose name matches.
+        target = (srv_target or "").strip().rstrip(".")
+        if target:
+            haystack_parts.append(f"target={target}")
         haystack_parts.extend([f"{k}={v}" for k, v in txt.items()])
         haystack = " ".join([part.lower() for part in haystack_parts if isinstance(part, str)])
 
@@ -797,9 +806,18 @@ class MDNSDiscovery(BaseDiscovery):
             "3dprinter": 32,
             "mediaserver": 34,
             "router": 35,
-            "smarttv": 36,
+            "smarttv": 41,
+            "server": 37,
+            "rackserver": 37,
             "nas": 38,
             "smartspeaker": 40,
+            # Explicit form factor from TXT model= (e.g. a Mac's _device-info): beats the
+            # smartspeaker guess a Mac's own _airplay/_raop receiver would otherwise give.
+            "desktop": 41,
+            "minipc": 41,
+            "allinone": 41,
+            "laptop": 41,
+            "smartphone": 41,
             "scanner": 52,
             "networkprinter": 55,
             "printer": 55,
@@ -1095,12 +1113,15 @@ class MDNSDiscovery(BaseDiscovery):
                     merged_services.append(dict(service))
 
         http_port = None
+        http_path = "/"
         for service in merged_services:
             service_name = str(service.get("service", "")).lower()
             if "_http._tcp" in service_name:
                 candidate = int(service.get("port", 0) or 0)
                 if candidate > 0:
                     http_port = candidate
+                    # DNS-SD convention: the web UI path is in TXT "path=" (default "/").
+                    http_path = mdns_http_path(service.get("txt"))
                     break
 
         # Services of one host may have resolved to different interfaces (multi-homed
@@ -1112,7 +1133,7 @@ class MDNSDiscovery(BaseDiscovery):
         ip = self._sticky_host_ip(host_key, ip)
         url = None
         if http_port and ip and ip != "0.0.0.0":
-            url = f"http://{ip}:{http_port}/"
+            url = f"http://{ip}:{http_port}{http_path}"
 
         merged_metadata = dict(rep_metadata)
         merged_metadata["services"] = merged_services
@@ -1129,6 +1150,7 @@ class MDNSDiscovery(BaseDiscovery):
             str(representative.get("name", "mDNS Device")),
             combined_txt,
             services_line_for_infer,
+            srv_target=self._to_text(rep_metadata.get("server", "")),
         )
         agg_type = self._best_aggregate_mdns_type(agg_type, merged_services)
         if self._merged_services_imply_multifunction_printer(merged_services):
@@ -1194,6 +1216,13 @@ class MDNSDiscovery(BaseDiscovery):
             "cnc": "cnc.png",
             "3dprinter": "3dprinter.png",
             "nas": "nas.png",
+            "server": "server.png",
+            "rackserver": "server.png",
+            "desktop": "computer.png",
+            "minipc": "computer.png",
+            "allinone": "computer.png",
+            "laptop": "computer.png",
+            "smartphone": "smartdevice.png",
             "computer": "computer.png",
             "esp32": "esp32.png",
             "http": "http.png",

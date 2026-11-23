@@ -177,15 +177,42 @@ def _port(svc: dict | None, default: int) -> int:
     return p if p > 0 else default
 
 
+def mdns_http_path(txt: object) -> str:
+    """Web path from a DNS-SD ``_http._tcp`` / ``_https._tcp`` TXT ``path=`` key (RFC 6763 convention).
+
+    Returns ``"/"`` when absent or unusable; always starts with ``/``.
+    """
+    if not isinstance(txt, dict):
+        return "/"
+    raw = ""
+    for k, v in txt.items():
+        if str(k).strip().lower() == "path":
+            raw = v.strip() if isinstance(v, str) else str(v or "").strip()
+            break
+    if not raw or "://" in raw or any(c.isspace() for c in raw):
+        return "/"
+    return raw if raw.startswith("/") else f"/{raw}"
+
+
 def _mdns_http_url(svc: dict | None, *, https: bool, host: str) -> str | None:
     if svc is None:
         return None
     default = 443 if https else 80
     p = _port(svc, default)
     scheme = "https" if https else "http"
+    path = mdns_http_path(svc.get("txt"))
     if p == default:
-        return f"{scheme}://{host}/"
-    return f"{scheme}://{host}:{p}/"
+        return f"{scheme}://{host}{path}"
+    return f"{scheme}://{host}:{p}{path}"
+
+
+def _disabled_schemes(device_cmds: list[dict]) -> frozenset[str]:
+    """Schemes whose auto-detected entry the user hid (``mode: disabled``)."""
+    return frozenset(
+        str(c.get("scheme", "")).strip().lower()
+        for c in device_cmds
+        if isinstance(c, dict) and str(c.get("mode", "")).strip().lower() == "disabled"
+    )
 
 
 _MDNS_NEEDLES = {
@@ -265,6 +292,7 @@ def resolve_connect_target(
     host = format_host_for_uri(bundle_ip, devices)
     services = _merged_mdns_services(devices)
     device_cmds = _device_commands_from_devices(devices)
+    disabled = _disabled_schemes(device_cmds)
 
     for scheme in _DCLICK_SCHEME_ORDER:
         # 1. Override for this scheme
@@ -277,8 +305,11 @@ def resolve_connect_target(
             if u:
                 return u
 
-        # 2. Auto-detected default
-        detected = _detected_uri_for_scheme(scheme, devices, services, host)
+        # 2. Auto-detected default (unless the user disabled it for this device)
+        detected = (
+            None if scheme in disabled
+            else _detected_uri_for_scheme(scheme, devices, services, host)
+        )
         if detected:
             _LOG.debug("resolve_connect: detected scheme=%s uri=%s", scheme, detected)
             return detected
@@ -318,6 +349,7 @@ def resolve_all_connect_targets(
     host = format_host_for_uri(bundle_ip, devices)
     services = _merged_mdns_services(devices)
     device_cmds = _device_commands_from_devices(devices)
+    disabled = _disabled_schemes(device_cmds)
 
     def _add(label: str, uri: str) -> None:
         if uri and uri not in seen_uris:
@@ -344,10 +376,11 @@ def resolve_all_connect_targets(
             if u:
                 _add(_command_label(scheme, override), u)
 
-        # Auto-detected
-        detected = _detected_uri_for_scheme(scheme, devices, services, host)
-        if detected:
-            _add(base, detected)
+        # Auto-detected (hidden when the user disabled it for this device)
+        if scheme not in disabled:
+            detected = _detected_uri_for_scheme(scheme, devices, services, host)
+            if detected:
+                _add(base, detected)
 
         # All additionals for this scheme
         for cmd in device_cmds:

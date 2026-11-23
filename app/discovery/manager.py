@@ -123,7 +123,9 @@ def _join_descriptor_base_and_path(base_url: str, absolute_path: str) -> str | N
 
 
 _VALID_COMMAND_SCHEMES = frozenset(("http", "https", "smb", "ftp", "ssh", "sftp", "telnet", "custom"))
-_VALID_COMMAND_MODES = frozenset(("override", "additional"))
+# "disabled" hides the auto-detected entry of that scheme (and, for "custom", the global
+# custom command) for this device; its ip/port/label are ignored.
+_VALID_COMMAND_MODES = frozenset(("override", "additional", "disabled"))
 
 
 def _normalize_command_list(raw: object) -> list[dict]:
@@ -2472,6 +2474,13 @@ class DiscoveryManager:
             "computer": 20,
             "esp32": 22,
             "router": 35,
+            "server": 37,
+            "rackserver": 37,
+            "desktop": 41,
+            "minipc": 41,
+            "allinone": 41,
+            "laptop": 41,
+            "smartphone": 41,
             "nas": 38,
             "mediaserver": 34,
             "smartspeaker": 40,
@@ -2479,7 +2488,7 @@ class DiscoveryManager:
             "multifunction_printer": 56,
             "printer": 55,
             "scanner": 52,
-            "smarttv": 36,
+            "smarttv": 41,
             "smartdevice": 28,
             "camera": 30,
             "homeappliance": 26,

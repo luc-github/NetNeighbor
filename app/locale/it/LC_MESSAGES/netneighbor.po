@@ -1307,15 +1307,15 @@ msgstr "Reimpostazione eseguita — riavviare l'applicazione"
 
 #: ui/
 msgid "App icon pack"
-msgstr ""
+msgstr "Pacchetto icone app"
 
 #: ui/
 msgid "Download failed"
-msgstr ""
+msgstr "Download non riuscito"
 
 #: ui/
 msgid "Downloading…"
-msgstr ""
+msgstr "Download in corso…"
 
 #: ui/
 msgid "Icon pack"
@@ -1339,7 +1339,7 @@ msgstr "Apri cartella…"
 
 #: ui/
 msgid "NetNeighbor"
-msgstr ""
+msgstr "NetNeighbor"
 
 #. app_qt.py:136
 msgid "Corrupted installation"
@@ -1358,3 +1358,48 @@ msgstr ""
 "{details}\n"
 "\n"
 "Reinstalla il programma."
+
+#: ui/
+msgid "All-in-one computer"
+msgstr "Computer all-in-one"
+
+#: ui/
+msgid "Desktop computer"
+msgstr "Computer desktop"
+
+#: ui/
+msgid "Laptop"
+msgstr "Laptop"
+
+#: ui/
+msgid "Mini PC"
+msgstr "Mini PC"
+
+#: ui/
+msgid "Rack server"
+msgstr "Server rack"
+
+#: ui/
+msgid "Server"
+msgstr "Server"
+
+#: ui/
+msgid "Servers"
+msgstr "Server"
+
+#: ui/
+msgid "Phones & Tablets"
+msgstr "Telefoni e tablet"
+
+#: ui/
+msgid "Smartphone"
+msgstr "Smartphone"
+
+#: ui/
+msgid ""
+"Mode 'disabled' hides the auto-detected entry of that protocol (for "
+"'custom', the global custom command); its other fields are ignored."
+msgstr ""
+"La modalità «disabled» nasconde la voce rilevata automaticamente per quel "
+"protocollo (per «custom», il comando personalizzato globale); gli altri "
+"campi vengono ignorati."

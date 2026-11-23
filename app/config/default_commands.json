@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "comment": "Per-OS defaults for Tools / External applications (scheme to command). Placeholders: {ip} {port} {name} {type} {category} {url}. localsmb:// (WNetAddConnection2) and localhttp://, localhttps:// are Windows-native pseudo-schemes opened via ShellExecute (no console flash) — append :{port} to override the port.",
+  "comment": "Per-OS defaults for Tools / External applications (scheme to command). Placeholders: {ip} {port} {name} {type} {category} {url}. A template of just {url} opens the full discovered URL (port + path) with the system default handler. localsmb:// (WNetAddConnection2) and localhttp://, localhttps:// are Windows-native pseudo-schemes opened via ShellExecute (no console flash) — append :{port} to override the port.",
   "linux": {
-    "http": "xdg-open http://{ip}",
-    "https": "xdg-open https://{ip}",
+    "http": "xdg-open {url}",
+    "https": "xdg-open {url}",
     "smb": "nemo smb://{ip}",
     "ftp": "nemo ftp://{ip}",
     "ssh": "x-terminal-emulator -e ssh -p {port} {ip}",
@@ -11,8 +11,8 @@
     "sftp": "nemo sftp://{ip}"
   },
   "darwin": {
-    "http": "open http://{ip}",
-    "https": "open https://{ip}",
+    "http": "open {url}",
+    "https": "open {url}",
     "smb": "open smb://{ip}",
     "ftp": "open ftp://{ip}",
     "ssh": "open ssh://{ip}:{port}",
@@ -20,8 +20,8 @@
     "sftp": "open sftp://{ip}"
   },
   "win32": {
-    "http": "localhttp://{ip}",
-    "https": "localhttps://{ip}",
+    "http": "{url}",
+    "https": "{url}",
     "smb": "localsmb://{ip}",
     "ftp": "localftp://{ip}",
     "ssh": "cmd.exe /k ssh -p {port} {ip}",

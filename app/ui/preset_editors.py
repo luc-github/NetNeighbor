@@ -71,7 +71,14 @@ def _default_location_presets() -> list[str]:
 def _default_type_options() -> list[tuple[str, str]]:
     return [
         (_("NAS"),                     "nas"),
+        (_("Server"),                  "server"),
+        (_("Rack server"),             "rackserver"),
         (_("Computer"),                "computer"),
+        (_("Desktop computer"),        "desktop"),
+        (_("Mini PC"),                 "minipc"),
+        (_("All-in-one computer"),     "allinone"),
+        (_("Laptop"),                  "laptop"),
+        (_("Smartphone"),              "smartphone"),
         (_("Router"),                  "router"),
         (_("Media server"),            "mediaserver"),
         (_("Printer"),                 "printer"),

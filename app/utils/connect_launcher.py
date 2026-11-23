@@ -34,8 +34,8 @@ _LOCAL_PSEUDO_SCHEMES: dict[str, str] = {
 
 _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
     "linux": {
-        "http": "xdg-open http://{ip}",
-        "https": "xdg-open https://{ip}",
+        "http": "xdg-open {url}",
+        "https": "xdg-open {url}",
         "smb": "nemo smb://{ip}",
         "ftp": "nemo ftp://{ip}",
         "ssh": "x-terminal-emulator -e ssh -p {port} {ip}",
@@ -43,8 +43,8 @@ _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
         "sftp": "nemo sftp://{ip}",
     },
     "darwin": {
-        "http": "open http://{ip}",
-        "https": "open https://{ip}",
+        "http": "open {url}",
+        "https": "open {url}",
         "smb": "open smb://{ip}",
         "ftp": "open ftp://{ip}",
         "ssh": "open ssh://{ip}:{port}",
@@ -52,11 +52,10 @@ _HARDCODED_DEFAULTS_BY_OS: dict[str, dict[str, str]] = {
         "sftp": "open sftp://{ip}",
     },
     "win32": {
-        # localhttp/localhttps pseudo-schemes open via ShellExecute (no console
-        # flash, unlike `cmd.exe /c start ...`) while keeping {ip}/{port}
-        # overrides. Add :{port} to force a port, e.g. localhttp://{ip}:{port}.
-        "http": "localhttp://{ip}",
-        "https": "localhttps://{ip}",
+        # "{url}" alone opens the full discovered URL (port + path) with the
+        # system default handler via ShellExecute (no console flash).
+        "http": "{url}",
+        "https": "{url}",
         "smb": "localsmb://{ip}",
         "ftp": "localftp://{ip}",
         "ssh": "cmd.exe /k ssh -p {port} {ip}",
@@ -146,12 +145,26 @@ def default_connect_command_templates() -> dict[str, str]:
     return defaults
 
 
+# Former HTTP(S) defaults that dropped the discovered port and path (opened :80 / :443 root).
+# A saved preference still equal to one of them is upgraded to the current default.
+_LEGACY_URL_DROPPING_DEFAULTS: frozenset[str] = frozenset({
+    "localhttp://{ip}",
+    "localhttps://{ip}",
+    "xdg-open http://{ip}",
+    "xdg-open https://{ip}",
+    "open http://{ip}",
+    "open https://{ip}",
+})
+
+
 def normalize_connect_templates(raw: object) -> dict[str, str]:
     out = default_connect_command_templates()
     if isinstance(raw, dict):
         for k in out:
             v = raw.get(k)
             if isinstance(v, str):
+                if k in ("http", "https") and v.strip() in _LEGACY_URL_DROPPING_DEFAULTS:
+                    continue  # keep the new default
                 out[k] = v
     return out
 
@@ -200,6 +213,13 @@ def launch_connect_for_uri(
         tmpl = ((templates.get(scheme) if isinstance(templates, dict) else None) or "").strip()
     if not tmpl:
         _LOG.debug("open: no template for scheme=%s → system default url=%s", scheme, u)
+        open_url(u)
+        return None
+
+    # "{url}" alone: open the full resolved URI (port + path) with the system default
+    # handler (ShellExecute on Windows → no console flash).
+    if tmpl == "{url}":
+        _LOG.debug("open: {url} template → system default url=%s", u)
         open_url(u)
         return None
 

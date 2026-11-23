@@ -174,6 +174,15 @@ chmod 0644 "${APP_DIR}/usr/share/applications/netneighbor.desktop"
 install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor_icon.svg" \
   "${APP_DIR}/io.esp3d.netneighbor.svg"
 
+# .DirIcon: appimagetool only derives it from a PNG/XPM named after Icon=
+# at the AppDir root (an SVG is not accepted); future versions refuse to
+# build without it.  The 256x256 PNG is the same logo as the SVG.
+_png_256="${PROJECT_ROOT}/docs/images/logo-256.png"
+install -m 0644 "${_png_256}" "${APP_DIR}/io.esp3d.netneighbor.png"
+mkdir -p "${APP_DIR}/usr/share/icons/hicolor/256x256/apps"
+install -m 0644 "${_png_256}" \
+  "${APP_DIR}/usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png"
+
 # hicolor tree (used by appimaged / desktop integration)
 install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor_icon.svg" \
   "${APP_DIR}/usr/share/icons/hicolor/scalable/apps/io.esp3d.netneighbor.svg"

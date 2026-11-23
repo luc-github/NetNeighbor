@@ -49,7 +49,7 @@ from utils.device_details_view import DeviceDetailsViewModel
 
 
 _VALID_SCHEMES = ["http", "https", "smb", "ftp", "ssh", "sftp", "telnet", "custom"]
-_VALID_MODES = ["override", "additional"]
+_VALID_MODES = ["override", "additional", "disabled"]
 
 
 @dataclass(slots=True)
@@ -513,6 +513,13 @@ class DeviceDetailsDialog(QDialog):
         hint.setWordWrap(True)
         hint.setStyleSheet("color: palette(mid);")
         bl.addWidget(hint)
+        hint_disabled = QLabel(
+            _("Mode 'disabled' hides the auto-detected entry of that protocol "
+              "(for 'custom', the global custom command); its other fields are ignored.")
+        )
+        hint_disabled.setWordWrap(True)
+        hint_disabled.setStyleSheet("color: palette(mid);")
+        bl.addWidget(hint_disabled)
 
         self._cmd_table = QTableWidget(0, 5)
         self._cmd_table.setHorizontalHeaderLabels(

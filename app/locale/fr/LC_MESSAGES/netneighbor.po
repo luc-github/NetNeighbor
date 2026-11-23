@@ -949,7 +949,7 @@ msgid "Unknown Devices"
 msgstr "Appareils inconnus"
 
 #: ui/
-#, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, fuzzy, python-brace-format, python-brace-format, python-brace-format
+#, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format, python-brace-format
 msgid "About NetNeighbor"
 msgstr "À propos de NetNeighbor"
 
@@ -1309,15 +1309,15 @@ msgstr "Réinitialisation effectuée — veuillez redémarrer"
 
 #: ui/
 msgid "App icon pack"
-msgstr ""
+msgstr "Pack d'icônes d'application"
 
 #: ui/
 msgid "Download failed"
-msgstr ""
+msgstr "Téléchargement échoué"
 
 #: ui/
 msgid "Downloading…"
-msgstr ""
+msgstr "Téléchargement…"
 
 #: ui/
 msgid "Icon pack"
@@ -1341,7 +1341,7 @@ msgstr "Ouvrir le dossier…"
 
 #: ui/
 msgid "NetNeighbor"
-msgstr ""
+msgstr "NetNeighbor"
 
 #. app_qt.py:136
 msgid "Corrupted installation"
@@ -1360,3 +1360,48 @@ msgstr ""
 "{details}\n"
 "\n"
 "Veuillez réinstaller le programme."
+
+#: ui/
+msgid "All-in-one computer"
+msgstr "Ordinateur tout-en-un"
+
+#: ui/
+msgid "Desktop computer"
+msgstr "Ordinateur de bureau"
+
+#: ui/
+msgid "Laptop"
+msgstr "Ordinateur portable"
+
+#: ui/
+msgid "Mini PC"
+msgstr "Mini PC"
+
+#: ui/
+msgid "Rack server"
+msgstr "Serveur en rack"
+
+#: ui/
+msgid "Server"
+msgstr "Serveur"
+
+#: ui/
+msgid "Servers"
+msgstr "Serveurs"
+
+#: ui/
+msgid "Phones & Tablets"
+msgstr "Téléphones et tablettes"
+
+#: ui/
+msgid "Smartphone"
+msgstr "Smartphone"
+
+#: ui/
+msgid ""
+"Mode 'disabled' hides the auto-detected entry of that protocol (for "
+"'custom', the global custom command); its other fields are ignored."
+msgstr ""
+"Le mode « disabled » masque l'entrée détectée automatiquement pour ce "
+"protocole (pour « custom », la commande personnalisée globale) ; ses autres "
+"champs sont ignorés."
