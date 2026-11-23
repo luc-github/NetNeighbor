@@ -31,8 +31,66 @@ def probe_tcp(ip: str, port: int, timeout_s: float = _DEFAULT_TIMEOUT_S) -> bool
         return False
 
 
+def _win_icmp_ping_v4(ip: str, timeout_ms: int) -> bool | None:
+    """ICMP echo through ``IcmpSendEcho`` (iphlpapi) — no ping.exe / conhost.exe spawn.
+
+    Returns None when the API is unavailable or *ip* is not IPv4 (caller falls back to
+    ``ping.exe``). A reply only counts when it comes from the target itself with status
+    IP_SUCCESS — a router's "destination host unreachable" is not a presence signal.
+    """
+    import ctypes
+    import ipaddress
+
+    try:
+        addr = ipaddress.ip_address(ip.split("%", 1)[0].strip())
+    except ValueError:
+        return None
+    if not isinstance(addr, ipaddress.IPv4Address):
+        return None
+    try:
+        iphlpapi = ctypes.WinDLL("iphlpapi.dll")
+        create = iphlpapi.IcmpCreateFile
+        send = iphlpapi.IcmpSendEcho
+        close = iphlpapi.IcmpCloseHandle
+    except (OSError, AttributeError):
+        return None
+    create.restype = ctypes.c_void_p
+    create.argtypes = []
+    send.restype = ctypes.c_uint32
+    send.argtypes = [
+        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint16,
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+    ]
+    close.restype = ctypes.c_int
+    close.argtypes = [ctypes.c_void_p]
+
+    handle = create()
+    if not handle or handle == ctypes.c_void_p(-1).value:
+        return None
+    try:
+        dest = int.from_bytes(addr.packed, "little")  # IPAddr: network byte order in memory
+        payload = ctypes.create_string_buffer(b"netneighbor", 11)
+        reply = ctypes.create_string_buffer(512)  # ICMP_ECHO_REPLY + echoed data + 8
+        n = send(handle, dest, payload, 11, None, reply, ctypes.sizeof(reply), max(1, int(timeout_ms)))
+        if n == 0:
+            return False
+        raw = reply.raw
+        reply_addr = int.from_bytes(raw[0:4], "little")
+        status = int.from_bytes(raw[4:8], "little")
+        return status == 0 and reply_addr == dest
+    finally:
+        close(handle)
+
+
 def ping_host(ip: str, timeout_s: float = 2.0) -> bool:
     """Return True if host responds to ICMP ping (no root required on Linux/Windows)."""
+    if sys.platform == "win32":
+        try:
+            native = _win_icmp_ping_v4(ip, int(timeout_s * 1000))
+        except Exception:
+            native = None
+        if native is not None:
+            return native
     timeout_ms = str(int(timeout_s * 1000))
     timeout_s_int = str(max(1, int(timeout_s)))
     # On Windows, CREATE_NO_WINDOW prevents a console window from flashing on

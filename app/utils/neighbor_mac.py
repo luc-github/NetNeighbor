@@ -15,17 +15,43 @@ import logging
 import re
 import subprocess
 import sys
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
 _LOG = logging.getLogger(__name__)
 
-# Short-lived cache: list refresh / details may call many times in one frame.
-_NEIGH_FULL_CACHE: tuple[float, str | None] = (0.0, None)
-_ARP_TEXT_CACHE: tuple[float, str | None] = (0.0, None)
-_WIN_ARP_CACHE: tuple[float, str | None] = (0.0, None)
-_WIN_IPV6_NEIGH_CACHE: tuple[float, str | None] = (0.0, None)
-_DARWIN_ARP_CACHE: tuple[float, str | None] = (0.0, None)
-_DARWIN_NDP_CACHE: tuple[float, str | None] = (0.0, None)
+# Neighbour tables are read for every device on every list rebuild, from the UI thread and
+# from several worker threads (ping, NetBIOS, discovery). Each table is therefore cached
+# and refreshed *single-flight*: one refresh at a time, concurrent callers wait for it and
+# reuse its result. Without the lock, every caller that saw an expired cache spawned its
+# own ``arp -a`` — on Windows that piled up hundreds of hidden arp.exe/conhost.exe and
+# exhausted the desktop heap.
+_TABLE_TTL_S = 2.0
+
+
+class _SingleFlightCache:
+    def __init__(self, loader: Callable[[], object], ttl_s: float = _TABLE_TTL_S) -> None:
+        self._loader = loader
+        self._ttl_s = ttl_s
+        self._lock = threading.Lock()
+        self._stamp = 0.0
+        self._value: object = None
+
+    def get(self):
+        with self._lock:
+            now = _monotonic()
+            if self._value is not None and now - self._stamp < self._ttl_s:
+                return self._value
+            try:
+                value = self._loader()
+            except Exception:  # never let a failed refresh re-trigger on every call
+                _LOG.debug("neighbour table refresh failed", exc_info=True)
+                value = None
+            # Cache failures too (as an empty table) so a broken tool is not re-run per call.
+            self._value = value if value is not None else ""
+            self._stamp = _monotonic()
+            return self._value
 
 # macOS ``arp -an`` line: ``? (192.168.1.1) at aa:bb:cc:dd:ee:ff on en0 ...``
 _DARWIN_ARP_RE = re.compile(
@@ -44,27 +70,25 @@ def _monotonic() -> float:
         return 0.0
 
 
-def _read_proc_arp_text_cached() -> str:
-    global _ARP_TEXT_CACHE
-    now = _monotonic()
-    if _ARP_TEXT_CACHE[1] is not None and now - _ARP_TEXT_CACHE[0] < 0.85:
-        return _ARP_TEXT_CACHE[1]
+def _load_proc_arp_text() -> str:
     try:
-        text = Path("/proc/net/arp").read_text(encoding="utf-8", errors="replace")
+        return Path("/proc/net/arp").read_text(encoding="utf-8", errors="replace")
     except OSError:
-        text = ""
-    _ARP_TEXT_CACHE = (now, text)
-    return text
+        return ""
+
+
+_PROC_ARP_CACHE = _SingleFlightCache(_load_proc_arp_text)
+
+
+def _read_proc_arp_text_cached() -> str:
+    return _PROC_ARP_CACHE.get()
+
+
+_NEIGH_FULL_CACHE = _SingleFlightCache(lambda: _run_ip_neigh(["neigh", "show"]))
 
 
 def _ip_neigh_show_all_cached() -> str:
-    global _NEIGH_FULL_CACHE
-    now = _monotonic()
-    if _NEIGH_FULL_CACHE[1] is not None and now - _NEIGH_FULL_CACHE[0] < 0.85:
-        return _NEIGH_FULL_CACHE[1]
-    out = _run_ip_neigh(["neigh", "show"])
-    _NEIGH_FULL_CACHE = (now, out)
-    return out
+    return _NEIGH_FULL_CACHE.get()
 
 
 def _norm_mac(s: str) -> str | None:
@@ -146,12 +170,8 @@ def _run_ip_neigh(args: list[str]) -> str:
     return proc.stdout or ""
 
 
-def _win_arp_table_cached() -> str:
-    """Run ``arp -a`` once and cache the result for 0.85 s (same TTL as Linux caches)."""
-    global _WIN_ARP_CACHE
-    now = _monotonic()
-    if _WIN_ARP_CACHE[1] is not None and now - _WIN_ARP_CACHE[0] < 0.85:
-        return _WIN_ARP_CACHE[1]
+def _load_win_arp_text() -> str:
+    """Fallback only: ``arp -a`` (used when the native neighbour API is unavailable)."""
     _cflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         proc = subprocess.run(
@@ -167,15 +187,18 @@ def _win_arp_table_cached() -> str:
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
         _LOG.debug("arp -a failed: %s", e)
         text = ""
-    _WIN_ARP_CACHE = (now, text)
     return text
 
 
-def _win_ipv6_neigh_cached() -> str:
-    global _WIN_IPV6_NEIGH_CACHE
-    now = _monotonic()
-    if _WIN_IPV6_NEIGH_CACHE[1] is not None and now - _WIN_IPV6_NEIGH_CACHE[0] < 0.85:
-        return _WIN_IPV6_NEIGH_CACHE[1]
+_WIN_ARP_TEXT_CACHE = _SingleFlightCache(_load_win_arp_text)
+
+
+def _win_arp_table_cached() -> str:
+    return _WIN_ARP_TEXT_CACHE.get()
+
+
+def _load_win_ipv6_neigh_text() -> str:
+    """Fallback only: ``netsh interface ipv6 show neighbors``."""
     _cflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         proc = subprocess.run(
@@ -191,12 +214,106 @@ def _win_ipv6_neigh_cached() -> str:
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
         _LOG.debug("netsh ipv6 neigh failed: %s", e)
         text = ""
-    _WIN_IPV6_NEIGH_CACHE = (now, text)
     return text
 
 
+_WIN_IPV6_TEXT_CACHE = _SingleFlightCache(_load_win_ipv6_neigh_text)
+
+
+def _win_ipv6_neigh_cached() -> str:
+    return _WIN_IPV6_TEXT_CACHE.get()
+
+
+def _load_win_native_neighbors() -> dict[str, str] | None:
+    """Read the IPv4+IPv6 neighbour table via ``GetIpNetTable2`` — no child process.
+
+    Returns ``{ip_text: mac}`` (IPv6 without zone), or None when the API is unavailable
+    so callers fall back to ``arp -a`` / ``netsh``.
+    """
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class _SockaddrInet(ctypes.Structure):  # SOCKADDR_INET (28 bytes)
+        _fields_ = [("family", ctypes.c_ushort), ("data", ctypes.c_ubyte * 26)]
+
+    class _MibIpnetRow2(ctypes.Structure):  # MIB_IPNET_ROW2 (88 bytes)
+        _fields_ = [
+            ("Address", _SockaddrInet),
+            ("InterfaceIndex", wintypes.ULONG),
+            ("InterfaceLuid", ctypes.c_ulonglong),
+            ("PhysicalAddress", ctypes.c_ubyte * 32),
+            ("PhysicalAddressLength", wintypes.ULONG),
+            ("State", ctypes.c_int),
+            ("Flags", ctypes.c_ubyte),
+            ("ReachabilityTime", wintypes.ULONG),
+        ]
+
+    if ctypes.sizeof(_MibIpnetRow2) != 88:
+        return None
+    try:
+        iphlpapi = ctypes.WinDLL("iphlpapi.dll")
+        get_table = iphlpapi.GetIpNetTable2
+        free_table = iphlpapi.FreeMibTable
+    except (OSError, AttributeError):
+        return None
+    get_table.argtypes = [ctypes.c_ushort, ctypes.POINTER(ctypes.c_void_p)]
+    get_table.restype = wintypes.ULONG
+    free_table.argtypes = [ctypes.c_void_p]
+    free_table.restype = None
+
+    af_inet, af_inet6 = 2, 23
+    nlns_incomplete = 1  # states 0 (unreachable) and 1 (incomplete) carry no usable MAC
+    table = ctypes.c_void_p()
+    if get_table(0, ctypes.byref(table)) != 0 or not table.value:  # AF_UNSPEC
+        return None
+    out: dict[str, str] = {}
+    try:
+        count = wintypes.ULONG.from_address(table.value).value
+        # MIB_IPNET_TABLE2: ULONG NumEntries, then rows aligned on 8 bytes.
+        rows = (_MibIpnetRow2 * count).from_address(table.value + 8)
+        for row in rows:
+            if row.State <= nlns_incomplete or row.PhysicalAddressLength != 6:
+                continue
+            hw = bytes(row.PhysicalAddress[:6])
+            if hw in (b"\x00" * 6, b"\xff" * 6):
+                continue
+            data = bytes(row.Address.data)
+            if row.Address.family == af_inet:
+                ip_txt = str(ipaddress.IPv4Address(data[2:6]))
+            elif row.Address.family == af_inet6:
+                ip_txt = str(ipaddress.IPv6Address(data[6:22]))
+            else:
+                continue
+            out.setdefault(ip_txt, ":".join(f"{b:02x}" for b in hw))
+    finally:
+        free_table(table)
+    return out
+
+
+_WIN_NATIVE_UNAVAILABLE = object()
+def _load_win_native_or_marker() -> object:
+    got = _load_win_native_neighbors()
+    return _WIN_NATIVE_UNAVAILABLE if got is None else got  # an empty table is still valid
+
+
+_WIN_NATIVE_CACHE = _SingleFlightCache(_load_win_native_or_marker)
+
+
+def _win_native_neighbors() -> dict[str, str] | None:
+    got = _WIN_NATIVE_CACHE.get()
+    return got if isinstance(got, dict) else None
+
+
 def _mac_from_windows_ipv6_neigh(ipv6_raw: str) -> str | None:
-    """Resolve MAC for an IPv6 address from ``netsh interface ipv6 show neighbors``."""
+    """Resolve MAC for an IPv6 address (native table, else ``netsh``)."""
+    native = _win_native_neighbors()
+    if native is not None:
+        try:
+            return native.get(str(ipaddress.ip_address(ipv6_raw.split("%", 1)[0].strip())))
+        except ValueError:
+            return None
     text = _win_ipv6_neigh_cached()
     if not text:
         return None
@@ -230,6 +347,9 @@ def _mac_from_windows_arp(ipv4: str) -> str | None:
     target = ipv4.strip()
     if not target:
         return None
+    native = _win_native_neighbors()
+    if native is not None:
+        return native.get(target)
     for line in _win_arp_table_cached().splitlines():
         parts = line.split()
         if len(parts) < 2:
@@ -242,11 +362,7 @@ def _mac_from_windows_arp(ipv4: str) -> str | None:
     return None
 
 
-def _darwin_arp_table_cached() -> str:
-    global _DARWIN_ARP_CACHE
-    now = _monotonic()
-    if _DARWIN_ARP_CACHE[1] is not None and now - _DARWIN_ARP_CACHE[0] < 0.85:
-        return _DARWIN_ARP_CACHE[1]
+def _load_darwin_arp_text() -> str:
     try:
         proc = subprocess.run(
             ["arp", "-an"],
@@ -257,15 +373,17 @@ def _darwin_arp_table_cached() -> str:
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
         _LOG.debug("arp -an failed: %s", e)
         text = ""
-    _DARWIN_ARP_CACHE = (now, text)
     return text
 
 
-def _darwin_ndp_table_cached() -> str:
-    global _DARWIN_NDP_CACHE
-    now = _monotonic()
-    if _DARWIN_NDP_CACHE[1] is not None and now - _DARWIN_NDP_CACHE[0] < 0.85:
-        return _DARWIN_NDP_CACHE[1]
+_DARWIN_ARP_CACHE = _SingleFlightCache(_load_darwin_arp_text)
+
+
+def _darwin_arp_table_cached() -> str:
+    return _DARWIN_ARP_CACHE.get()
+
+
+def _load_darwin_ndp_text() -> str:
     try:
         proc = subprocess.run(
             ["ndp", "-an"],
@@ -276,8 +394,14 @@ def _darwin_ndp_table_cached() -> str:
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
         _LOG.debug("ndp -an failed: %s", e)
         text = ""
-    _DARWIN_NDP_CACHE = (now, text)
     return text
+
+
+_DARWIN_NDP_CACHE = _SingleFlightCache(_load_darwin_ndp_text)
+
+
+def _darwin_ndp_table_cached() -> str:
+    return _DARWIN_NDP_CACHE.get()
 
 
 def _mac_from_darwin_arp(ipv4: str) -> str | None:
@@ -377,20 +501,10 @@ def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
         hit = _mac_from_proc_arp(base)
         if hit:
             return hit
-        out = _run_ip_neigh(["neigh", "show", base])
-        hit = _parse_ip_neigh_stdout(out, base)
-        if hit:
-            return hit
+        # Shared cached table only — no per-IP ``ip neigh show <ip>`` spawn per lookup.
         out = _ip_neigh_show_all_cached()
         return _parse_ip_neigh_stdout(out, base)
 
-    out = _run_ip_neigh(["neigh", "show", base])
-    hit = _parse_ip_neigh_stdout(out, raw)
-    if hit:
-        return hit
-    hit = _parse_ip_neigh_stdout(out, base)
-    if hit:
-        return hit
     out = _ip_neigh_show_all_cached()
     hit = _parse_ip_neigh_stdout(out, raw)
     if hit:
@@ -399,8 +513,14 @@ def lookup_mac_from_neighbor_cache(ip_raw: str | None) -> str | None:
 
 
 def _ipv4_addrs_for_mac_from_win_arp(mac_norm: str) -> set[str]:
-    """Find IPv4 addresses for a MAC in the Windows ``arp -a`` cache."""
+    """Find IPv4 addresses for a MAC in the Windows neighbour table."""
     out: set[str] = set()
+    native = _win_native_neighbors()
+    if native is not None:
+        for ip_txt, mac in native.items():
+            if mac == mac_norm and ":" not in ip_txt:
+                out.add(ip_txt)
+        return out
     for line in _win_arp_table_cached().splitlines():
         parts = line.split()
         if len(parts) < 2:

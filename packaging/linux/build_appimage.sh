@@ -103,6 +103,7 @@ APP_SHARE="${APP_DIR}/usr/share/netneighbor"
 rm -rf "${BUILD_ROOT}"
 mkdir -p \
   "${APP_DIR}/usr/share/applications" \
+  "${APP_DIR}/usr/share/metainfo" \
   "${APP_DIR}/usr/share/icons/hicolor/scalable/apps" \
   "${APP_DIR}/usr/share/icons/hicolor/scalable/status" \
   "${APP_SHARE}"
@@ -166,13 +167,29 @@ chmod 0644 "${APP_DIR}/io.esp3d.netneighbor.desktop"
 # Also place it under usr/share/applications so it registers when the
 # AppImage is integrated by appimaged or a launcher tool.
 sed "s/@APP_VERSION@/${VERSION}/g" "${SCRIPT_DIR}/netneighbor.desktop" \
-  > "${APP_DIR}/usr/share/applications/netneighbor.desktop"
-chmod 0644 "${APP_DIR}/usr/share/applications/netneighbor.desktop"
+  > "${APP_DIR}/usr/share/applications/io.esp3d.netneighbor.desktop"
+chmod 0644 "${APP_DIR}/usr/share/applications/io.esp3d.netneighbor.desktop"
+
+# ── AppStream metadata ─────────────────────────────────────────────────────
+# appimagetool looks for usr/share/metainfo/<id>.appdata.xml; the
+# <launchable> in it points at the desktop file above (same id).
+sed -e "s/@APP_VERSION@/${VERSION}/g" -e "s/@APP_DATE@/$(date -u +%Y-%m-%d)/g" \
+  "${SCRIPT_DIR}/io.esp3d.netneighbor.metainfo.xml" \
+  > "${APP_DIR}/usr/share/metainfo/io.esp3d.netneighbor.appdata.xml"
 
 # ── Icons ──────────────────────────────────────────────────────────────────
 # Root icon: must match the Icon= value in the desktop file (no extension).
 install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor_icon.svg" \
   "${APP_DIR}/io.esp3d.netneighbor.svg"
+
+# .DirIcon: appimagetool only derives it from a PNG/XPM named after Icon=
+# at the AppDir root (an SVG is not accepted); future versions refuse to
+# build without it.  The 256x256 PNG is the same logo as the SVG.
+_png_256="${PROJECT_ROOT}/docs/images/logo-256.png"
+install -m 0644 "${_png_256}" "${APP_DIR}/io.esp3d.netneighbor.png"
+mkdir -p "${APP_DIR}/usr/share/icons/hicolor/256x256/apps"
+install -m 0644 "${_png_256}" \
+  "${APP_DIR}/usr/share/icons/hicolor/256x256/apps/io.esp3d.netneighbor.png"
 
 # hicolor tree (used by appimaged / desktop integration)
 install -m 0644 "${PROJECT_ROOT}/app/assets/svg/netneighbor_icon.svg" \

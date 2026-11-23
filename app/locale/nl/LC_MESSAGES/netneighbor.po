@@ -1305,15 +1305,15 @@ msgstr "Gewist — herstart de applicatie"
 
 #: ui/
 msgid "App icon pack"
-msgstr ""
+msgstr "App-pictogrampakket"
 
 #: ui/
 msgid "Download failed"
-msgstr ""
+msgstr "Download mislukt"
 
 #: ui/
 msgid "Downloading…"
-msgstr ""
+msgstr "Downloaden…"
 
 #: ui/
 msgid "Icon pack"
@@ -1337,7 +1337,7 @@ msgstr "Map openen…"
 
 #: ui/
 msgid "NetNeighbor"
-msgstr ""
+msgstr "NetNeighbor"
 
 #. app_qt.py:136
 msgid "Corrupted installation"
@@ -1356,3 +1356,48 @@ msgstr ""
 "{details}\n"
 "\n"
 "Installeer het programma opnieuw."
+
+#: ui/
+msgid "All-in-one computer"
+msgstr "All-in-one-computer"
+
+#: ui/
+msgid "Desktop computer"
+msgstr "Desktopcomputer"
+
+#: ui/
+msgid "Laptop"
+msgstr "Laptop"
+
+#: ui/
+msgid "Mini PC"
+msgstr "Mini-pc"
+
+#: ui/
+msgid "Rack server"
+msgstr "Rack-server"
+
+#: ui/
+msgid "Server"
+msgstr "Server"
+
+#: ui/
+msgid "Servers"
+msgstr "Servers"
+
+#: ui/
+msgid "Phones & Tablets"
+msgstr "Telefoons en tablets"
+
+#: ui/
+msgid "Smartphone"
+msgstr "Smartphone"
+
+#: ui/
+msgid ""
+"Mode 'disabled' hides the auto-detected entry of that protocol (for "
+"'custom', the global custom command); its other fields are ignored."
+msgstr ""
+"De modus 'disabled' verbergt de automatisch gedetecteerde vermelding van dat"
+" protocol (bij 'custom' de globale aangepaste opdracht); de overige velden "
+"worden genegeerd."

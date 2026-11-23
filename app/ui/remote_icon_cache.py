@@ -175,30 +175,27 @@ class QtRemoteIconCache(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        # Keyed by canonical icon URL only — never by IP: DHCP reuses addresses, and an
+        # IP-keyed map handed a previous occupant's icon to the host now holding that IP.
         self._bytes_by_key: dict[str, bytes] = {}
-        self._bytes_by_host: dict[str, bytes] = {}
         self._fetching: set[str] = set()
         self._failed: set[str] = set()
         self._fetch_result.connect(self._handle_fetch_result)
 
     def clear(self) -> None:
         self._bytes_by_key.clear()
-        self._bytes_by_host.clear()
         self._failed.clear()
 
     def evict_for_ip(self, ip: str) -> None:
         """Drop ALL in-memory icon state for a device IP so a rebuild re-fetches cleanly.
 
-        Must mirror the disk purge (purge_remote_icon_for_ip). Previously only ``_bytes_by_host``
-        was cleared (and ``_failed.discard(sip)`` was a no-op, since ``_failed`` holds URLs, not
-        IPs): ``_bytes_by_key`` kept the URL→bytes entry, so ``fetch_status_for_device`` still
-        returned "ready" and the icon was never re-fetched after a "Clear device" — leaving the
-        device stuck on the generic type icon (host map + disk payload gone, key map stale).
+        Must mirror the disk purge (purge_remote_icon_for_ip): drop every URL→bytes entry and
+        failure mark whose URL host is this IP, so ``fetch_status_for_device`` does not keep
+        returning "ready" and the icon is re-fetched after a "Clear device".
         """
         sip = str(ip).strip()
         if not sip:
             return
-        self._bytes_by_host.pop(sip, None)
 
         def _host_matches(url_key: str) -> bool:
             try:
@@ -218,8 +215,10 @@ class QtRemoteIconCache(QObject):
         icons in memory, avoiding per-device disk reads during tile painting.
         """
         from utils.device_remote_icon import _load_index, _REMOTE_ICON_DISK_DIR
-        for sip, row in _load_index().items():
-            if sip in self._bytes_by_host:
+        loaded = 0
+        for _sip, row in _load_index().items():
+            canon = row.get("canonical_url", "")
+            if not canon or canon in self._bytes_by_key:
                 continue
             sha = row.get("payload_sha256", "")
             if not isinstance(sha, str) or len(sha) != 64:
@@ -230,17 +229,12 @@ class QtRemoteIconCache(QObject):
             except OSError:
                 continue
             if data:
-                self._bytes_by_host[sip] = data
-                canon = row.get("canonical_url", "")
-                if canon:
-                    self._bytes_by_key[canon] = data
-        _LOG.debug("prefetch_from_index: %d hosts pre-loaded", len(self._bytes_by_host))
+                self._bytes_by_key[canon] = data
+                loaded += 1
+        _LOG.debug("prefetch_from_index: %d icon(s) pre-loaded", loaded)
 
     def fetch_status_for_device(self, device: Device) -> str:
         """Return 'ready', 'fetching', 'failed', or 'missing'."""
-        sip = str(device.ip).strip()
-        if sip and sip in self._bytes_by_host:
-            return "ready"
         for key in iter_remote_icon_disk_keys(device):
             if key in self._bytes_by_key:
                 return "ready"
@@ -287,11 +281,6 @@ class QtRemoteIconCache(QObject):
 
     def bytes_for_device(self, device: Device) -> bytes | None:
         """Return cached icon bytes (memory or disk) without triggering a network fetch."""
-        sip = str(device.ip).strip()
-        if sip:
-            hit = self._bytes_by_host.get(sip)
-            if hit:
-                return hit
         for key in iter_remote_icon_disk_keys(device):
             cached = self._bytes_by_key.get(key)
             if cached:
@@ -318,17 +307,9 @@ class QtRemoteIconCache(QObject):
         *,
         on_fetch_started: Callable[[], None] | None = None,
     ) -> bytes | None:
-        sip = str(device.ip).strip()
-        if sip:
-            host_hit = self._bytes_by_host.get(sip)
-            if host_hit:
-                return host_hit
-
         for key in iter_remote_icon_disk_keys(device):
             cached = self._bytes_by_key.get(key)
             if cached:
-                if sip:
-                    self._bytes_by_host[sip] = cached
                 return cached
 
         data = load_remote_icon_payload_for_device(device)
@@ -350,9 +331,6 @@ class QtRemoteIconCache(QObject):
     def _register_bytes(
         self, device: Device, data: bytes, disk_keys: list[str]
     ) -> None:
-        sip = str(device.ip).strip()
-        if sip:
-            self._bytes_by_host[sip] = data
         for key in disk_keys:
             self._bytes_by_key[key] = data
         pair = primary_fetch_pair_for_device(device)
@@ -405,8 +383,6 @@ class QtRemoteIconCache(QObject):
         disk_keys = result["disk_keys"]
         self._fetching.discard(cache_key)
         if payload:
-            if sip:
-                self._bytes_by_host[sip] = payload
             for key in disk_keys:
                 self._bytes_by_key[key] = payload
             self._bytes_by_key.setdefault(cache_key, payload)

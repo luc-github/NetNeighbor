@@ -49,6 +49,26 @@ def bundle_custom_command(bundle: DeviceBundle) -> str:
     return ""
 
 
+def bundle_global_custom_command_disabled(bundle: DeviceBundle) -> bool:
+    """True when the device has a ``custom`` entry in ``disabled`` mode (hide the global command)."""
+    for dev in bundle.devices:
+        md = dev.metadata if isinstance(dev.metadata, dict) else {}
+        cmds = md.get("device_commands")
+        if isinstance(cmds, list):
+            return any(
+                isinstance(c, dict) and c.get("scheme") == "custom" and c.get("mode") == "disabled"
+                for c in cmds
+            )
+    return False
+
+
+def effective_global_custom_command(bundle: DeviceBundle, global_template: str) -> str:
+    """Global custom command template, or ``""`` when disabled for this device."""
+    if bundle_global_custom_command_disabled(bundle):
+        return ""
+    return (global_template or "").strip()
+
+
 def bundle_all_custom_commands(bundle: DeviceBundle) -> list[tuple[str, str]]:
     """Return all custom scheme entries as (label, template) pairs (override first)."""
     result: list[tuple[str, str]] = []
@@ -86,7 +106,7 @@ def run_custom_command_for_bundle(
     connect_templates: dict[str, str],
 ) -> None:
     per_device = bundle_custom_command(bundle)
-    tmpl = per_device or (global_template or "").strip()
+    tmpl = per_device or effective_global_custom_command(bundle, global_template)
     if not tmpl:
         return
     d = bundle.primary
@@ -131,7 +151,10 @@ def launch_open_uri(
         name=bundle.name or "",
         type_=d.type or "",
         category=d.category or "",
-        device_cmd_override=bundle_custom_command(bundle) or global_custom_command,
+        device_cmd_override=(
+            bundle_custom_command(bundle)
+            or effective_global_custom_command(bundle, global_custom_command)
+        ),
     )
     if err:
         show_command_error(

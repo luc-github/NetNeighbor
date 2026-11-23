@@ -1312,3 +1312,51 @@ msgid ""
 "\n"
 "Please reinstall the program."
 msgstr ""
+
+#: ui/
+msgid "All-in-one computer"
+msgstr ""
+
+#: ui/
+msgid "Desktop computer"
+msgstr ""
+
+#: ui/
+msgid "Laptop"
+msgstr ""
+
+#: ui/
+msgid "Mini PC"
+msgstr ""
+
+#: ui/
+msgid "Rack server"
+msgstr ""
+
+#: ui/
+msgid "Server"
+msgstr ""
+
+#: ui/
+msgid "Servers"
+msgstr ""
+
+
+#: ui/
+msgid "Phones & Tablets"
+msgstr ""
+
+#: ui/
+msgid "Smartphone"
+msgstr ""
+
+
+
+
+#: ui/
+msgid ""
+"Mode 'disabled' hides the auto-detected entry of that protocol (for 'c"
+"ustom', the global custom command); its other fields are ignored."
+msgstr ""
+
+

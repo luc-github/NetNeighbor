@@ -1309,15 +1309,15 @@ msgstr "Restablecimiento completado — reinicie la aplicación"
 
 #: ui/
 msgid "App icon pack"
-msgstr ""
+msgstr "Paquete de iconos de la aplicación"
 
 #: ui/
 msgid "Download failed"
-msgstr ""
+msgstr "Descarga fallida"
 
 #: ui/
 msgid "Downloading…"
-msgstr ""
+msgstr "Descargando…"
 
 #: ui/
 msgid "Icon pack"
@@ -1341,7 +1341,7 @@ msgstr "Abrir carpeta…"
 
 #: ui/
 msgid "NetNeighbor"
-msgstr ""
+msgstr "NetNeighbor"
 
 #. app_qt.py:136
 msgid "Corrupted installation"
@@ -1360,3 +1360,48 @@ msgstr ""
 "{details}\n"
 "\n"
 "Vuelva a instalar el programa."
+
+#: ui/
+msgid "All-in-one computer"
+msgstr "Ordenador todo en uno"
+
+#: ui/
+msgid "Desktop computer"
+msgstr "Ordenador de escritorio"
+
+#: ui/
+msgid "Laptop"
+msgstr "Portátil"
+
+#: ui/
+msgid "Mini PC"
+msgstr "Mini PC"
+
+#: ui/
+msgid "Rack server"
+msgstr "Servidor rack"
+
+#: ui/
+msgid "Server"
+msgstr "Servidor"
+
+#: ui/
+msgid "Servers"
+msgstr "Servidores"
+
+#: ui/
+msgid "Phones & Tablets"
+msgstr "Teléfonos y tabletas"
+
+#: ui/
+msgid "Smartphone"
+msgstr "Smartphone"
+
+#: ui/
+msgid ""
+"Mode 'disabled' hides the auto-detected entry of that protocol (for "
+"'custom', the global custom command); its other fields are ignored."
+msgstr ""
+"El modo «disabled» oculta la entrada detectada automáticamente de ese "
+"protocolo (para «custom», el comando personalizado global); sus demás campos"
+" se ignoran."

@@ -1283,15 +1283,15 @@ msgstr "リセット完了 — 再起動してください"
 
 #: ui/
 msgid "App icon pack"
-msgstr ""
+msgstr "アプリアイコンパック"
 
 #: ui/
 msgid "Download failed"
-msgstr ""
+msgstr "ダウンロード失敗"
 
 #: ui/
 msgid "Downloading…"
-msgstr ""
+msgstr "ダウンロード中…"
 
 #: ui/
 msgid "Icon pack"
@@ -1315,7 +1315,7 @@ msgstr "フォルダを開く…"
 
 #: ui/
 msgid "NetNeighbor"
-msgstr ""
+msgstr "NetNeighbor"
 
 #. app_qt.py:136
 msgid "Corrupted installation"
@@ -1334,3 +1334,46 @@ msgstr ""
 "{details}\n"
 "\n"
 "プログラムを再インストールしてください。"
+
+#: ui/
+msgid "All-in-one computer"
+msgstr "オールインワンコンピュータ"
+
+#: ui/
+msgid "Desktop computer"
+msgstr "デスクトップコンピュータ"
+
+#: ui/
+msgid "Laptop"
+msgstr "ノートパソコン"
+
+#: ui/
+msgid "Mini PC"
+msgstr "ミニPC"
+
+#: ui/
+msgid "Rack server"
+msgstr "ラックサーバー"
+
+#: ui/
+msgid "Server"
+msgstr "サーバー"
+
+#: ui/
+msgid "Servers"
+msgstr "サーバー"
+
+#: ui/
+msgid "Phones & Tablets"
+msgstr "電話とタブレット"
+
+#: ui/
+msgid "Smartphone"
+msgstr "スマートフォン"
+
+#: ui/
+msgid ""
+"Mode 'disabled' hides the auto-detected entry of that protocol (for "
+"'custom', the global custom command); its other fields are ignored."
+msgstr ""
+"モード「disabled」は、そのプロトコルの自動検出エントリを非表示にします（「custom」の場合はグローバルなカスタムコマンド）。その他のフィールドは無視されます。"
