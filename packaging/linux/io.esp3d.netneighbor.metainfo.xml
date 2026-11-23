@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for NetNeighbor (installed by build_appimage.sh).
+     @APP_VERSION@ / @APP_DATE@ are substituted at build time. -->
+<component type="desktop-application">
+  <id>io.esp3d.netneighbor</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>NetNeighbor</name>
+  <summary>Discover and monitor devices on your local network</summary>
+  <summary xml:lang="fr">Découvrez et surveillez les appareils de votre réseau local</summary>
+  <developer id="io.esp3d">
+    <name>Luc LEBOSSE</name>
+  </developer>
+  <description>
+    <p>
+      NetNeighbor discovers and monitors devices on your local network, a modern
+      equivalent of the Windows Network Neighborhood experience.
+    </p>
+    <ul>
+      <li>Automatic discovery with SSDP, mDNS/Bonjour, WS-Discovery and NetBIOS, without active port scanning</li>
+      <li>List and icon grid views, grouped by device type or location</li>
+      <li>One-click access through HTTP, HTTPS, SMB, SSH, FTP, SFTP or Telnet</li>
+      <li>Per-device overrides for name, type, location, icon and commands</li>
+      <li>System tray integration</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.esp3d.netneighbor.desktop</launchable>
+  <url type="homepage">https://github.com/luc-github/NetNeighbor</url>
+  <url type="bugtracker">https://github.com/luc-github/NetNeighbor/issues</url>
+  <categories>
+    <category>Network</category>
+    <category>Monitor</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@APP_VERSION@" date="@APP_DATE@"/>
+  </releases>
+</component>

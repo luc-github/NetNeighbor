@@ -103,6 +103,7 @@ APP_SHARE="${APP_DIR}/usr/share/netneighbor"
 rm -rf "${BUILD_ROOT}"
 mkdir -p \
   "${APP_DIR}/usr/share/applications" \
+  "${APP_DIR}/usr/share/metainfo" \
   "${APP_DIR}/usr/share/icons/hicolor/scalable/apps" \
   "${APP_DIR}/usr/share/icons/hicolor/scalable/status" \
   "${APP_SHARE}"
@@ -166,8 +167,15 @@ chmod 0644 "${APP_DIR}/io.esp3d.netneighbor.desktop"
 # Also place it under usr/share/applications so it registers when the
 # AppImage is integrated by appimaged or a launcher tool.
 sed "s/@APP_VERSION@/${VERSION}/g" "${SCRIPT_DIR}/netneighbor.desktop" \
-  > "${APP_DIR}/usr/share/applications/netneighbor.desktop"
-chmod 0644 "${APP_DIR}/usr/share/applications/netneighbor.desktop"
+  > "${APP_DIR}/usr/share/applications/io.esp3d.netneighbor.desktop"
+chmod 0644 "${APP_DIR}/usr/share/applications/io.esp3d.netneighbor.desktop"
+
+# ── AppStream metadata ─────────────────────────────────────────────────────
+# appimagetool looks for usr/share/metainfo/<id>.appdata.xml; the
+# <launchable> in it points at the desktop file above (same id).
+sed -e "s/@APP_VERSION@/${VERSION}/g" -e "s/@APP_DATE@/$(date -u +%Y-%m-%d)/g" \
+  "${SCRIPT_DIR}/io.esp3d.netneighbor.metainfo.xml" \
+  > "${APP_DIR}/usr/share/metainfo/io.esp3d.netneighbor.appdata.xml"
 
 # ── Icons ──────────────────────────────────────────────────────────────────
 # Root icon: must match the Icon= value in the desktop file (no extension).
