@@ -506,7 +506,12 @@ class DiscoveryManager:
         existing_key = device.key
         existing = self._devices.get(existing_key)
         if existing is None and device.source == "ssdp":
-            existing_key, existing = self._find_existing_ssdp_by_endpoint(device)
+            ep_key, ep_existing = self._find_existing_ssdp_by_endpoint(device)
+            # Keep device.key when no endpoint matches: (None, None) would store every new
+            # SSDP row under the None key, so two descriptors of one host (e.g. MediaTek
+            # tvdevice :56790 + DIAL :8008) would keep overwriting each other.
+            if ep_existing is not None:
+                existing_key, existing = ep_key, ep_existing
 
         self._hydrate_mdns_from_ssdp_profile_cache(device, existing)
         self._hydrate_ssdp_from_profile_cache(device)
@@ -548,6 +553,9 @@ class DiscoveryManager:
                 device.metadata = self._merge_ssdp_metadata(existing.metadata, device.metadata, existing.name, device.name)
                 if not self._has_effective_name_override(existing):
                     device.name = self._pick_ssdp_name(existing.name, device.name, existing.metadata, device.metadata)
+                elif self._find_name_override_value(device) is None and self._resolved_field_rule_name(device):
+                    # Field rule already applied above (_apply_field_mapping_rules) — keep it.
+                    self._ssdp_logger.debug("SSDP name preserved: name field rule is active")
                 else:
                     device.name = existing.name
                     self._ssdp_logger.debug("SSDP name preserved: user override is active")
@@ -575,6 +583,7 @@ class DiscoveryManager:
         self._devices[existing_key] = device
         if old_key_to_drop is not None:
             self._devices.pop(old_key_to_drop, None)
+        self._reapply_field_rules_to_ip_siblings(device)
         self._maybe_queue_nmb_probe_for_synthetic_wsd(device)
         self._run_location_reapply_sweep()
         device_log = self._device_event_logger(device.source)
@@ -770,6 +779,7 @@ class DiscoveryManager:
         """
         by_host: dict[str, dict] = {}
         emit_rows: list[tuple[str, dict]] = []
+        ignored_logged: set[tuple[str, str]] = set()
         cache_blob = load_discovery_cache()
         raw = cache_blob.get("ssdp_profile_cache")
         if not isinstance(raw, dict):
@@ -808,8 +818,40 @@ class DiscoveryManager:
                 continue
             row_copy = dict(row)
             emit_rows.append((host, row_copy))
-            by_host[host] = row_copy
+            prev = by_host.get(host)
+            if prev is None or self._ssdp_profile_row_richness(row_copy) >= self._ssdp_profile_row_richness(prev):
+                by_host[host] = row_copy
+                kept, ignored = row_copy, prev
+            else:
+                kept, ignored = prev, row_copy
+            ignore_note = (host, str(ignored.get("ssdp_location") if ignored else ""))
+            if (
+                ignored is not None
+                and kept.get("ssdp_location") != ignored.get("ssdp_location")
+                and ignore_note not in ignored_logged
+            ):
+                ignored_logged.add(ignore_note)
+                self._ssdp_logger.debug(
+                    "SSDP profile cache index for %s: kept %s name=%r richness(icon,fields)=%s, "
+                    "ignored %s name=%r richness=%s\nignored XML:\n%s",
+                    host,
+                    kept.get("ssdp_location"),
+                    kept.get("name"),
+                    self._ssdp_profile_row_richness(kept),
+                    ignored.get("ssdp_location"),
+                    ignored.get("name"),
+                    self._ssdp_profile_row_richness(ignored),
+                    str(ignored.get("raw_xml") or "(none)").strip(),
+                )
         return by_host, emit_rows
+
+    @staticmethod
+    def _ssdp_profile_row_richness(row: dict) -> tuple[int, int]:
+        """Rank cached SSDP profiles of one host: a descriptor with an icon (vendor descriptor,
+        e.g. Sharp DIAL :8008) beats a bare SoC placeholder one (e.g. "Mediatek_MTXXXX")."""
+        xf = row.get("xml_fields") if isinstance(row.get("xml_fields"), dict) else {}
+        icon = xf.get("iconURL") or row.get("iconURL")
+        return (1 if isinstance(icon, str) and icon.strip() else 0, len(xf))
 
     def _load_nmb_name_cache(self) -> dict[str, dict]:
         """Load NMB-resolved hostnames from the discovery cache."""
@@ -2092,11 +2134,12 @@ class DiscoveryManager:
             bucket = rules.get(target_norm)
             if not isinstance(bucket, list):
                 bucket = []
-            if path_norm in bucket:
-                continue
-            bucket.append(path_norm)
-            rules[target_norm] = bucket
-            self._field_mapping_rules[preferred_key] = rules
+            if path_norm not in bucket:
+                bucket.append(path_norm)
+                rules[target_norm] = bucket
+                self._field_mapping_rules[preferred_key] = rules
+            # Apply even when the rule already exists: same-IP rows often share one key
+            # (SSDP + mDNS by UID), and the second row must be renamed too.
             changed = True
             self._apply_field_mapping_rules(existing)
             self._apply_location_override(existing)
@@ -2738,6 +2781,8 @@ class DiscoveryManager:
         c_norm = cached_raw.strip() if isinstance(cached_raw, str) and cached_raw.strip() else ""
         d_norm = discovered_raw.strip() if isinstance(discovered_raw, str) and discovered_raw.strip() else ""
 
+        r_norm = self._resolved_field_rule_value(device, "location")
+
         chosen = ""
 
         if c_norm:
@@ -2745,6 +2790,15 @@ class DiscoveryManager:
             chosen = c_norm
             dev_log.debug(
                 "Location: prefs cache ip=%s port=%s value=%r",
+                device.ip,
+                device.port,
+                self._clip_loc_log(chosen),
+            )
+        elif r_norm:
+            # "Use as location" field rule (user choice) beats auto-discovered keys.
+            chosen = r_norm
+            dev_log.debug(
+                "Location: field rule ip=%s port=%s value=%r",
                 device.ip,
                 device.port,
                 self._clip_loc_log(chosen),
@@ -2899,7 +2953,43 @@ class DiscoveryManager:
             return True
         if prior_row is not None and self._find_name_override_value(prior_row) is not None:
             return True
+        # A "name" field-mapping rule (e.g. txt:fn) that resolves is a user naming choice too.
+        if self._resolved_field_rule_name(device):
+            return True
+        if prior_row is not None and self._resolved_field_rule_name(prior_row):
+            return True
         return False
+
+    def _resolved_field_rule_value(self, device: Device, target: str) -> str:
+        """Value of the first resolvable ``target`` field-mapping rule for ``device`` ("" if none)."""
+        rules = self.get_device_field_mapping_rules(device)
+        for raw in rules.get(target) or []:
+            value = self._mapped_value_for_field_path(device, raw)
+            if isinstance(value, str) and value.strip():
+                if target == "location" and not is_plausible_room_location(value.strip()):
+                    continue
+                return value.strip()
+        return ""
+
+    def _resolved_field_rule_name(self, device: Device) -> str:
+        return self._resolved_field_rule_value(device, "name")
+
+    def _reapply_field_rules_to_ip_siblings(self, device: Device) -> None:
+        """Re-resolve field-mapping rules (name/location/information) on other rows of the same IP.
+
+        A rule like ``txt:fn`` set on an SSDP-primary bundle resolves from the mDNS sibling's
+        TXT; when that sibling (re)appears after the SSDP row, the SSDP row must pick it up.
+        Saved user names/locations (prefs) still win.
+        """
+        ip_norm = str(device.ip).strip()
+        for row in list(self._devices.values()):
+            if row is device or str(row.ip).strip() != ip_norm:
+                continue
+            if not self.get_device_field_mapping_rules(row):
+                continue
+            self._apply_field_mapping_rules(row)
+            self._apply_location_override(row)
+            self._apply_name_override(row)
 
     def _find_location_override_value(self, device: Device) -> str | None:
         preferred_key = self._make_name_override_key_for_device(device)

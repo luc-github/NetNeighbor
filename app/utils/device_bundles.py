@@ -22,6 +22,10 @@ from utils.location_label import is_plausible_room_location
 from utils.neighbor_mac import lookup_mac_from_neighbor_cache
 
 _LOG = logging.getLogger(__name__)
+# Child of "discovery.ssdp": follows the "ssdp" level of ~/.config/netneighbor/logging.json.
+_SSDP_CHOICE_LOG = logging.getLogger("discovery.ssdp.bundle_choice")
+# Last logged (kept, ignored) descriptor pair per IP — log only when the choice changes.
+_last_ssdp_choice_by_ip: dict[str, tuple[str, str]] = {}
 
 _SOURCE_PRIMARY_TIEBREAK = {"ssdp": 0, "wsdd": 1, "wsd": 2, "nmb": 3, "mdns": 4}
 _PRIMARY_RANK_SLACK_FOR_NAME = 2
@@ -279,7 +283,12 @@ def choose_bundle_primary(bundle: DeviceBundle, information_precedence: Sequence
 
 
 def _descriptor_richness(dev: Device | None) -> tuple[int, int, int]:
-    """Rank a device by how much descriptor data it carries (raw XML, xml_fields, iconURL)."""
+    """Rank a device by how much descriptor data it carries (raw XML, iconURL, xml_fields).
+
+    The icon ranks before the field count: a host can serve a vendor descriptor (with an icon,
+    e.g. Sharp DIAL :8008) and a bare SoC placeholder one (e.g. "Mediatek_MTXXXX" tvdevice) with
+    a similar number of fields; the placeholder is re-announced more often and must not win ties.
+    """
     if dev is None:
         return (0, 0, 0)
     md = dev.metadata if isinstance(dev.metadata, dict) else {}
@@ -287,7 +296,7 @@ def _descriptor_richness(dev: Device | None) -> tuple[int, int, int]:
     has_xml = 1 if isinstance(md.get("xml"), str) and md.get("xml").strip() else 0
     icon = xf.get("iconURL")
     has_icon = 1 if isinstance(icon, str) and icon.strip() else 0
-    return (has_xml, len(xf), has_icon)
+    return (has_xml, has_icon, len(xf))
 
 
 def _richer_descriptor_device(existing: Device | None, candidate: Device) -> Device:
@@ -300,7 +309,51 @@ def _richer_descriptor_device(existing: Device | None, candidate: Device) -> Dev
     """
     if existing is None:
         return candidate
-    return candidate if _descriptor_richness(candidate) >= _descriptor_richness(existing) else existing
+    kept = candidate if _descriptor_richness(candidate) >= _descriptor_richness(existing) else existing
+    ignored = existing if kept is candidate else candidate
+    if kept.source == "ssdp":
+        _log_ssdp_descriptor_choice(kept, ignored)
+    return kept
+
+
+def _ssdp_descriptor_label(dev: Device) -> str:
+    md = dev.metadata if isinstance(dev.metadata, dict) else {}
+    return str(md.get("location") or dev.url or f"{dev.ip}:{dev.port}").strip()
+
+
+def _log_ssdp_descriptor_choice(kept: Device, ignored: Device) -> None:
+    """DEBUG trace of the SSDP descriptor set aside when one host exposes several (e.g. DIAL + tvdevice)."""
+    if not _SSDP_CHOICE_LOG.isEnabledFor(logging.DEBUG):
+        return
+    kept_loc = _ssdp_descriptor_label(kept)
+    ignored_loc = _ssdp_descriptor_label(ignored)
+    if kept_loc == ignored_loc:
+        return
+    ip = str(kept.ip).strip()
+    pair = (kept_loc, ignored_loc)
+    if _last_ssdp_choice_by_ip.get(ip) == pair:
+        return
+    _last_ssdp_choice_by_ip[ip] = pair
+
+    def _desc(dev: Device) -> str:
+        md = dev.metadata if isinstance(dev.metadata, dict) else {}
+        xf = md.get("xml_fields") if isinstance(md.get("xml_fields"), dict) else {}
+        return (
+            f"LOCATION={_ssdp_descriptor_label(dev)} USN={md.get('usn', '')} "
+            f"friendlyName={xf.get('friendlyName', '')!r} manufacturer={xf.get('manufacturer', '')!r} "
+            f"modelName={xf.get('modelName', '')!r} icon={xf.get('iconURL', '')!r} "
+            f"richness(xml,icon,fields)={_descriptor_richness(dev)}"
+        )
+
+    ignored_md = ignored.metadata if isinstance(ignored.metadata, dict) else {}
+    ignored_xml = ignored_md.get("xml") if isinstance(ignored_md.get("xml"), str) else ""
+    _SSDP_CHOICE_LOG.debug(
+        "SSDP descriptor choice for %s\n  kept:    %s\n  ignored: %s\nignored XML:\n%s",
+        ip,
+        _desc(kept),
+        _desc(ignored),
+        ignored_xml.strip() or "(none: XML not fetched yet)",
+    )
 
 
 def build_device_bundles(

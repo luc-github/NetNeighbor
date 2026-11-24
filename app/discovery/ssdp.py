@@ -211,6 +211,8 @@ class SSDPDiscovery(BaseDiscovery):
         else:
             self._descriptor_http_min_interval = max(0.0, float(descriptor_http_min_interval_seconds))
         self._last_descriptor_http_mono: dict[str, float] = {}
+        # (USN, ignored LOCATION) pairs already traced by _best_profile_for_headers (DEBUG).
+        self._profile_ignore_logged: set[str] = set()
         self._xml_fetch_gates: dict[str, threading.Lock] = {}
         self._xml_fetch_gates_lock = threading.Lock()
         self._rules = self._load_rules()
@@ -567,6 +569,17 @@ class SSDPDiscovery(BaseDiscovery):
             headers = self._parse_headers(payload)
             if not headers:
                 continue
+            # One compact line per received frame (all descriptors a device advertises,
+            # even those later deduplicated or whose XML is never fetched).
+            self._logger.debug(
+                "SSDP RX headers from %s kind=%s LOCATION=%s ST=%s USN=%s SERVER=%s",
+                src_ip,
+                ("NOTIFY " + headers.get("NTS", "")).strip() if is_notify else "M-SEARCH-RESPONSE",
+                headers.get("LOCATION", ""),
+                headers.get("ST") or headers.get("NT") or "",
+                headers.get("USN", ""),
+                headers.get("SERVER", ""),
+            )
             if is_notify:
                 nts = headers.get("NTS", "").lower()
                 if nts == "ssdp:byebye":
@@ -978,14 +991,38 @@ class SSDPDiscovery(BaseDiscovery):
         return keys
 
     def _best_profile_for_headers(self, headers: dict[str, str], fallback_ip: str) -> tuple[datetime, dict] | None:
+        # A USN-specific profile always beats the per-host one: one host can serve several
+        # descriptors (e.g. Sharp DIAL :8008 + MediaTek tvdevice :56790). The host key holds
+        # whichever was announced last, so "freshest wins" would leak the other descriptor's
+        # name / xml_fields onto this USN.
         best: tuple[datetime, dict] | None = None
+        host_fallback: tuple[datetime, dict] | None = None
         for key in self._profile_candidate_keys(headers, fallback_ip):
             cached = self._profile_disk_cache.get(key)
             if cached is None:
                 continue
+            if key.startswith("ssdp:host:"):
+                if host_fallback is None or cached[0] > host_fallback[0]:
+                    host_fallback = cached
+                continue
             if best is None or cached[0] > best[0]:
                 best = cached
-        return best
+        if best is not None and host_fallback is not None and self._logger.isEnabledFor(logging.DEBUG):
+            kept_loc = str(best[1].get("ssdp_location") or "")
+            ignored_loc = str(host_fallback[1].get("ssdp_location") or "")
+            if kept_loc != ignored_loc:
+                note_key = f"{headers.get('USN', '')}\0{ignored_loc}"
+                if note_key not in self._profile_ignore_logged:
+                    self._profile_ignore_logged.add(note_key)
+                    self._logger.debug(
+                        "SSDP profile cache: per-host entry ignored for USN=%s (kept %s name=%r, ignored %s name=%r)",
+                        headers.get("USN", ""),
+                        kept_loc,
+                        best[1].get("name"),
+                        ignored_loc,
+                        host_fallback[1].get("name"),
+                    )
+        return best if best is not None else host_fallback
 
     def fetch_descriptor_xml(self, location_url: str | None) -> tuple[dict, str | None]:
         """Fetch and parse UPnP device descriptor XML (same caches as live SSDP LOCATION handling)."""
