@@ -84,17 +84,29 @@ _MDNS_ICON_TXT_KEYS = frozenset(
 _MDNS_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
 
 
+_GOOGLECAST_HTTP_PORT = 8008
+
+
 def _mdns_preferred_icon_base_port(metadata: dict, fallback_port: int) -> int:
-    """Use ``_http._tcp`` port when present (Sonos and similar serve icons there)."""
+    """Base port for relative mDNS icon paths.
+
+    - ``_http._tcp`` port when present (Sonos and similar serve icons there).
+    - Google Cast (``_googlecast._tcp``): TXT ``ic=/setup/icon.png`` is served by the Cast
+      HTTP server on :8008 (the DIAL ``URLBase``); the advertised :8009 is the TLS Cast
+      channel and never answers HTTP (verified on Sharp AQUOS Google TV).
+    """
     if not isinstance(metadata, dict):
         return fallback_port
     services = metadata.get("services")
     if not isinstance(services, list):
-        return fallback_port
+        services = []
+    is_googlecast = "_googlecast._tcp" in str(metadata.get("service", "")).lower()
     for svc in services:
         if not isinstance(svc, dict):
             continue
         name = str(svc.get("service", "")).lower()
+        if "_googlecast._tcp" in name:
+            is_googlecast = True
         if "_http._tcp" not in name:
             continue
         try:
@@ -103,6 +115,8 @@ def _mdns_preferred_icon_base_port(metadata: dict, fallback_port: int) -> int:
             continue
         if candidate > 0:
             return candidate
+    if is_googlecast:
+        return _GOOGLECAST_HTTP_PORT
     try:
         return int(fallback_port) if fallback_port else 80
     except (TypeError, ValueError):
