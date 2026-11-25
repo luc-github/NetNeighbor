@@ -209,3 +209,18 @@ def setup_logging(*, log_name: str = "app") -> None:
     apply_named_log_levels(config)
     _apply_netneighbor_debug_ui_env(log_name=log_name)
     logging.getLogger(log_name).info("Logging initialized at %s (%s)", default_level_name, log_file)
+
+
+def close_file_log_handlers() -> None:
+    """Detach and close root file handlers so the log file can be deleted (Windows keeps it locked).
+
+    Used before "Reset all application data"; later records still reach the stream handler.
+    """
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        if isinstance(handler, logging.FileHandler):
+            root_logger.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass

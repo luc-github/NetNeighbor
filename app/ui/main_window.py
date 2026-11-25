@@ -1149,6 +1149,16 @@ class NetNeighborMainWindow(QMainWindow):
 
     def _clear_icon_cache(self) -> None:
         from utils.device_remote_icon import clear_all_app_data
+        # Stop discovery *before* wiping: protocol stop() force-flushes in-memory caches
+        # (e.g. SSDP XML/profile cache) to disk. Stopping after the wipe (app_qt finally
+        # block) would rewrite discovery-cache.json with the previous session's devices.
+        # stop() is idempotent, so the later call in app_qt is a no-op.
+        if self._discovery_manager is not None:
+            self._discovery_manager.stop()
+        # The open log file is locked on Windows: close it so the wipe can delete it.
+        from utils.app_logging import close_file_log_handlers
+        _LOG.info("Reset all application data: discovery stopped, closing log file before wipe")
+        close_file_log_handlers()
         clear_all_app_data()
         self._remote_icon_cache.clear()
 
