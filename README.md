@@ -101,6 +101,8 @@ User documentation: [`USER_DOCUMENTATION.md`](docs/USER_DOCUMENTATION.md)
 
 Developer documentation: [`docs/README.md`](docs/README.md)
 
+Common problems (device not listed, icon not loading, device going offline): [Troubleshooting](docs/USER_DOCUMENTATION.md#troubleshooting)
+
 ## Translations
 
 | Language | Code | Status |

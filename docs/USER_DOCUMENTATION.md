@@ -300,6 +300,19 @@ Corrections:
 - Once offline, a **monitored** device stays visible greyed out; a non-monitored device is removed from the list. A device that returns (e.g. wakes from sleep) reappears automatically on the next discovery scan or after **View → Reload discovery**
 - After **Reload discovery**, devices that no longer respond are dropped within ~15 seconds instead of waiting for the full timeout
 
+**Device is listed but its icon does not load, Open fails, or it keeps going offline and coming back:**
+- NetNeighbor sees the device through multicast announcements (mDNS/SSDP), but icon download,
+  Open and reachability checks need a direct connection to the device
+- A VPN or firewall running **on the device itself** (e.g. a VPN app on a smart TV) can block
+  these local connections while announcements keep arriving. The device then appears, fails
+  its reachability check, disappears, and reappears on its next announcement
+- Such a device may even keep announcing itself while in standby, whereas the same model
+  without a VPN goes silent when switched off
+- Disconnect the VPN, or allow local network access in its settings, then use
+  **View → Reload discovery**
+- To check, open the icon URL shown in Details in a browser on your computer: if it does not
+  load there either, the block is on the device or network side
+
 **Open is disabled:**
 - No connection target was found; check the device's IP/services in Details
 - Add a command manually in the device's Options tab
